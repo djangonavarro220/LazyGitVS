@@ -69,11 +69,24 @@ jobs:
         run: |
           set -euo pipefail
           VSIX="$(ls dist/*.vsix | head -1)"
-          NOTES="LazyGitVS ${{ steps.version.outputs.version }} release.\n\n- Built and tested by GitHub Actions.\n- VSIX attached below.\n- Marketplace publish runs from this workflow when VSCE_PAT is configured."
-          gh release create "${{ steps.version.outputs.tag }}" "$VSIX" \
-            --title "LazyGitVS ${{ steps.version.outputs.version }}" \
-            --notes "$NOTES" \
-          || gh release upload "${{ steps.version.outputs.tag }}" "$VSIX" --clobber
+          NOTES_FILE="$(mktemp)"
+          cat > "$NOTES_FILE" <<EOF
+          LazyGitVS ${{ steps.version.outputs.version }} release.
+
+          - Built and tested by GitHub Actions.
+          - VSIX attached below.
+          - Marketplace publish runs from this workflow when VSCE_PAT is configured.
+          EOF
+          if gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            gh release edit "${{ steps.version.outputs.tag }}" \
+              --title "LazyGitVS ${{ steps.version.outputs.version }}" \
+              --notes-file "$NOTES_FILE"
+            gh release upload "${{ steps.version.outputs.tag }}" "$VSIX" --clobber
+          else
+            gh release create "${{ steps.version.outputs.tag }}" "$VSIX" \
+              --title "LazyGitVS ${{ steps.version.outputs.version }}" \
+              --notes-file "$NOTES_FILE"
+          fi
 
       - name: Publish to Visual Studio Marketplace
         env:
