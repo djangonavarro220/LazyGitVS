@@ -82,8 +82,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${VSCE_PAT:-}" ]; then
-            echo "::warning::VSCE_PAT is not configured; skipping Marketplace publish."
-            exit 0
+            echo "::error::VSCE_PAT is not configured; Marketplace publish cannot run."
+            exit 1
           fi
           VSIX="$(ls dist/*.vsix | head -1)"
           npx vsce publish --packagePath "$VSIX" -p "$VSCE_PAT"
