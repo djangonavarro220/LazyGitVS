@@ -1,0 +1,456 @@
+{
+  "name": "lazygitvs",
+  "displayName": "LazyGitVS",
+  "description": "A lazygit-inspired, keyboard-first Git workflow in the VS Code SCM sidebar.",
+  "version": "0.1.91",
+  "preview": true,
+  "publisher": "lazygitvs",
+  "license": "MIT",
+  "icon": "resources/icon.png",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "keywords": [
+    "git",
+    "lazygit",
+    "source-control",
+    "scm",
+    "keyboard",
+    "staging",
+    "hunks"
+  ],
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:lazygitvs.openDashboard",
+    "onCommand:lazygitvs.closeDashboard",
+    "onCommand:lazygitvs.changedFiles",
+    "onCommand:lazygitvs.editorHunkNext",
+    "onCommand:lazygitvs.editorHunkPrev",
+    "onCommand:lazygitvs.editorHunkToggle",
+    "onCommand:lazygitvs.editorHunkEdit",
+    "onCommand:lazygitvs.editorHunkToggleMode",
+    "onCommand:lazygitvs.editorHunkToggleSide",
+    "onCommand:lazygitvs.editorHunkDiscard",
+    "onCommand:lazygitvs.editorHunkHelp",
+    "onCommand:lazygitvs.editorHunkReturn",
+    "onCommand:lazygitvs.editorHunkExit",
+    "onView:lazygitvs.statusView",
+    "onView:lazygitvs.filesView",
+    "onView:lazygitvs.branchesView",
+    "onView:lazygitvs.tagsView",
+    "onView:lazygitvs.remotesView",
+    "onView:lazygitvs.commitsView",
+    "onView:lazygitvs.stashView",
+    "onView:lazygitvs.conflictsView",
+    "onCommand:lazygitvs.focusPanel1",
+    "onCommand:lazygitvs.focusPanel2",
+    "onCommand:lazygitvs.focusPanel3",
+    "onCommand:lazygitvs.focusPanel4",
+    "onCommand:lazygitvs.focusPanel5",
+    "onCommand:lazygitvs.focusPanel6",
+    "onCommand:lazygitvs.focusPanel7",
+    "onCommand:lazygitvs.focusPanel8"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "lazygitvs.openDashboard",
+        "title": "LazyGitVS: Focus SCM Sidebar"
+      },
+      {
+        "command": "lazygitvs.closeDashboard",
+        "title": "LazyGitVS: Close Sidebar"
+      },
+      {
+        "command": "lazygitvs.changedFiles",
+        "title": "LazyGitVS: Changed Files"
+      },
+      {
+        "command": "lazygitvs.editorHunkNext",
+        "title": "LazyGitVS: Editor Hunk Next"
+      },
+      {
+        "command": "lazygitvs.editorHunkPrev",
+        "title": "LazyGitVS: Editor Hunk Previous"
+      },
+      {
+        "command": "lazygitvs.editorHunkToggle",
+        "title": "LazyGitVS: Editor Hunk Stage/Unstage"
+      },
+      {
+        "command": "lazygitvs.editorHunkEdit",
+        "title": "LazyGitVS: Editor Hunk Edit Mode"
+      },
+      {
+        "command": "lazygitvs.editorHunkReturn",
+        "title": "LazyGitVS: Return to Editor Hunk Mode"
+      },
+      {
+        "command": "lazygitvs.editorHunkExit",
+        "title": "LazyGitVS: Exit Editor Hunk Mode"
+      },
+      {
+        "command": "lazygitvs.editorHunkToggleMode",
+        "title": "LazyGitVS: Toggle Editor Hunk/Line Mode"
+      },
+      {
+        "command": "lazygitvs.editorHunkToggleSide",
+        "title": "LazyGitVS: Toggle Editor Staged/Unstaged Hunks"
+      },
+      {
+        "command": "lazygitvs.editorHunkHelp",
+        "title": "LazyGitVS: Editor Hunk Help"
+      },
+      {
+        "command": "lazygitvs.editorHunkDiscard",
+        "title": "LazyGitVS: Discard/Unstage Editor Hunk"
+      },
+      {
+        "command": "lazygitvs.focusPanel1",
+        "title": "LazyGitVS: Focus 1 Status"
+      },
+      {
+        "command": "lazygitvs.focusPanel2",
+        "title": "LazyGitVS: Focus 2 Files"
+      },
+      {
+        "command": "lazygitvs.focusPanel3",
+        "title": "LazyGitVS: Focus 3 Branches"
+      },
+      {
+        "command": "lazygitvs.focusPanel4",
+        "title": "LazyGitVS: Focus 4 Commits"
+      },
+      {
+        "command": "lazygitvs.focusPanel5",
+        "title": "LazyGitVS: Focus 5 Stash"
+      },
+      {
+        "command": "lazygitvs.focusPanel6",
+        "title": "LazyGitVS: Focus 6 Conflicts"
+      },
+      {
+        "command": "lazygitvs.focusPanel7",
+        "title": "LazyGitVS: Focus 7 Tags"
+      },
+      {
+        "command": "lazygitvs.focusPanel8",
+        "title": "LazyGitVS: Focus 8 Remotes"
+      }
+    ],
+    "views": {
+      "scm": [
+        {
+          "id": "lazygitvs.statusView",
+          "name": "1 Status",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "lazygitvs.filesView",
+          "name": "2 Files",
+          "type": "webview"
+        },
+        {
+          "id": "lazygitvs.branchesView",
+          "name": "3 Branches",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "lazygitvs.commitsView",
+          "name": "4 Commits",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "lazygitvs.stashView",
+          "name": "5 Stash",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "lazygitvs.conflictsView",
+          "name": "6 Conflicts",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "lazygitvs.tagsView",
+          "name": "7 Tags",
+          "type": "webview",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "lazygitvs.remotesView",
+          "name": "8 Remotes",
+          "type": "webview",
+          "visibility": "collapsed"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "LazyGitVS",
+      "properties": {
+        "lazygitvs.showStatusBarMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show LazyGitVS mode in the VS Code status bar. Off by default to avoid duplicate Vim/Neovim mode labels. The sidebar footer still follows lazygit gui.showBottomLine."
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "key": "down",
+        "command": "lazygitvs.editorHunkNext",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "up",
+        "command": "lazygitvs.editorHunkPrev",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "j",
+        "command": "lazygitvs.editorHunkNext",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "k",
+        "command": "lazygitvs.editorHunkPrev",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "space",
+        "command": "lazygitvs.editorHunkToggle",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "escape",
+        "command": "lazygitvs.editorHunkExit",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "q",
+        "command": "lazygitvs.closeDashboard",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "a",
+        "command": "lazygitvs.editorHunkToggleMode",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "tab",
+        "command": "lazygitvs.editorHunkToggleSide",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "tab",
+        "command": "lazygitvs.editorHunkToggleSide",
+        "when": "editorTextFocus && vim.active && lazygitvs.editorHunkMode && vim.mode != 'Insert' && !inDebugRepl && !inlineEditIsVisible"
+      },
+      {
+        "key": "ctrl+i",
+        "command": "lazygitvs.editorHunkToggleSide",
+        "when": "editorTextFocus && vim.active && lazygitvs.editorHunkMode && vim.use<C-i> && !inDebugRepl"
+      },
+      {
+        "key": "ctrl+i",
+        "command": "lazygitvs.editorHunkToggleSide",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "d",
+        "command": "lazygitvs.editorHunkDiscard",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+/",
+        "command": "lazygitvs.editorHunkHelp",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+'",
+        "command": "lazygitvs.editorHunkHelp",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "e",
+        "command": "lazygitvs.editorHunkEdit",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "ctrl+enter",
+        "command": "lazygitvs.editorHunkReturn",
+        "when": "lazygitvs.editorEditMode && editorTextFocus"
+      },
+      {
+        "key": "q",
+        "command": "lazygitvs.closeDashboard",
+        "when": "webviewId == 'lazygitvs.statusView' || webviewId == 'lazygitvs.filesView' || webviewId == 'lazygitvs.branchesView' || webviewId == 'lazygitvs.commitsView' || webviewId == 'lazygitvs.stashView' || webviewId == 'lazygitvs.conflictsView' || webviewId == 'lazygitvs.tagsView' || webviewId == 'lazygitvs.remotesView'"
+      },
+      {
+        "key": "ctrl+alt+g",
+        "command": "lazygitvs.openDashboard",
+        "when": "!terminalFocus"
+      },
+      {
+        "key": "1",
+        "command": "lazygitvs.focusPanel1",
+        "when": "lazygitvs.viewerFocus && editorTextFocus"
+      },
+      {
+        "key": "1",
+        "command": "lazygitvs.focusPanel1",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "2",
+        "command": "lazygitvs.focusPanel2",
+        "when": "lazygitvs.viewerFocus && editorTextFocus"
+      },
+      {
+        "key": "2",
+        "command": "lazygitvs.focusPanel2",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "3",
+        "command": "lazygitvs.focusPanel3",
+        "when": "lazygitvs.viewerFocus && editorTextFocus"
+      },
+      {
+        "key": "3",
+        "command": "lazygitvs.focusPanel3",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "4",
+        "command": "lazygitvs.focusPanel4",
+        "when": "lazygitvs.viewerFocus && editorTextFocus"
+      },
+      {
+        "key": "4",
+        "command": "lazygitvs.focusPanel4",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "5",
+        "command": "lazygitvs.focusPanel5",
+        "when": "lazygitvs.viewerFocus && editorTextFocus"
+      },
+      {
+        "key": "5",
+        "command": "lazygitvs.focusPanel5",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "6",
+        "command": "lazygitvs.focusPanel6",
+        "when": "lazygitvs.viewerFocus && editorTextFocus"
+      },
+      {
+        "key": "6",
+        "command": "lazygitvs.focusPanel6",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "7",
+        "command": "lazygitvs.focusPanel7",
+        "when": "lazygitvs.viewerFocus && editorTextFocus"
+      },
+      {
+        "key": "7",
+        "command": "lazygitvs.focusPanel7",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "8",
+        "command": "lazygitvs.focusPanel8",
+        "when": "lazygitvs.viewerFocus && editorTextFocus"
+      },
+      {
+        "key": "8",
+        "command": "lazygitvs.focusPanel8",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "1",
+        "command": "lazygitvs.focusPanel1",
+        "when": "lazygitvs.keyboardMode && editorTextFocus"
+      },
+      {
+        "key": "2",
+        "command": "lazygitvs.focusPanel2",
+        "when": "lazygitvs.keyboardMode && editorTextFocus"
+      },
+      {
+        "key": "3",
+        "command": "lazygitvs.focusPanel3",
+        "when": "lazygitvs.keyboardMode && editorTextFocus"
+      },
+      {
+        "key": "4",
+        "command": "lazygitvs.focusPanel4",
+        "when": "lazygitvs.keyboardMode && editorTextFocus"
+      },
+      {
+        "key": "5",
+        "command": "lazygitvs.focusPanel5",
+        "when": "lazygitvs.keyboardMode && editorTextFocus"
+      },
+      {
+        "key": "6",
+        "command": "lazygitvs.focusPanel6",
+        "when": "lazygitvs.keyboardMode && editorTextFocus"
+      },
+      {
+        "key": "7",
+        "command": "lazygitvs.focusPanel7",
+        "when": "lazygitvs.keyboardMode && editorTextFocus"
+      },
+      {
+        "key": "8",
+        "command": "lazygitvs.focusPanel8",
+        "when": "lazygitvs.keyboardMode && editorTextFocus"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "test": "npm run compile && node test/lazygitConfig.test.js && node test/lazygitMenu.test.js && node test/hunkPatch.test.js && node test/gitPrimitives.test.js && node test/escapeScope.test.js && node test/hunkModeBindings.test.js && node test/originalPreviewScope.test.js && node test/filesPanelUx.test.js && node test/branchCommitWorkflow.test.js && node test/statusRepoSelection.test.js && node test/virtualPreview.test.js && node test/nativePanelFocus.test.js",
+    "dogfood:ui": "node scripts/dogfood-ui.js",
+    "build": "npm run compile && npm run package",
+    "package": "LGVS_VSIX_OUT_DIR=../releases/LazyGitVS npm run package:vsix",
+    "package:vsix": "node scripts/package-vsix.js",
+    "package:dist": "LGVS_VSIX_OUT_DIR=dist npm run package:vsix",
+    "package:local": "node scripts/package-vsix.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.2.1",
+    "chrome-remote-interface": "^0.34.0",
+    "typescript": "^5.4.5"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/djangonavarro220/LazyGitVS.git"
+  },
+  "bugs": {
+    "url": "https://github.com/djangonavarro220/LazyGitVS/issues"
+  },
+  "homepage": "https://github.com/djangonavarro220/LazyGitVS#readme"
+}

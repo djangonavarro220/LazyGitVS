@@ -1,0 +1,12 @@
+node_modules/
+out/
+dist/
+dogfood-output/
+.vscode-test/
+.local/
+.env
+.env.*
+*.local
+*.vsix
+*.log
+.DS_Store

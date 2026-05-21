@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-package-dogfood:
+    name: Test, package, and dogfood
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit and integration tests
+        run: npm test
+
+      - name: Package VSIX
+        run: npm run package:dist
+
+      - name: UI dogfood
+        run: npm run dogfood:ui
+        env:
+          LGVS_DOGFOOD_THEME: Default Light Modern
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lazygitvs-vsix
+          path: dist/*.vsix
+          if-no-files-found: error
+
+      - name: Upload dogfood screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dogfood-output
+          path: dogfood-output/
+          if-no-files-found: ignore

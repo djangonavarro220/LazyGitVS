@@ -1,0 +1,3401 @@
+{
+  "source_repo": "upstream lazygit checkout used for parity research",
+  "keybindings": [
+    {
+      "section": "Global keybindings",
+      "bindings": [
+        {
+          "key": "<c-r>",
+          "action": "Switch to a recent repo",
+          "info": ""
+        },
+        {
+          "key": "<pgup> (fn+up/shift+k)",
+          "action": "Scroll up main window",
+          "info": ""
+        },
+        {
+          "key": "<pgdown> (fn+down/shift+j)",
+          "action": "Scroll down main window",
+          "info": ""
+        },
+        {
+          "key": "@",
+          "action": "View command log options",
+          "info": "View options for the command log e.g. show/hide the command log and focus the command log."
+        },
+        {
+          "key": "P",
+          "action": "Push",
+          "info": "Push the current branch to its upstream branch. If no upstream is configured, you will be prompted to configure an upstream branch."
+        },
+        {
+          "key": "p",
+          "action": "Pull",
+          "info": "Pull changes from the remote for the current branch. If no upstream is configured, you will be prompted to configure an upstream branch."
+        },
+        {
+          "key": ")",
+          "action": "Increase rename similarity threshold",
+          "info": "Increase the similarity threshold for a deletion and addition pair to be treated as a rename. The default can be changed in the config file with the key 'git.renameSimilarityThreshold'."
+        },
+        {
+          "key": "(",
+          "action": "Decrease rename similarity threshold",
+          "info": "Decrease the similarity threshold for a deletion and addition pair to be treated as a rename. The default can be changed in the config file with the key 'git.renameSimilarityThreshold'."
+        },
+        {
+          "key": "}",
+          "action": "Increase diff context size",
+          "info": "Increase the amount of the context shown around changes in the diff view. The default can be changed in the config file with the key 'git.diffContextSize'."
+        },
+        {
+          "key": "{",
+          "action": "Decrease diff context size",
+          "info": "Decrease the amount of the context shown around changes in the diff view. The default can be changed in the config file with the key 'git.diffContextSize'."
+        },
+        {
+          "key": ":",
+          "action": "Execute shell command",
+          "info": "Bring up a prompt where you can enter a shell command to execute."
+        },
+        {
+          "key": "<c-p>",
+          "action": "View custom patch options",
+          "info": ""
+        },
+        {
+          "key": "m",
+          "action": "View merge/rebase options",
+          "info": "View options to abort/continue/skip the current merge/rebase."
+        },
+        {
+          "key": "R",
+          "action": "Refresh",
+          "info": "Refresh the git state (i.e. run `git status`, `git branch`, etc in background to update the contents of panels). This does not run `git fetch`."
+        },
+        {
+          "key": "+",
+          "action": "Next screen mode (normal/half/fullscreen)",
+          "info": ""
+        },
+        {
+          "key": "_",
+          "action": "Prev screen mode",
+          "info": ""
+        },
+        {
+          "key": "\\|",
+          "action": "Cycle pagers",
+          "info": "Choose the next pager in the list of configured pagers"
+        },
+        {
+          "key": "<esc>",
+          "action": "Cancel",
+          "info": ""
+        },
+        {
+          "key": "?",
+          "action": "Open keybindings menu",
+          "info": ""
+        },
+        {
+          "key": "<c-s>",
+          "action": "View filter options",
+          "info": "View options for filtering the commit log, so that only commits matching the filter are shown."
+        },
+        {
+          "key": "W",
+          "action": "View diffing options",
+          "info": "View options relating to diffing two refs e.g. diffing against selected ref, entering ref to diff against, and reversing the diff direction."
+        },
+        {
+          "key": "<c-e>",
+          "action": "View diffing options",
+          "info": "View options relating to diffing two refs e.g. diffing against selected ref, entering ref to diff against, and reversing the diff direction."
+        },
+        {
+          "key": "q",
+          "action": "Quit",
+          "info": ""
+        },
+        {
+          "key": "<c-z>",
+          "action": "Suspend the application",
+          "info": ""
+        },
+        {
+          "key": "<c-w>",
+          "action": "Toggle whitespace",
+          "info": "Toggle whether or not whitespace changes are shown in the diff view. The default can be changed in the config file with the key 'git.ignoreWhitespaceInDiffView'."
+        },
+        {
+          "key": "z",
+          "action": "Undo",
+          "info": "The reflog will be used to determine what git command to run to undo the last git command. This does not include changes to the working tree; only commits are taken into consideration."
+        },
+        {
+          "key": "Z",
+          "action": "Redo",
+          "info": "The reflog will be used to determine what git command to run to redo the last git command. This does not include changes to the working tree; only commits are taken into consideration."
+        }
+      ]
+    },
+    {
+      "section": "List panel navigation",
+      "bindings": [
+        {
+          "key": ",",
+          "action": "Previous page",
+          "info": ""
+        },
+        {
+          "key": ".",
+          "action": "Next page",
+          "info": ""
+        },
+        {
+          "key": "< (<home>)",
+          "action": "Scroll to top",
+          "info": ""
+        },
+        {
+          "key": "> (<end>)",
+          "action": "Scroll to bottom",
+          "info": ""
+        },
+        {
+          "key": "v",
+          "action": "Toggle range select",
+          "info": ""
+        },
+        {
+          "key": "<s-down>",
+          "action": "Range select down",
+          "info": ""
+        },
+        {
+          "key": "<s-up>",
+          "action": "Range select up",
+          "info": ""
+        },
+        {
+          "key": "/",
+          "action": "Search the current view by text",
+          "info": ""
+        },
+        {
+          "key": "H",
+          "action": "Scroll left",
+          "info": ""
+        },
+        {
+          "key": "L",
+          "action": "Scroll right",
+          "info": ""
+        },
+        {
+          "key": "]",
+          "action": "Next tab",
+          "info": ""
+        },
+        {
+          "key": "[",
+          "action": "Previous tab",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Commit files",
+      "bindings": [
+        {
+          "key": "<c-o>",
+          "action": "Copy path to clipboard",
+          "info": ""
+        },
+        {
+          "key": "y",
+          "action": "Copy to clipboard",
+          "info": ""
+        },
+        {
+          "key": "c",
+          "action": "Checkout",
+          "info": "Checkout file. This replaces the file in your working tree with the version from the selected commit."
+        },
+        {
+          "key": "d",
+          "action": "Discard",
+          "info": "Discard this commit's changes to this file. This runs an interactive rebase in the background, so you may get a merge conflict if a later commit also changes this file."
+        },
+        {
+          "key": "o",
+          "action": "Open file",
+          "info": "Open file in default application."
+        },
+        {
+          "key": "e",
+          "action": "Edit",
+          "info": "Open file in external editor."
+        },
+        {
+          "key": "<c-t>",
+          "action": "Open external diff tool (git difftool)",
+          "info": ""
+        },
+        {
+          "key": "<space>",
+          "action": "Toggle file included in patch",
+          "info": "Toggle whether the file is included in the custom patch. See https://github.com/jesseduffield/lazygit#rebase-magic-custom-patches."
+        },
+        {
+          "key": "a",
+          "action": "Toggle all files",
+          "info": "Add/remove all commit's files to custom patch. See https://github.com/jesseduffield/lazygit#rebase-magic-custom-patches."
+        },
+        {
+          "key": "<enter>",
+          "action": "Enter file / Toggle directory collapsed",
+          "info": "If a file is selected, enter the file so that you can add/remove individual lines to the custom patch. If a directory is selected, toggle the directory."
+        },
+        {
+          "key": "`",
+          "action": "Toggle file tree view",
+          "info": "Toggle file view between flat and tree layout. Flat layout shows all file paths in a single list, tree layout groups files by directory. The default can be changed in the config file with the key 'gui.showFileTree'."
+        },
+        {
+          "key": "-",
+          "action": "Collapse all files",
+          "info": "Collapse all directories in the files tree"
+        },
+        {
+          "key": "=",
+          "action": "Expand all files",
+          "info": "Expand all directories in the file tree"
+        },
+        {
+          "key": "0",
+          "action": "Focus main view",
+          "info": ""
+        },
+        {
+          "key": "/",
+          "action": "Filter the current view by text",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Commit summary",
+      "bindings": [
+        {
+          "key": "<enter>",
+          "action": "Confirm",
+          "info": ""
+        },
+        {
+          "key": "<esc>",
+          "action": "Close",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Commits",
+      "bindings": [
+        {
+          "key": "<c-o>",
+          "action": "Copy abbreviated commit hash to clipboard",
+          "info": ""
+        },
+        {
+          "key": "<c-r>",
+          "action": "Reset copied (cherry-picked) commits selection",
+          "info": ""
+        },
+        {
+          "key": "b",
+          "action": "View bisect options",
+          "info": ""
+        },
+        {
+          "key": "s",
+          "action": "Squash",
+          "info": "Squash the selected commit into the commit below it. The selected commit's message will be appended to the commit below it."
+        },
+        {
+          "key": "f",
+          "action": "Fixup",
+          "info": "Meld the selected commit into the commit below it. Similar to squash, but the selected commit's message will be discarded."
+        },
+        {
+          "key": "c",
+          "action": "Set fixup message",
+          "info": "Set the message option for the fixup commit. The -C option means to use this commit's message instead of the target commit's message."
+        },
+        {
+          "key": "r",
+          "action": "Reword",
+          "info": "Reword the selected commit's message."
+        },
+        {
+          "key": "R",
+          "action": "Reword with editor",
+          "info": ""
+        },
+        {
+          "key": "d",
+          "action": "Drop",
+          "info": "Drop the selected commit. This will remove the commit from the branch via a rebase. If the commit makes changes that later commits depend on, you may need to resolve merge conflicts."
+        },
+        {
+          "key": "e",
+          "action": "Edit (start interactive rebase)",
+          "info": "Edit the selected commit. Use this to start an interactive rebase from the selected commit. When already mid-rebase, this will mark the selected commit for editing, which means that upon continuing the rebase, the rebase will pause at the selected commit to allow you to make changes."
+        },
+        {
+          "key": "i",
+          "action": "Start interactive rebase",
+          "info": "Start an interactive rebase for the commits on your branch. This will include all commits from the HEAD commit down to the first merge commit or main branch commit.<br>If you would instead like to start an interactive rebase from the selected commit, press `e`."
+        },
+        {
+          "key": "p",
+          "action": "Pick",
+          "info": "Mark the selected commit to be picked (when mid-rebase). This means that the commit will be retained upon continuing the rebase."
+        },
+        {
+          "key": "F",
+          "action": "Create fixup commit",
+          "info": "Create 'fixup!' commit for the selected commit. Later on, you can press `S` on this same commit to apply all above fixup commits."
+        },
+        {
+          "key": "S",
+          "action": "Apply fixup commits",
+          "info": "Squash all 'fixup!' commits, either above the selected commit, or all in current branch (autosquash)."
+        },
+        {
+          "key": "<c-j>",
+          "action": "Move commit down one",
+          "info": ""
+        },
+        {
+          "key": "<c-k>",
+          "action": "Move commit up one",
+          "info": ""
+        },
+        {
+          "key": "V",
+          "action": "Paste (cherry-pick)",
+          "info": ""
+        },
+        {
+          "key": "B",
+          "action": "Mark as base commit for rebase",
+          "info": "Select a base commit for the next rebase. When you rebase onto a branch, only commits above the base commit will be brought across. This uses the `git rebase --onto` command."
+        },
+        {
+          "key": "A",
+          "action": "Amend",
+          "info": "Amend commit with staged changes. If the selected commit is the HEAD commit, this will perform `git commit --amend`. Otherwise the commit will be amended via a rebase."
+        },
+        {
+          "key": "a",
+          "action": "Amend commit attribute",
+          "info": "Set/Reset commit author or set co-author."
+        },
+        {
+          "key": "t",
+          "action": "Revert",
+          "info": "Create a revert commit for the selected commit, which applies the selected commit's changes in reverse."
+        },
+        {
+          "key": "T",
+          "action": "Tag commit",
+          "info": "Create a new tag pointing at the selected commit. You'll be prompted to enter a tag name and optional description."
+        },
+        {
+          "key": "<c-l>",
+          "action": "View log options",
+          "info": "View options for commit log e.g. changing sort order, hiding the git graph, showing the whole git graph."
+        },
+        {
+          "key": "G",
+          "action": "Open pull request in browser",
+          "info": ""
+        },
+        {
+          "key": "<space>",
+          "action": "Checkout",
+          "info": "Checkout the selected commit as a detached HEAD."
+        },
+        {
+          "key": "y",
+          "action": "Copy commit attribute to clipboard",
+          "info": "Copy commit attribute to clipboard (e.g. hash, URL, diff, message, author)."
+        },
+        {
+          "key": "o",
+          "action": "Open commit in browser",
+          "info": ""
+        },
+        {
+          "key": "n",
+          "action": "Create new branch off of commit",
+          "info": ""
+        },
+        {
+          "key": "N",
+          "action": "Move commits to new branch",
+          "info": "Create a new branch and move the unpushed commits of the current branch to it. Useful if you meant to start new work and forgot to create a new branch first. Note that this disregards the selection, the new branch is always created either from the main branch or stacked on top of the current branch (you get to choose which)."
+        },
+        {
+          "key": "g",
+          "action": "Reset",
+          "info": "View reset options (soft/mixed/hard) for resetting onto selected item."
+        },
+        {
+          "key": "C",
+          "action": "Copy (cherry-pick)",
+          "info": "Mark commit as copied. Then, within the local commits view, you can press `V` to paste (cherry-pick) the copied commit(s) into your checked out branch. At any time you can press `<esc>` to cancel the selection."
+        },
+        {
+          "key": "<c-t>",
+          "action": "Open external diff tool (git difftool)",
+          "info": ""
+        },
+        {
+          "key": "*",
+          "action": "Select commits of current branch",
+          "info": ""
+        },
+        {
+          "key": "0",
+          "action": "Focus main view",
+          "info": ""
+        },
+        {
+          "key": "<enter>",
+          "action": "View files",
+          "info": ""
+        },
+        {
+          "key": "w",
+          "action": "View worktree options",
+          "info": ""
+        },
+        {
+          "key": "/",
+          "action": "Search the current view by text",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Confirmation panel",
+      "bindings": [
+        {
+          "key": "<enter>",
+          "action": "Confirm",
+          "info": ""
+        },
+        {
+          "key": "<esc>",
+          "action": "Close/Cancel",
+          "info": ""
+        },
+        {
+          "key": "<c-o>",
+          "action": "Copy to clipboard",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Files",
+      "bindings": [
+        {
+          "key": "<c-o>",
+          "action": "Copy path to clipboard",
+          "info": ""
+        },
+        {
+          "key": "<space>",
+          "action": "Stage",
+          "info": "Toggle staged for selected file."
+        },
+        {
+          "key": "<c-b>",
+          "action": "Filter files by status",
+          "info": ""
+        },
+        {
+          "key": "y",
+          "action": "Copy to clipboard",
+          "info": ""
+        },
+        {
+          "key": "c",
+          "action": "Commit",
+          "info": "Commit staged changes."
+        },
+        {
+          "key": "w",
+          "action": "Commit changes without pre-commit hook",
+          "info": ""
+        },
+        {
+          "key": "A",
+          "action": "Amend last commit",
+          "info": ""
+        },
+        {
+          "key": "C",
+          "action": "Commit changes using git editor",
+          "info": ""
+        },
+        {
+          "key": "<c-f>",
+          "action": "Find base commit for fixup",
+          "info": "Find the commit that your current changes are building upon, for the sake of amending/fixing up the commit. This spares you from having to look through your branch's commits one-by-one to see which commit should be amended/fixed up. See docs: <https://github.com/jesseduffield/lazygit/tree/master/docs/Fixup_Commits.md>"
+        },
+        {
+          "key": "e",
+          "action": "Edit",
+          "info": "Open file in external editor."
+        },
+        {
+          "key": "o",
+          "action": "Open file",
+          "info": "Open file in default application."
+        },
+        {
+          "key": "i",
+          "action": "Ignore or exclude file",
+          "info": ""
+        },
+        {
+          "key": "r",
+          "action": "Refresh files",
+          "info": ""
+        },
+        {
+          "key": "s",
+          "action": "Stash",
+          "info": "Stash all changes. For other variations of stashing, use the view stash options keybinding."
+        },
+        {
+          "key": "S",
+          "action": "View stash options",
+          "info": "View stash options (e.g. stash all, stash staged, stash unstaged)."
+        },
+        {
+          "key": "a",
+          "action": "Stage all",
+          "info": "Toggle staged/unstaged for all files in working tree."
+        },
+        {
+          "key": "<enter>",
+          "action": "Stage lines / Collapse directory",
+          "info": "If the selected item is a file, focus the staging view so you can stage individual hunks/lines. If the selected item is a directory, collapse/expand it."
+        },
+        {
+          "key": "d",
+          "action": "Discard",
+          "info": "View options for discarding changes to the selected file."
+        },
+        {
+          "key": "g",
+          "action": "View upstream reset options",
+          "info": ""
+        },
+        {
+          "key": "D",
+          "action": "Reset",
+          "info": "View reset options for working tree (e.g. nuking the working tree)."
+        },
+        {
+          "key": "`",
+          "action": "Toggle file tree view",
+          "info": "Toggle file view between flat and tree layout. Flat layout shows all file paths in a single list, tree layout groups files by directory. The default can be changed in the config file with the key 'gui.showFileTree'."
+        },
+        {
+          "key": "<c-t>",
+          "action": "Open external diff tool (git difftool)",
+          "info": ""
+        },
+        {
+          "key": "M",
+          "action": "View merge conflict options",
+          "info": "View options for resolving merge conflicts."
+        },
+        {
+          "key": "f",
+          "action": "Fetch",
+          "info": "Fetch changes from remote."
+        },
+        {
+          "key": "-",
+          "action": "Collapse all files",
+          "info": "Collapse all directories in the files tree"
+        },
+        {
+          "key": "=",
+          "action": "Expand all files",
+          "info": "Expand all directories in the file tree"
+        },
+        {
+          "key": "0",
+          "action": "Focus main view",
+          "info": ""
+        },
+        {
+          "key": "/",
+          "action": "Filter the current view by text",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Input prompt",
+      "bindings": [
+        {
+          "key": "<enter>",
+          "action": "Confirm",
+          "info": ""
+        },
+        {
+          "key": "<esc>",
+          "action": "Close/Cancel",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Local branches",
+      "bindings": [
+        {
+          "key": "<c-o>",
+          "action": "Copy branch name to clipboard",
+          "info": ""
+        },
+        {
+          "key": "i",
+          "action": "Show git-flow options",
+          "info": ""
+        },
+        {
+          "key": "<space>",
+          "action": "Checkout",
+          "info": "Checkout selected item."
+        },
+        {
+          "key": "n",
+          "action": "New branch",
+          "info": ""
+        },
+        {
+          "key": "N",
+          "action": "Move commits to new branch",
+          "info": "Create a new branch and move the unpushed commits of the current branch to it. Useful if you meant to start new work and forgot to create a new branch first. Note that this disregards the selection, the new branch is always created either from the main branch or stacked on top of the current branch (you get to choose which)."
+        },
+        {
+          "key": "o",
+          "action": "Create pull request",
+          "info": ""
+        },
+        {
+          "key": "O",
+          "action": "View create pull request options",
+          "info": ""
+        },
+        {
+          "key": "G",
+          "action": "Open pull request in browser",
+          "info": ""
+        },
+        {
+          "key": "<c-y>",
+          "action": "Copy pull request URL to clipboard",
+          "info": ""
+        },
+        {
+          "key": "c",
+          "action": "Checkout by name",
+          "info": "Checkout by name. In the input box you can enter '-' to switch to the previous branch."
+        },
+        {
+          "key": "-",
+          "action": "Checkout previous branch",
+          "info": ""
+        },
+        {
+          "key": "F",
+          "action": "Force checkout",
+          "info": "Force checkout selected branch. This will discard all local changes in your working directory before checking out the selected branch."
+        },
+        {
+          "key": "d",
+          "action": "Delete",
+          "info": "View delete options for local/remote branch."
+        },
+        {
+          "key": "r",
+          "action": "Rebase",
+          "info": "Rebase the checked-out branch onto the selected branch."
+        },
+        {
+          "key": "M",
+          "action": "Merge",
+          "info": "View options for merging the selected item into the current branch (regular merge, squash merge)"
+        },
+        {
+          "key": "f",
+          "action": "Fast-forward",
+          "info": "Fast-forward selected branch from its upstream."
+        },
+        {
+          "key": "T",
+          "action": "New tag",
+          "info": ""
+        },
+        {
+          "key": "s",
+          "action": "Sort order",
+          "info": ""
+        },
+        {
+          "key": "g",
+          "action": "Reset",
+          "info": ""
+        },
+        {
+          "key": "R",
+          "action": "Rename branch",
+          "info": ""
+        },
+        {
+          "key": "u",
+          "action": "View upstream options",
+          "info": "View options relating to the branch's upstream e.g. setting/unsetting the upstream and resetting to the upstream."
+        },
+        {
+          "key": "<c-t>",
+          "action": "Open external diff tool (git difftool)",
+          "info": ""
+        },
+        {
+          "key": "0",
+          "action": "Focus main view",
+          "info": ""
+        },
+        {
+          "key": "<enter>",
+          "action": "View commits",
+          "info": ""
+        },
+        {
+          "key": "w",
+          "action": "View worktree options",
+          "info": ""
+        },
+        {
+          "key": "/",
+          "action": "Filter the current view by text",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Main panel (merging)",
+      "bindings": [
+        {
+          "key": "<space>",
+          "action": "Pick hunk",
+          "info": ""
+        },
+        {
+          "key": "b",
+          "action": "Pick all hunks",
+          "info": ""
+        },
+        {
+          "key": "<up>",
+          "action": "Previous hunk",
+          "info": ""
+        },
+        {
+          "key": "<down>",
+          "action": "Next hunk",
+          "info": ""
+        },
+        {
+          "key": "<left>",
+          "action": "Previous conflict",
+          "info": ""
+        },
+        {
+          "key": "<right>",
+          "action": "Next conflict",
+          "info": ""
+        },
+        {
+          "key": "z",
+          "action": "Undo",
+          "info": "Undo last merge conflict resolution."
+        },
+        {
+          "key": "e",
+          "action": "Edit file",
+          "info": "Open file in external editor."
+        },
+        {
+          "key": "o",
+          "action": "Open file",
+          "info": "Open file in default application."
+        },
+        {
+          "key": "M",
+          "action": "View merge conflict options",
+          "info": "View options for resolving merge conflicts."
+        },
+        {
+          "key": "<esc>",
+          "action": "Return to files panel",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Main panel (normal)",
+      "bindings": [
+        {
+          "key": "mouse wheel down (fn+up)",
+          "action": "Scroll down",
+          "info": ""
+        },
+        {
+          "key": "mouse wheel up (fn+down)",
+          "action": "Scroll up",
+          "info": ""
+        },
+        {
+          "key": "<tab>",
+          "action": "Switch view",
+          "info": "Switch to other view (staged/unstaged changes)."
+        },
+        {
+          "key": "<esc>",
+          "action": "Exit back to side panel",
+          "info": ""
+        },
+        {
+          "key": "/",
+          "action": "Search the current view by text",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Main panel (patch building)",
+      "bindings": [
+        {
+          "key": "<left>",
+          "action": "Go to previous hunk",
+          "info": ""
+        },
+        {
+          "key": "<right>",
+          "action": "Go to next hunk",
+          "info": ""
+        },
+        {
+          "key": "v",
+          "action": "Toggle range select",
+          "info": ""
+        },
+        {
+          "key": "a",
+          "action": "Toggle hunk selection",
+          "info": "Toggle line-by-line vs. hunk selection mode."
+        },
+        {
+          "key": "<c-o>",
+          "action": "Copy selected text to clipboard",
+          "info": ""
+        },
+        {
+          "key": "o",
+          "action": "Open file",
+          "info": "Open file in default application."
+        },
+        {
+          "key": "e",
+          "action": "Edit file",
+          "info": "Open file in external editor."
+        },
+        {
+          "key": "<space>",
+          "action": "Toggle lines in patch",
+          "info": ""
+        },
+        {
+          "key": "d",
+          "action": "Remove lines from commit",
+          "info": "Remove the selected lines from this commit. This runs an interactive rebase in the background, so you may get a merge conflict if a later commit also changes these lines."
+        },
+        {
+          "key": "<esc>",
+          "action": "Exit custom patch builder",
+          "info": ""
+        },
+        {
+          "key": "/",
+          "action": "Search the current view by text",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Main panel (staging)",
+      "bindings": [
+        {
+          "key": "<left>",
+          "action": "Go to previous hunk",
+          "info": ""
+        },
+        {
+          "key": "<right>",
+          "action": "Go to next hunk",
+          "info": ""
+        },
+        {
+          "key": "v",
+          "action": "Toggle range select",
+          "info": ""
+        },
+        {
+          "key": "a",
+          "action": "Toggle hunk selection",
+          "info": "Toggle line-by-line vs. hunk selection mode."
+        },
+        {
+          "key": "<c-o>",
+          "action": "Copy selected text to clipboard",
+          "info": ""
+        },
+        {
+          "key": "<space>",
+          "action": "Stage",
+          "info": "Toggle selection staged / unstaged."
+        },
+        {
+          "key": "d",
+          "action": "Discard",
+          "info": "When unstaged change is selected, discard the change using `git reset`. When staged change is selected, unstage the change."
+        },
+        {
+          "key": "o",
+          "action": "Open file",
+          "info": "Open file in default application."
+        },
+        {
+          "key": "e",
+          "action": "Edit file",
+          "info": "Open file in external editor."
+        },
+        {
+          "key": "<esc>",
+          "action": "Return to files panel",
+          "info": ""
+        },
+        {
+          "key": "<tab>",
+          "action": "Switch view",
+          "info": "Switch to other view (staged/unstaged changes)."
+        },
+        {
+          "key": "E",
+          "action": "Edit hunk",
+          "info": "Edit selected hunk in external editor."
+        },
+        {
+          "key": "c",
+          "action": "Commit",
+          "info": "Commit staged changes."
+        },
+        {
+          "key": "w",
+          "action": "Commit changes without pre-commit hook",
+          "info": ""
+        },
+        {
+          "key": "C",
+          "action": "Commit changes using git editor",
+          "info": ""
+        },
+        {
+          "key": "<c-f>",
+          "action": "Find base commit for fixup",
+          "info": "Find the commit that your current changes are building upon, for the sake of amending/fixing up the commit. This spares you from having to look through your branch's commits one-by-one to see which commit should be amended/fixed up. See docs: <https://github.com/jesseduffield/lazygit/tree/master/docs/Fixup_Commits.md>"
+        },
+        {
+          "key": "/",
+          "action": "Search the current view by text",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Menu",
+      "bindings": [
+        {
+          "key": "<enter>",
+          "action": "Execute",
+          "info": ""
+        },
+        {
+          "key": "<esc>",
+          "action": "Close/Cancel",
+          "info": ""
+        },
+        {
+          "key": "/",
+          "action": "Filter the current view by text",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Reflog",
+      "bindings": [
+        {
+          "key": "<c-o>",
+          "action": "Copy abbreviated commit hash to clipboard",
+          "info": ""
+        },
+        {
+          "key": "<space>",
+          "action": "Checkout",
+          "info": "Checkout the selected commit as a detached HEAD."
+        },
+        {
+          "key": "y",
+          "action": "Copy commit attribute to clipboard",
+          "info": "Copy commit attribute to clipboard (e.g. hash, URL, diff, message, author)."
+        },
+        {
+          "key": "o",
+          "action": "Open commit in browser",
+          "info": ""
+        },
+        {
+          "key": "n",
+          "action": "Create new branch off of commit",
+          "info": ""
+        },
+        {
+          "key": "N",
+          "action": "Move commits to new branch",
+          "info": "Create a new branch and move the unpushed commits of the current branch to it. Useful if you meant to start new work and forgot to create a new branch first. Note that this disregards the selection, the new branch is always created either from the main branch or stacked on top of the current branch (you get to choose which)."
+        },
+        {
+          "key": "g",
+          "action": "Reset",
+          "info": "View reset options (soft/mixed/hard) for resetting onto selected item."
+        },
+        {
+          "key": "C",
+          "action": "Copy (cherry-pick)",
+          "info": "Mark commit as copied. Then, within the local commits view, you can press `V` to paste (cherry-pick) the copied commit(s) into your checked out branch. At any time you can press `<esc>` to cancel the selection."
+        },
+        {
+          "key": "<c-r>",
+          "action": "Reset copied (cherry-picked) commits selection",
+          "info": ""
+        },
+        {
+          "key": "<c-t>",
+          "action": "Open external diff tool (git difftool)",
+          "info": ""
+        },
+        {
+          "key": "*",
+          "action": "Select commits of current branch",
+          "info": ""
+        },
+        {
+          "key": "0",
+          "action": "Focus main view",
+          "info": ""
+        },
+        {
+          "key": "<enter>",
+          "action": "View commits",
+          "info": ""
+        },
+        {
+          "key": "w",
+          "action": "View worktree options",
+          "info": ""
+        },
+        {
+          "key": "/",
+          "action": "Filter the current view by text",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Remote branches",
+      "bindings": [
+        {
+          "key": "<c-o>",
+          "action": "Copy branch name to clipboard",
+          "info": ""
+        },
+        {
+          "key": "<space>",
+          "action": "Checkout",
+          "info": "Checkout a new local branch based on the selected remote branch, or the remote branch as a detached head."
+        },
+        {
+          "key": "n",
+          "action": "New branch",
+          "info": ""
+        },
+        {
+          "key": "M",
+          "action": "Merge",
+          "info": "View options for merging the selected item into the current branch (regular merge, squash merge)"
+        },
+        {
+          "key": "r",
+          "action": "Rebase",
+          "info": "Rebase the checked-out branch onto the selected branch."
+        },
+        {
+          "key": "d",
+          "action": "Delete",
+          "info": "Delete the remote branch from the remote."
+        },
+        {
+          "key": "u",
+          "action": "Set as upstream",
+          "info": "Set the selected remote branch as the upstream of the checked-out branch."
+        },
+        {
+          "key": "s",
+          "action": "Sort order",
+          "info": ""
+        },
+        {
+          "key": "g",
+          "action": "Reset",
+          "info": "View reset options (soft/mixed/hard) for resetting onto selected item."
+        },
+        {
+          "key": "<c-t>",
+          "action": "Open external diff tool (git difftool)",
+          "info": ""
+        },
+        {
+          "key": "0",
+          "action": "Focus main view",
+          "info": ""
+        },
+        {
+          "key": "<enter>",
+          "action": "View commits",
+          "info": ""
+        },
+        {
+          "key": "w",
+          "action": "View worktree options",
+          "info": ""
+        },
+        {
+          "key": "/",
+          "action": "Filter the current view by text",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Remotes",
+      "bindings": [
+        {
+          "key": "<enter>",
+          "action": "View branches",
+          "info": ""
+        },
+        {
+          "key": "n",
+          "action": "New remote",
+          "info": ""
+        },
+        {
+          "key": "d",
+          "action": "Remove",
+          "info": "Remove the selected remote. Any local branches tracking a remote branch from the remote will be unaffected."
+        },
+        {
+          "key": "e",
+          "action": "Edit",
+          "info": "Edit the selected remote's name or URL."
+        },
+        {
+          "key": "f",
+          "action": "Fetch",
+          "info": "Fetch updates from the remote repository. This retrieves new commits and branches without merging them into your local branches."
+        },
+        {
+          "key": "F",
+          "action": "Add fork remote",
+          "info": "Quickly add a fork remote by replacing the owner in the origin URL and optionally check out a branch from new remote."
+        },
+        {
+          "key": "/",
+          "action": "Filter the current view by text",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Secondary",
+      "bindings": [
+        {
+          "key": "<tab>",
+          "action": "Switch view",
+          "info": "Switch to other view (staged/unstaged changes)."
+        },
+        {
+          "key": "<esc>",
+          "action": "Exit back to side panel",
+          "info": ""
+        },
+        {
+          "key": "/",
+          "action": "Search the current view by text",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Stash",
+      "bindings": [
+        {
+          "key": "<space>",
+          "action": "Apply",
+          "info": "Apply the stash entry to your working directory."
+        },
+        {
+          "key": "g",
+          "action": "Pop",
+          "info": "Apply the stash entry to your working directory and remove the stash entry."
+        },
+        {
+          "key": "d",
+          "action": "Drop",
+          "info": "Remove the stash entry from the stash list."
+        },
+        {
+          "key": "n",
+          "action": "New branch",
+          "info": "Create a new branch from the selected stash entry. This works by git checking out the commit that the stash entry was created from, creating a new branch from that commit, then applying the stash entry to the new branch as an additional commit."
+        },
+        {
+          "key": "r",
+          "action": "Rename stash",
+          "info": ""
+        },
+        {
+          "key": "0",
+          "action": "Focus main view",
+          "info": ""
+        },
+        {
+          "key": "<enter>",
+          "action": "View files",
+          "info": ""
+        },
+        {
+          "key": "w",
+          "action": "View worktree options",
+          "info": ""
+        },
+        {
+          "key": "/",
+          "action": "Filter the current view by text",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Status",
+      "bindings": [
+        {
+          "key": "o",
+          "action": "Open config file",
+          "info": "Open file in default application."
+        },
+        {
+          "key": "e",
+          "action": "Edit config file",
+          "info": "Open file in external editor."
+        },
+        {
+          "key": "u",
+          "action": "Check for update",
+          "info": ""
+        },
+        {
+          "key": "<enter>",
+          "action": "Switch to a recent repo",
+          "info": ""
+        },
+        {
+          "key": "a",
+          "action": "Show/cycle all branch logs",
+          "info": ""
+        },
+        {
+          "key": "A",
+          "action": "Show/cycle all branch logs (reverse)",
+          "info": ""
+        },
+        {
+          "key": "0",
+          "action": "Focus main view",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Sub-commits",
+      "bindings": [
+        {
+          "key": "<c-o>",
+          "action": "Copy abbreviated commit hash to clipboard",
+          "info": ""
+        },
+        {
+          "key": "<space>",
+          "action": "Checkout",
+          "info": "Checkout the selected commit as a detached HEAD."
+        },
+        {
+          "key": "y",
+          "action": "Copy commit attribute to clipboard",
+          "info": "Copy commit attribute to clipboard (e.g. hash, URL, diff, message, author)."
+        },
+        {
+          "key": "o",
+          "action": "Open commit in browser",
+          "info": ""
+        },
+        {
+          "key": "n",
+          "action": "Create new branch off of commit",
+          "info": ""
+        },
+        {
+          "key": "N",
+          "action": "Move commits to new branch",
+          "info": "Create a new branch and move the unpushed commits of the current branch to it. Useful if you meant to start new work and forgot to create a new branch first. Note that this disregards the selection, the new branch is always created either from the main branch or stacked on top of the current branch (you get to choose which)."
+        },
+        {
+          "key": "g",
+          "action": "Reset",
+          "info": "View reset options (soft/mixed/hard) for resetting onto selected item."
+        },
+        {
+          "key": "C",
+          "action": "Copy (cherry-pick)",
+          "info": "Mark commit as copied. Then, within the local commits view, you can press `V` to paste (cherry-pick) the copied commit(s) into your checked out branch. At any time you can press `<esc>` to cancel the selection."
+        },
+        {
+          "key": "<c-r>",
+          "action": "Reset copied (cherry-picked) commits selection",
+          "info": ""
+        },
+        {
+          "key": "<c-t>",
+          "action": "Open external diff tool (git difftool)",
+          "info": ""
+        },
+        {
+          "key": "*",
+          "action": "Select commits of current branch",
+          "info": ""
+        },
+        {
+          "key": "0",
+          "action": "Focus main view",
+          "info": ""
+        },
+        {
+          "key": "<enter>",
+          "action": "View files",
+          "info": ""
+        },
+        {
+          "key": "w",
+          "action": "View worktree options",
+          "info": ""
+        },
+        {
+          "key": "/",
+          "action": "Search the current view by text",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Submodules",
+      "bindings": [
+        {
+          "key": "<c-o>",
+          "action": "Copy submodule name to clipboard",
+          "info": ""
+        },
+        {
+          "key": "<enter>",
+          "action": "Enter",
+          "info": "Enter submodule. After entering the submodule, you can press `<esc>` to escape back to the parent repo."
+        },
+        {
+          "key": "d",
+          "action": "Remove",
+          "info": "Remove the selected submodule and its corresponding directory."
+        },
+        {
+          "key": "u",
+          "action": "Update",
+          "info": "Update selected submodule."
+        },
+        {
+          "key": "n",
+          "action": "New submodule",
+          "info": ""
+        },
+        {
+          "key": "e",
+          "action": "Update submodule URL",
+          "info": ""
+        },
+        {
+          "key": "i",
+          "action": "Initialize",
+          "info": "Initialize the selected submodule to prepare for fetching. You probably want to follow this up by invoking the 'update' action to fetch the submodule."
+        },
+        {
+          "key": "b",
+          "action": "View bulk submodule options",
+          "info": ""
+        },
+        {
+          "key": "/",
+          "action": "Filter the current view by text",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Tags",
+      "bindings": [
+        {
+          "key": "<c-o>",
+          "action": "Copy tag to clipboard",
+          "info": ""
+        },
+        {
+          "key": "<space>",
+          "action": "Checkout",
+          "info": "Checkout the selected tag as a detached HEAD."
+        },
+        {
+          "key": "n",
+          "action": "New tag",
+          "info": "Create new tag from current commit. You'll be prompted to enter a tag name and optional description."
+        },
+        {
+          "key": "d",
+          "action": "Delete",
+          "info": "View delete options for local/remote tag."
+        },
+        {
+          "key": "P",
+          "action": "Push tag",
+          "info": "Push the selected tag to a remote. You'll be prompted to select a remote."
+        },
+        {
+          "key": "g",
+          "action": "Reset",
+          "info": "View reset options (soft/mixed/hard) for resetting onto selected item."
+        },
+        {
+          "key": "<c-t>",
+          "action": "Open external diff tool (git difftool)",
+          "info": ""
+        },
+        {
+          "key": "0",
+          "action": "Focus main view",
+          "info": ""
+        },
+        {
+          "key": "<enter>",
+          "action": "View commits",
+          "info": ""
+        },
+        {
+          "key": "w",
+          "action": "View worktree options",
+          "info": ""
+        },
+        {
+          "key": "/",
+          "action": "Filter the current view by text",
+          "info": ""
+        }
+      ]
+    },
+    {
+      "section": "Worktrees",
+      "bindings": [
+        {
+          "key": "n",
+          "action": "New worktree",
+          "info": ""
+        },
+        {
+          "key": "<space>",
+          "action": "Switch",
+          "info": "Switch to the selected worktree."
+        },
+        {
+          "key": "o",
+          "action": "Open in editor",
+          "info": ""
+        },
+        {
+          "key": "d",
+          "action": "Remove",
+          "info": "Remove the selected worktree. This will both delete the worktree's directory, as well as metadata about the worktree in the .git directory."
+        },
+        {
+          "key": "/",
+          "action": "Filter the current view by text",
+          "info": ""
+        }
+      ]
+    }
+  ],
+  "config_default_keybindings_go": "\t\tKeybinding: KeybindingConfig{\n\t\t\tUniversal: KeybindingUniversalConfig{\n\t\t\t\tQuit:                              \"q\",\n\t\t\t\tQuitAlt1:                          \"<ctrl+c>\",\n\t\t\t\tSuspendApp:                        \"<ctrl+z>\",\n\t\t\t\tReturn:                            \"<esc>\",\n\t\t\t\tQuitWithoutChangingDirectory:      \"Q\",\n\t\t\t\tTogglePanel:                       \"<tab>\",\n\t\t\t\tPrevItem:                          \"<up>\",\n\t\t\t\tNextItem:                          \"<down>\",\n\t\t\t\tPrevItemAlt:                       \"k\",\n\t\t\t\tNextItemAlt:                       \"j\",\n\t\t\t\tPrevPage:                          \",\",\n\t\t\t\tNextPage:                          \".\",\n\t\t\t\tScrollLeft:                        \"H\",\n\t\t\t\tScrollRight:                       \"L\",\n\t\t\t\tGotoTop:                           \"<\",\n\t\t\t\tGotoBottom:                        \">\",\n\t\t\t\tGotoTopAlt:                        \"<home>\",\n\t\t\t\tGotoBottomAlt:                     \"<end>\",\n\t\t\t\tToggleRangeSelect:                 \"v\",\n\t\t\t\tRangeSelectDown:                   \"<shift+down>\",\n\t\t\t\tRangeSelectUp:                     \"<shift+up>\",\n\t\t\t\tPrevBlock:                         \"<left>\",\n\t\t\t\tNextBlock:                         \"<right>\",\n\t\t\t\tPrevBlockAlt:                      \"h\",\n\t\t\t\tNextBlockAlt:                      \"l\",\n\t\t\t\tPrevBlockAlt2:                     \"<backtab>\",\n\t\t\t\tNextBlockAlt2:                     \"<tab>\",\n\t\t\t\tJumpToBlock:                       []string{\"1\", \"2\", \"3\", \"4\", \"5\"},\n\t\t\t\tFocusMainView:                     \"0\",\n\t\t\t\tNextMatch:                         \"n\",\n\t\t\t\tPrevMatch:                         \"N\",\n\t\t\t\tStartSearch:                       \"/\",\n\t\t\t\tMoveWordLeft:                      platformKeyBinding(platform, map[string]string{\"darwin\": \"<alt+left>\"}, \"<ctrl+left>\"),\n\t\t\t\tMoveWordRight:                     platformKeyBinding(platform, map[string]string{\"darwin\": \"<alt+right>\"}, \"<ctrl+right>\"),\n\t\t\t\tBackspaceWord:                     platformKeyBinding(platform, map[string]string{\"darwin\": \"<alt+backspace>\"}, \"<ctrl+backspace>\"),\n\t\t\t\tForwardDeleteWord:                 platformKeyBinding(platform, map[string]string{\"darwin\": \"<alt+delete>\"}, \"<ctrl+delete>\"),\n\t\t\t\tOptionMenu:                        \"<disabled>\",\n\t\t\t\tOptionMenuAlt1:                    \"?\",\n\t\t\t\tSelect:                            \"<space>\",\n\t\t\t\tGoInto:                            \"<enter>\",\n\t\t\t\tConfirm:                           \"<enter>\",\n\t\t\t\tConfirmMenu:                       \"<enter>\",\n\t\t\t\tConfirmSuggestion:                 \"<enter>\",\n\t\t\t\tConfirmInEditor:                   platformKeyBinding(platform, map[string]string{\"darwin\": \"<meta+enter>\"}, \"<ctrl+enter>\"),\n\t\t\t\tConfirmInEditorAlt:                \"<ctrl+s>\",\n\t\t\t\tRemove:                            \"d\",\n\t\t\t\tNew:                               \"n\",\n\t\t\t\tEdit:                              \"e\",\n\t\t\t\tOpenFile:                          \"o\",\n\t\t\t\tOpenRecentRepos:                   \"<ctrl+r>\",\n\t\t\t\tScrollUpMain:                      \"<pgup>\",\n\t\t\t\tScrollDownMain:                    \"<pgdown>\",\n\t\t\t\tScrollUpMainAlt1:                  \"K\",\n\t\t\t\tScrollDownMainAlt1:                \"J\",\n\t\t\t\tScrollUpMainAlt2:                  \"<ctrl+u>\",\n\t\t\t\tScrollDownMainAlt2:                \"<ctrl+d>\",\n\t\t\t\tExecuteShellCommand:               \":\",\n\t\t\t\tCreateRebaseOptionsMenu:           \"m\",\n\t\t\t\tPush:                              \"P\",\n\t\t\t\tPull:                              \"p\",\n\t\t\t\tRefresh:                           \"R\",\n\t\t\t\tCreatePatchOptionsMenu:            \"<ctrl+p>\",\n\t\t\t\tNextTab:                           \"]\",\n\t\t\t\tPrevTab:                           \"[\",\n\t\t\t\tNextScreenMode:                    \"+\",\n\t\t\t\tPrevScreenMode:                    \"_\",\n\t\t\t\tCyclePagers:                       \"|\",\n\t\t\t\tUndo:                              \"z\",\n\t\t\t\tRedo:                              \"Z\",\n\t\t\t\tFilteringMenu:                     \"<ctrl+s>\",\n\t\t\t\tDiffingMenu:                       \"W\",\n\t\t\t\tDiffingMenuAlt:                    \"<ctrl+e>\",\n\t\t\t\tCopyToClipboard:                   \"<ctrl+o>\",\n\t\t\t\tSubmitEditorText:                  \"<enter>\",\n\t\t\t\tExtrasMenu:                        \"@\",\n\t\t\t\tToggleWhitespaceInDiffView:        \"<ctrl+w>\",\n\t\t\t\tIncreaseContextInDiffView:         \"}\",\n\t\t\t\tDecreaseContextInDiffView:         \"{\",\n\t\t\t\tIncreaseRenameSimilarityThreshold: \")\",\n\t\t\t\tDecreaseRenameSimilarityThreshold: \"(\",\n\t\t\t\tOpenDiffTool:                      \"<ctrl+t>\",\n\t\t\t},\n\t\t\tStatus: KeybindingStatusConfig{\n\t\t\t\tCheckForUpdate:             \"u\",\n\t\t\t\tRecentRepos:                \"<enter>\",\n\t\t\t\tAllBranchesLogGraph:        \"a\",\n\t\t\t\tAllBranchesLogGraphReverse: \"A\",\n\t\t\t},\n\t\t\tFiles: KeybindingFilesConfig{\n\t\t\t\tCommitChanges:            \"c\",\n\t\t\t\tCommitChangesWithoutHook: \"w\",\n\t\t\t\tAmendLastCommit:          \"A\",\n\t\t\t\tCommitChangesWithEditor:  \"C\",\n\t\t\t\tFindBaseCommitForFixup:   \"<ctrl+f>\",\n\t\t\t\tIgnoreFile:               \"i\",\n\t\t\t\tRefreshFiles:             \"r\",\n\t\t\t\tStashAllChanges:          \"s\",\n\t\t\t\tViewStashOptions:         \"S\",\n\t\t\t\tToggleStagedAll:          \"a\",\n\t\t\t\tViewResetOptions:         \"D\",\n\t\t\t\tFetch:                    \"f\",\n\t\t\t\tToggleTreeView:           \"`\",\n\t\t\t\tOpenMergeOptions:         \"M\",\n\t\t\t\tOpenStatusFilter:         \"<ctrl+b>\",\n\t\t\t\tConfirmDiscard:           \"x\",\n\t\t\t\tCopyFileInfoToClipboard:  \"y\",\n\t\t\t\tCollapseAll:              \"-\",\n\t\t\t\tExpandAll:                \"=\",\n\t\t\t},\n\t\t\tBranches: KeybindingBranchesConfig{\n\t\t\t\tCopyPullRequestURL:       \"<ctrl+y>\",\n\t\t\t\tCreatePullRequest:        \"o\",\n\t\t\t\tViewPullRequestOptions:   \"O\",\n\t\t\t\tOpenPullRequestInBrowser: \"G\",\n\t\t\t\tCheckoutBranchByName:     \"c\",\n\t\t\t\tForceCheckoutBranch:      \"F\",\n\t\t\t\tCheckoutPreviousBranch:   \"-\",\n\t\t\t\tRebaseBranch:             \"r\",\n\t\t\t\tRenameBranch:             \"R\",\n\t\t\t\tMergeIntoCurrentBranch:   \"M\",\n\t\t\t\tMoveCommitsToNewBranch:   \"N\",\n\t\t\t\tViewGitFlowOptions:       \"i\",\n\t\t\t\tFastForward:              \"f\",\n\t\t\t\tCreateTag:                \"T\",\n\t\t\t\tPushTag:                  \"P\",\n\t\t\t\tSetUpstream:              \"u\",\n\t\t\t\tFetchRemote:              \"f\",\n\t\t\t\tAddForkRemote:            \"F\",\n\t\t\t\tSortOrder:                \"s\",\n\t\t\t},\n\t\t\tWorktrees: KeybindingWorktreesConfig{\n\t\t\t\tViewWorktreeOptions: \"w\",\n\t\t\t},\n\t\t\tCommits: KeybindingCommitsConfig{\n\t\t\t\tSquashDown:                     \"s\",\n\t\t\t\tRenameCommit:                   \"r\",\n\t\t\t\tRenameCommitWithEditor:         \"R\",\n\t\t\t\tViewResetOptions:               \"g\",\n\t\t\t\tMarkCommitAsFixup:              \"f\",\n\t\t\t\tSetFixupMessage:                \"c\",\n\t\t\t\tCreateFixupCommit:              \"F\",\n\t\t\t\tSquashAboveCommits:             \"S\",\n\t\t\t\tMoveDownCommit:                 \"<ctrl+j>\",\n\t\t\t\tMoveUpCommit:                   \"<ctrl+k>\",\n\t\t\t\tAmendToCommit:                  \"A\",\n\t\t\t\tResetCommitAuthor:              \"a\",\n\t\t\t\tPickCommit:                     \"p\",\n\t\t\t\tRevertCommit:                   \"t\",\n\t\t\t\tCherryPickCopy:                 \"C\",\n\t\t\t\tPasteCommits:                   \"V\",\n\t\t\t\tMarkCommitAsBaseForRebase:      \"B\",\n\t\t\t\tCreateTag:                      \"T\",\n\t\t\t\tCheckoutCommit:                 \"<space>\",\n\t\t\t\tResetCherryPick:                \"<ctrl+r>\",\n\t\t\t\tCopyCommitAttributeToClipboard: \"y\",\n\t\t\t\tOpenLogMenu:                    \"<ctrl+l>\",\n\t\t\t\tOpenInBrowser:                  \"o\",\n\t\t\t\tOpenPullRequestInBrowser:       \"G\",\n\t\t\t\tViewBisectOptions:              \"b\",\n\t\t\t\tStartInteractiveRebase:         \"i\",\n\t\t\t\tSelectCommitsOfCurrentBranch:   \"*\",\n\t\t\t},\n\t\t\tAmendAttribute: KeybindingAmendAttributeConfig{\n\t\t\t\tResetAuthor: \"a\",\n\t\t\t\tSetAuthor:   \"A\",\n\t\t\t\tAddCoAuthor: \"c\",\n\t\t\t},\n\t\t\tStash: KeybindingStashConfig{\n\t\t\t\tPopStash:    \"g\",\n\t\t\t\tRenameStash: \"r\",\n\t\t\t},\n\t\t\tCommitFiles: KeybindingCommitFilesConfig{\n\t\t\t\tCheckoutCommitFile: \"c\",\n\t\t\t},\n\t\t\tMain: KeybindingMainConfig{\n\t\t\t\tToggleSelectHunk: \"a\",\n\t\t\t\tPickBothHunks:    \"b\",\n\t\t\t\tEditSelectHunk:   \"E\",\n\t\t\t},\n\t\t\tSubmodules: KeybindingSubmodulesConfig{\n\t\t\t\tInit:     \"i\",\n\t\t\t\tUpdate:   \"u\",\n\t\t\t\tBulkMenu: \"b\",\n\t\t\t},\n\t\t\tCommitMessage: KeybindingCommitMessageConfig{\n\t\t\t\tCommitMenu: \"<ctrl+o>\",\n\t\t\t},\n\t\t},\n",
+  "config_fields": [
+    {
+      "struct": "UserConfig",
+      "fields": [
+        {
+          "field": "Gui",
+          "yaml": "gui"
+        },
+        {
+          "field": "Git",
+          "yaml": "git"
+        },
+        {
+          "field": "Update",
+          "yaml": "update"
+        },
+        {
+          "field": "Refresher",
+          "yaml": "refresher"
+        },
+        {
+          "field": "ConfirmOnQuit",
+          "yaml": "confirmOnQuit"
+        },
+        {
+          "field": "QuitOnTopLevelReturn",
+          "yaml": "quitOnTopLevelReturn"
+        },
+        {
+          "field": "OS",
+          "yaml": "os"
+        },
+        {
+          "field": "DisableStartupPopups",
+          "yaml": "disableStartupPopups"
+        },
+        {
+          "field": "CustomCommands",
+          "yaml": "customCommands"
+        },
+        {
+          "field": "Services",
+          "yaml": "services"
+        },
+        {
+          "field": "NotARepository",
+          "yaml": "notARepository"
+        },
+        {
+          "field": "PromptToReturnFromSubprocess",
+          "yaml": "promptToReturnFromSubprocess"
+        },
+        {
+          "field": "Keybinding",
+          "yaml": "keybinding"
+        }
+      ]
+    },
+    {
+      "struct": "GuiConfig",
+      "fields": [
+        {
+          "field": "AuthorColors",
+          "yaml": "authorColors"
+        },
+        {
+          "field": "BranchColors",
+          "yaml": "branchColors"
+        },
+        {
+          "field": "BranchColorPatterns",
+          "yaml": "branchColorPatterns"
+        },
+        {
+          "field": "CustomIcons",
+          "yaml": "customIcons"
+        },
+        {
+          "field": "ScrollHeight",
+          "yaml": "scrollHeight"
+        },
+        {
+          "field": "ScrollPastBottom",
+          "yaml": "scrollPastBottom"
+        },
+        {
+          "field": "ScrollOffMargin",
+          "yaml": "scrollOffMargin"
+        },
+        {
+          "field": "ScrollOffBehavior",
+          "yaml": "scrollOffBehavior"
+        },
+        {
+          "field": "TabWidth",
+          "yaml": "tabWidth"
+        },
+        {
+          "field": "MouseEvents",
+          "yaml": "mouseEvents"
+        },
+        {
+          "field": "SkipAmendWarning",
+          "yaml": "skipAmendWarning"
+        },
+        {
+          "field": "SkipDiscardChangeWarning",
+          "yaml": "skipDiscardChangeWarning"
+        },
+        {
+          "field": "SkipStashWarning",
+          "yaml": "skipStashWarning"
+        },
+        {
+          "field": "SkipNoStagedFilesWarning",
+          "yaml": "skipNoStagedFilesWarning"
+        },
+        {
+          "field": "SkipRewordInEditorWarning",
+          "yaml": "skipRewordInEditorWarning"
+        },
+        {
+          "field": "SkipSwitchWorktreeOnCheckoutWarning",
+          "yaml": "skipSwitchWorktreeOnCheckoutWarning"
+        },
+        {
+          "field": "SidePanelWidth",
+          "yaml": "sidePanelWidth"
+        },
+        {
+          "field": "ExpandFocusedSidePanel",
+          "yaml": "expandFocusedSidePanel"
+        },
+        {
+          "field": "ExpandedSidePanelWeight",
+          "yaml": "expandedSidePanelWeight"
+        },
+        {
+          "field": "MainPanelSplitMode",
+          "yaml": "mainPanelSplitMode"
+        },
+        {
+          "field": "EnlargedSideViewLocation",
+          "yaml": "enlargedSideViewLocation"
+        },
+        {
+          "field": "WrapLinesInStagingView",
+          "yaml": "wrapLinesInStagingView"
+        },
+        {
+          "field": "UseHunkModeInStagingView",
+          "yaml": "useHunkModeInStagingView"
+        },
+        {
+          "field": "Language",
+          "yaml": "language"
+        },
+        {
+          "field": "TimeFormat",
+          "yaml": "timeFormat"
+        },
+        {
+          "field": "ShortTimeFormat",
+          "yaml": "shortTimeFormat"
+        },
+        {
+          "field": "Theme",
+          "yaml": "theme"
+        },
+        {
+          "field": "CommitLength",
+          "yaml": "commitLength"
+        },
+        {
+          "field": "ShowListFooter",
+          "yaml": "showListFooter"
+        },
+        {
+          "field": "ShowFileTree",
+          "yaml": "showFileTree"
+        },
+        {
+          "field": "ShowRootItemInFileTree",
+          "yaml": "showRootItemInFileTree"
+        },
+        {
+          "field": "FileTreeSortOrder",
+          "yaml": "fileTreeSortOrder"
+        },
+        {
+          "field": "FileTreeSortCaseSensitive",
+          "yaml": "fileTreeSortCaseSensitive"
+        },
+        {
+          "field": "ShowNumstatInFilesView",
+          "yaml": "showNumstatInFilesView"
+        },
+        {
+          "field": "ShowRandomTip",
+          "yaml": "showRandomTip"
+        },
+        {
+          "field": "ShowCommandLog",
+          "yaml": "showCommandLog"
+        },
+        {
+          "field": "ShowBottomLine",
+          "yaml": "showBottomLine"
+        },
+        {
+          "field": "ShowPanelJumps",
+          "yaml": "showPanelJumps"
+        },
+        {
+          "field": "ShowIcons",
+          "yaml": "showIcons"
+        },
+        {
+          "field": "NerdFontsVersion",
+          "yaml": "nerdFontsVersion"
+        },
+        {
+          "field": "ShowFileIcons",
+          "yaml": "showFileIcons"
+        },
+        {
+          "field": "CommitAuthorShortLength",
+          "yaml": "commitAuthorShortLength"
+        },
+        {
+          "field": "CommitAuthorLongLength",
+          "yaml": "commitAuthorLongLength"
+        },
+        {
+          "field": "CommitHashLength",
+          "yaml": "commitHashLength"
+        },
+        {
+          "field": "ShowBranchCommitHash",
+          "yaml": "showBranchCommitHash"
+        },
+        {
+          "field": "ShowDivergenceFromBaseBranch",
+          "yaml": "showDivergenceFromBaseBranch"
+        },
+        {
+          "field": "CommandLogSize",
+          "yaml": "commandLogSize"
+        },
+        {
+          "field": "SplitDiff",
+          "yaml": "splitDiff"
+        },
+        {
+          "field": "ScreenMode",
+          "yaml": "screenMode"
+        },
+        {
+          "field": "Border",
+          "yaml": "border"
+        },
+        {
+          "field": "AnimateExplosion",
+          "yaml": "animateExplosion"
+        },
+        {
+          "field": "PortraitMode",
+          "yaml": "portraitMode"
+        },
+        {
+          "field": "PortraitModeAutoMaxWidth",
+          "yaml": "portraitModeAutoMaxWidth"
+        },
+        {
+          "field": "PortraitModeAutoMinHeight",
+          "yaml": "portraitModeAutoMinHeight"
+        },
+        {
+          "field": "FilterMode",
+          "yaml": "filterMode"
+        },
+        {
+          "field": "Spinner",
+          "yaml": "spinner"
+        },
+        {
+          "field": "StatusPanelView",
+          "yaml": "statusPanelView"
+        },
+        {
+          "field": "SwitchToFilesAfterStashPop",
+          "yaml": "switchToFilesAfterStashPop"
+        },
+        {
+          "field": "SwitchToFilesAfterStashApply",
+          "yaml": "switchToFilesAfterStashApply"
+        },
+        {
+          "field": "SwitchTabsWithPanelJumpKeys",
+          "yaml": "switchTabsWithPanelJumpKeys"
+        }
+      ]
+    },
+    {
+      "struct": "GitConfig",
+      "fields": [
+        {
+          "field": "Pagers",
+          "yaml": "pagers"
+        },
+        {
+          "field": "Commit",
+          "yaml": "commit"
+        },
+        {
+          "field": "Merging",
+          "yaml": "merging"
+        },
+        {
+          "field": "MainBranches",
+          "yaml": "mainBranches"
+        },
+        {
+          "field": "SkipHookPrefix",
+          "yaml": "skipHookPrefix"
+        },
+        {
+          "field": "AutoFetch",
+          "yaml": "autoFetch"
+        },
+        {
+          "field": "AutoRefresh",
+          "yaml": "autoRefresh"
+        },
+        {
+          "field": "AutoForwardBranches",
+          "yaml": "autoForwardBranches"
+        },
+        {
+          "field": "FetchAll",
+          "yaml": "fetchAll"
+        },
+        {
+          "field": "AutoStageResolvedConflicts",
+          "yaml": "autoStageResolvedConflicts"
+        },
+        {
+          "field": "BranchLogCmd",
+          "yaml": "branchLogCmd"
+        },
+        {
+          "field": "AllBranchesLogCmds",
+          "yaml": "allBranchesLogCmds"
+        },
+        {
+          "field": "IgnoreWhitespaceInDiffView",
+          "yaml": "ignoreWhitespaceInDiffView"
+        },
+        {
+          "field": "DiffContextSize",
+          "yaml": "diffContextSize"
+        },
+        {
+          "field": "RenameSimilarityThreshold",
+          "yaml": "renameSimilarityThreshold"
+        },
+        {
+          "field": "OverrideGpg",
+          "yaml": "overrideGpg"
+        },
+        {
+          "field": "DisableForcePushing",
+          "yaml": "disableForcePushing"
+        },
+        {
+          "field": "CommitPrefix",
+          "yaml": "commitPrefix"
+        },
+        {
+          "field": "CommitPrefixes",
+          "yaml": "commitPrefixes"
+        },
+        {
+          "field": "BranchPrefix",
+          "yaml": "branchPrefix"
+        },
+        {
+          "field": "ParseEmoji",
+          "yaml": "parseEmoji"
+        },
+        {
+          "field": "Log",
+          "yaml": "log"
+        },
+        {
+          "field": "LocalBranchSortOrder",
+          "yaml": "localBranchSortOrder"
+        },
+        {
+          "field": "RemoteBranchSortOrder",
+          "yaml": "remoteBranchSortOrder"
+        },
+        {
+          "field": "TruncateCopiedCommitHashesTo",
+          "yaml": "truncateCopiedCommitHashesTo"
+        }
+      ]
+    },
+    {
+      "struct": "KeybindingConfig",
+      "fields": [
+        {
+          "field": "Universal",
+          "yaml": "universal"
+        },
+        {
+          "field": "Status",
+          "yaml": "status"
+        },
+        {
+          "field": "Files",
+          "yaml": "files"
+        },
+        {
+          "field": "Branches",
+          "yaml": "branches"
+        },
+        {
+          "field": "Worktrees",
+          "yaml": "worktrees"
+        },
+        {
+          "field": "Commits",
+          "yaml": "commits"
+        },
+        {
+          "field": "AmendAttribute",
+          "yaml": "amendAttribute"
+        },
+        {
+          "field": "Stash",
+          "yaml": "stash"
+        },
+        {
+          "field": "CommitFiles",
+          "yaml": "commitFiles"
+        },
+        {
+          "field": "Main",
+          "yaml": "main"
+        },
+        {
+          "field": "Submodules",
+          "yaml": "submodules"
+        },
+        {
+          "field": "CommitMessage",
+          "yaml": "commitMessage"
+        }
+      ]
+    },
+    {
+      "struct": "KeybindingUniversalConfig",
+      "fields": [
+        {
+          "field": "Quit",
+          "yaml": "quit"
+        },
+        {
+          "field": "QuitAlt1",
+          "yaml": "quit-alt1"
+        },
+        {
+          "field": "SuspendApp",
+          "yaml": "suspendApp"
+        },
+        {
+          "field": "Return",
+          "yaml": "return"
+        },
+        {
+          "field": "QuitWithoutChangingDirectory",
+          "yaml": "quitWithoutChangingDirectory"
+        },
+        {
+          "field": "TogglePanel",
+          "yaml": "togglePanel"
+        },
+        {
+          "field": "PrevItem",
+          "yaml": "prevItem"
+        },
+        {
+          "field": "NextItem",
+          "yaml": "nextItem"
+        },
+        {
+          "field": "PrevItemAlt",
+          "yaml": "prevItem-alt"
+        },
+        {
+          "field": "NextItemAlt",
+          "yaml": "nextItem-alt"
+        },
+        {
+          "field": "PrevPage",
+          "yaml": "prevPage"
+        },
+        {
+          "field": "NextPage",
+          "yaml": "nextPage"
+        },
+        {
+          "field": "ScrollLeft",
+          "yaml": "scrollLeft"
+        },
+        {
+          "field": "ScrollRight",
+          "yaml": "scrollRight"
+        },
+        {
+          "field": "GotoTop",
+          "yaml": "gotoTop"
+        },
+        {
+          "field": "GotoBottom",
+          "yaml": "gotoBottom"
+        },
+        {
+          "field": "GotoTopAlt",
+          "yaml": "gotoTop-alt"
+        },
+        {
+          "field": "GotoBottomAlt",
+          "yaml": "gotoBottom-alt"
+        },
+        {
+          "field": "ToggleRangeSelect",
+          "yaml": "toggleRangeSelect"
+        },
+        {
+          "field": "RangeSelectDown",
+          "yaml": "rangeSelectDown"
+        },
+        {
+          "field": "RangeSelectUp",
+          "yaml": "rangeSelectUp"
+        },
+        {
+          "field": "PrevBlock",
+          "yaml": "prevBlock"
+        },
+        {
+          "field": "NextBlock",
+          "yaml": "nextBlock"
+        },
+        {
+          "field": "PrevBlockAlt",
+          "yaml": "prevBlock-alt"
+        },
+        {
+          "field": "NextBlockAlt",
+          "yaml": "nextBlock-alt"
+        },
+        {
+          "field": "NextBlockAlt2",
+          "yaml": "nextBlock-alt2"
+        },
+        {
+          "field": "PrevBlockAlt2",
+          "yaml": "prevBlock-alt2"
+        },
+        {
+          "field": "JumpToBlock",
+          "yaml": "jumpToBlock"
+        },
+        {
+          "field": "FocusMainView",
+          "yaml": "focusMainView"
+        },
+        {
+          "field": "NextMatch",
+          "yaml": "nextMatch"
+        },
+        {
+          "field": "PrevMatch",
+          "yaml": "prevMatch"
+        },
+        {
+          "field": "StartSearch",
+          "yaml": "startSearch"
+        },
+        {
+          "field": "MoveWordLeft",
+          "yaml": "moveWordLeft"
+        },
+        {
+          "field": "MoveWordRight",
+          "yaml": "moveWordRight"
+        },
+        {
+          "field": "BackspaceWord",
+          "yaml": "backspaceWord"
+        },
+        {
+          "field": "ForwardDeleteWord",
+          "yaml": "forwardDeleteWord"
+        },
+        {
+          "field": "OptionMenu",
+          "yaml": "optionMenu"
+        },
+        {
+          "field": "OptionMenuAlt1",
+          "yaml": "optionMenu-alt1"
+        },
+        {
+          "field": "Select",
+          "yaml": "select"
+        },
+        {
+          "field": "GoInto",
+          "yaml": "goInto"
+        },
+        {
+          "field": "Confirm",
+          "yaml": "confirm"
+        },
+        {
+          "field": "ConfirmMenu",
+          "yaml": "confirmMenu"
+        },
+        {
+          "field": "ConfirmSuggestion",
+          "yaml": "confirmSuggestion"
+        },
+        {
+          "field": "ConfirmInEditor",
+          "yaml": "confirmInEditor"
+        },
+        {
+          "field": "ConfirmInEditorAlt",
+          "yaml": "confirmInEditor-alt"
+        },
+        {
+          "field": "Remove",
+          "yaml": "remove"
+        },
+        {
+          "field": "New",
+          "yaml": "new"
+        },
+        {
+          "field": "Edit",
+          "yaml": "edit"
+        },
+        {
+          "field": "OpenFile",
+          "yaml": "openFile"
+        },
+        {
+          "field": "ScrollUpMain",
+          "yaml": "scrollUpMain"
+        },
+        {
+          "field": "ScrollDownMain",
+          "yaml": "scrollDownMain"
+        },
+        {
+          "field": "ScrollUpMainAlt1",
+          "yaml": "scrollUpMain-alt1"
+        },
+        {
+          "field": "ScrollDownMainAlt1",
+          "yaml": "scrollDownMain-alt1"
+        },
+        {
+          "field": "ScrollUpMainAlt2",
+          "yaml": "scrollUpMain-alt2"
+        },
+        {
+          "field": "ScrollDownMainAlt2",
+          "yaml": "scrollDownMain-alt2"
+        },
+        {
+          "field": "ExecuteShellCommand",
+          "yaml": "executeShellCommand"
+        },
+        {
+          "field": "CreateRebaseOptionsMenu",
+          "yaml": "createRebaseOptionsMenu"
+        },
+        {
+          "field": "Push",
+          "yaml": "pushFiles"
+        },
+        {
+          "field": "Pull",
+          "yaml": "pullFiles"
+        },
+        {
+          "field": "Refresh",
+          "yaml": "refresh"
+        },
+        {
+          "field": "CreatePatchOptionsMenu",
+          "yaml": "createPatchOptionsMenu"
+        },
+        {
+          "field": "NextTab",
+          "yaml": "nextTab"
+        },
+        {
+          "field": "PrevTab",
+          "yaml": "prevTab"
+        },
+        {
+          "field": "NextScreenMode",
+          "yaml": "nextScreenMode"
+        },
+        {
+          "field": "PrevScreenMode",
+          "yaml": "prevScreenMode"
+        },
+        {
+          "field": "CyclePagers",
+          "yaml": "cyclePagers"
+        },
+        {
+          "field": "Undo",
+          "yaml": "undo"
+        },
+        {
+          "field": "Redo",
+          "yaml": "redo"
+        },
+        {
+          "field": "FilteringMenu",
+          "yaml": "filteringMenu"
+        },
+        {
+          "field": "DiffingMenu",
+          "yaml": "diffingMenu"
+        },
+        {
+          "field": "DiffingMenuAlt",
+          "yaml": "diffingMenu-alt"
+        },
+        {
+          "field": "CopyToClipboard",
+          "yaml": "copyToClipboard"
+        },
+        {
+          "field": "OpenRecentRepos",
+          "yaml": "openRecentRepos"
+        },
+        {
+          "field": "SubmitEditorText",
+          "yaml": "submitEditorText"
+        },
+        {
+          "field": "ExtrasMenu",
+          "yaml": "extrasMenu"
+        },
+        {
+          "field": "ToggleWhitespaceInDiffView",
+          "yaml": "toggleWhitespaceInDiffView"
+        },
+        {
+          "field": "IncreaseContextInDiffView",
+          "yaml": "increaseContextInDiffView"
+        },
+        {
+          "field": "DecreaseContextInDiffView",
+          "yaml": "decreaseContextInDiffView"
+        },
+        {
+          "field": "IncreaseRenameSimilarityThreshold",
+          "yaml": "increaseRenameSimilarityThreshold"
+        },
+        {
+          "field": "DecreaseRenameSimilarityThreshold",
+          "yaml": "decreaseRenameSimilarityThreshold"
+        },
+        {
+          "field": "OpenDiffTool",
+          "yaml": "openDiffTool"
+        }
+      ]
+    },
+    {
+      "struct": "KeybindingStatusConfig",
+      "fields": [
+        {
+          "field": "CheckForUpdate",
+          "yaml": "checkForUpdate"
+        },
+        {
+          "field": "RecentRepos",
+          "yaml": "recentRepos"
+        },
+        {
+          "field": "AllBranchesLogGraph",
+          "yaml": "allBranchesLogGraph"
+        },
+        {
+          "field": "AllBranchesLogGraphReverse",
+          "yaml": "allBranchesLogGraphReverse"
+        }
+      ]
+    },
+    {
+      "struct": "KeybindingFilesConfig",
+      "fields": [
+        {
+          "field": "CommitChanges",
+          "yaml": "commitChanges"
+        },
+        {
+          "field": "CommitChangesWithoutHook",
+          "yaml": "commitChangesWithoutHook"
+        },
+        {
+          "field": "AmendLastCommit",
+          "yaml": "amendLastCommit"
+        },
+        {
+          "field": "CommitChangesWithEditor",
+          "yaml": "commitChangesWithEditor"
+        },
+        {
+          "field": "FindBaseCommitForFixup",
+          "yaml": "findBaseCommitForFixup"
+        },
+        {
+          "field": "ConfirmDiscard",
+          "yaml": "confirmDiscard"
+        },
+        {
+          "field": "IgnoreFile",
+          "yaml": "ignoreFile"
+        },
+        {
+          "field": "RefreshFiles",
+          "yaml": "refreshFiles"
+        },
+        {
+          "field": "StashAllChanges",
+          "yaml": "stashAllChanges"
+        },
+        {
+          "field": "ViewStashOptions",
+          "yaml": "viewStashOptions"
+        },
+        {
+          "field": "ToggleStagedAll",
+          "yaml": "toggleStagedAll"
+        },
+        {
+          "field": "ViewResetOptions",
+          "yaml": "viewResetOptions"
+        },
+        {
+          "field": "Fetch",
+          "yaml": "fetch"
+        },
+        {
+          "field": "ToggleTreeView",
+          "yaml": "toggleTreeView"
+        },
+        {
+          "field": "OpenMergeOptions",
+          "yaml": "openMergeOptions"
+        },
+        {
+          "field": "OpenStatusFilter",
+          "yaml": "openStatusFilter"
+        },
+        {
+          "field": "CopyFileInfoToClipboard",
+          "yaml": "copyFileInfoToClipboard"
+        },
+        {
+          "field": "CollapseAll",
+          "yaml": "collapseAll"
+        },
+        {
+          "field": "ExpandAll",
+          "yaml": "expandAll"
+        }
+      ]
+    },
+    {
+      "struct": "KeybindingBranchesConfig",
+      "fields": [
+        {
+          "field": "CreatePullRequest",
+          "yaml": "createPullRequest"
+        },
+        {
+          "field": "ViewPullRequestOptions",
+          "yaml": "viewPullRequestOptions"
+        },
+        {
+          "field": "OpenPullRequestInBrowser",
+          "yaml": "openPullRequestInBrowser"
+        },
+        {
+          "field": "CopyPullRequestURL",
+          "yaml": "copyPullRequestURL"
+        },
+        {
+          "field": "CheckoutBranchByName",
+          "yaml": "checkoutBranchByName"
+        },
+        {
+          "field": "ForceCheckoutBranch",
+          "yaml": "forceCheckoutBranch"
+        },
+        {
+          "field": "CheckoutPreviousBranch",
+          "yaml": "checkoutPreviousBranch"
+        },
+        {
+          "field": "RebaseBranch",
+          "yaml": "rebaseBranch"
+        },
+        {
+          "field": "RenameBranch",
+          "yaml": "renameBranch"
+        },
+        {
+          "field": "MergeIntoCurrentBranch",
+          "yaml": "mergeIntoCurrentBranch"
+        },
+        {
+          "field": "MoveCommitsToNewBranch",
+          "yaml": "moveCommitsToNewBranch"
+        },
+        {
+          "field": "ViewGitFlowOptions",
+          "yaml": "viewGitFlowOptions"
+        },
+        {
+          "field": "FastForward",
+          "yaml": "fastForward"
+        },
+        {
+          "field": "CreateTag",
+          "yaml": "createTag"
+        },
+        {
+          "field": "PushTag",
+          "yaml": "pushTag"
+        },
+        {
+          "field": "SetUpstream",
+          "yaml": "setUpstream"
+        },
+        {
+          "field": "FetchRemote",
+          "yaml": "fetchRemote"
+        },
+        {
+          "field": "AddForkRemote",
+          "yaml": "addForkRemote"
+        },
+        {
+          "field": "SortOrder",
+          "yaml": "sortOrder"
+        }
+      ]
+    },
+    {
+      "struct": "KeybindingWorktreesConfig",
+      "fields": [
+        {
+          "field": "ViewWorktreeOptions",
+          "yaml": "viewWorktreeOptions"
+        }
+      ]
+    },
+    {
+      "struct": "KeybindingCommitsConfig",
+      "fields": [
+        {
+          "field": "SquashDown",
+          "yaml": "squashDown"
+        },
+        {
+          "field": "RenameCommit",
+          "yaml": "renameCommit"
+        },
+        {
+          "field": "RenameCommitWithEditor",
+          "yaml": "renameCommitWithEditor"
+        },
+        {
+          "field": "ViewResetOptions",
+          "yaml": "viewResetOptions"
+        },
+        {
+          "field": "MarkCommitAsFixup",
+          "yaml": "markCommitAsFixup"
+        },
+        {
+          "field": "SetFixupMessage",
+          "yaml": "setFixupMessage"
+        },
+        {
+          "field": "CreateFixupCommit",
+          "yaml": "createFixupCommit"
+        },
+        {
+          "field": "SquashAboveCommits",
+          "yaml": "squashAboveCommits"
+        },
+        {
+          "field": "MoveDownCommit",
+          "yaml": "moveDownCommit"
+        },
+        {
+          "field": "MoveUpCommit",
+          "yaml": "moveUpCommit"
+        },
+        {
+          "field": "AmendToCommit",
+          "yaml": "amendToCommit"
+        },
+        {
+          "field": "ResetCommitAuthor",
+          "yaml": "resetCommitAuthor"
+        },
+        {
+          "field": "PickCommit",
+          "yaml": "pickCommit"
+        },
+        {
+          "field": "RevertCommit",
+          "yaml": "revertCommit"
+        },
+        {
+          "field": "CherryPickCopy",
+          "yaml": "cherryPickCopy"
+        },
+        {
+          "field": "PasteCommits",
+          "yaml": "pasteCommits"
+        },
+        {
+          "field": "MarkCommitAsBaseForRebase",
+          "yaml": "markCommitAsBaseForRebase"
+        },
+        {
+          "field": "CreateTag",
+          "yaml": "tagCommit"
+        },
+        {
+          "field": "CheckoutCommit",
+          "yaml": "checkoutCommit"
+        },
+        {
+          "field": "ResetCherryPick",
+          "yaml": "resetCherryPick"
+        },
+        {
+          "field": "CopyCommitAttributeToClipboard",
+          "yaml": "copyCommitAttributeToClipboard"
+        },
+        {
+          "field": "OpenLogMenu",
+          "yaml": "openLogMenu"
+        },
+        {
+          "field": "OpenInBrowser",
+          "yaml": "openInBrowser"
+        },
+        {
+          "field": "OpenPullRequestInBrowser",
+          "yaml": "openPullRequestInBrowser"
+        },
+        {
+          "field": "ViewBisectOptions",
+          "yaml": "viewBisectOptions"
+        },
+        {
+          "field": "StartInteractiveRebase",
+          "yaml": "startInteractiveRebase"
+        },
+        {
+          "field": "SelectCommitsOfCurrentBranch",
+          "yaml": "selectCommitsOfCurrentBranch"
+        }
+      ]
+    },
+    {
+      "struct": "KeybindingAmendAttributeConfig",
+      "fields": [
+        {
+          "field": "ResetAuthor",
+          "yaml": "resetAuthor"
+        },
+        {
+          "field": "SetAuthor",
+          "yaml": "setAuthor"
+        },
+        {
+          "field": "AddCoAuthor",
+          "yaml": "addCoAuthor"
+        }
+      ]
+    },
+    {
+      "struct": "KeybindingStashConfig",
+      "fields": [
+        {
+          "field": "PopStash",
+          "yaml": "popStash"
+        },
+        {
+          "field": "RenameStash",
+          "yaml": "renameStash"
+        }
+      ]
+    },
+    {
+      "struct": "KeybindingCommitFilesConfig",
+      "fields": [
+        {
+          "field": "CheckoutCommitFile",
+          "yaml": "checkoutCommitFile"
+        }
+      ]
+    },
+    {
+      "struct": "KeybindingMainConfig",
+      "fields": [
+        {
+          "field": "ToggleSelectHunk",
+          "yaml": "toggleSelectHunk"
+        },
+        {
+          "field": "PickBothHunks",
+          "yaml": "pickBothHunks"
+        },
+        {
+          "field": "EditSelectHunk",
+          "yaml": "editSelectHunk"
+        }
+      ]
+    },
+    {
+      "struct": "KeybindingSubmodulesConfig",
+      "fields": [
+        {
+          "field": "Init",
+          "yaml": "init"
+        },
+        {
+          "field": "Update",
+          "yaml": "update"
+        },
+        {
+          "field": "BulkMenu",
+          "yaml": "bulkMenu"
+        }
+      ]
+    },
+    {
+      "struct": "KeybindingCommitMessageConfig",
+      "fields": [
+        {
+          "field": "CommitMenu",
+          "yaml": "commitMenu"
+        }
+      ]
+    }
+  ],
+  "menus": [
+    {
+      "file": "pkg/gui/extras_panel.go",
+      "line": 13,
+      "title": "gui.c.Tr.CommandLog",
+      "labels": [
+        "gui.c.Tr.ToggleShowCommandLog",
+        "gui.c.Tr.FocusCommandLog"
+      ],
+      "keys": [
+        "gocui.NewKeyRune('t')",
+        "gocui.NewKeyRune('f')"
+      ]
+    },
+    {
+      "file": "pkg/gui/menu_panel.go",
+      "line": 14,
+      "title": "",
+      "labels": [
+        "gui.c.Tr.Cancel"
+      ],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/options_menu_action.go",
+      "line": 48,
+      "title": "self.c.Tr.Keybindings",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/diffing_menu_action.go",
+      "line": 72,
+      "title": "self.c.Tr.DiffingMenuTitle",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/custom_patch_options_menu_action.go",
+      "line": 114,
+      "title": "self.c.Tr.PatchOptionsTitle",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/bisect_controller.go",
+      "line": 157,
+      "title": "self.c.Tr.Bisect.BisectMenuTitle",
+      "labels": [
+        "fmt.Sprintf(self.c.Tr.Bisect.MarkStart",
+        "fmt.Sprintf(self.c.Tr.Bisect.MarkStart",
+        "self.c.Tr.Bisect.ChooseTerms"
+      ],
+      "keys": [
+        "gocui.NewKeyRune('b')",
+        "gocui.NewKeyRune('g')",
+        "gocui.NewKeyRune('t')"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/bisect_controller.go",
+      "line": 164,
+      "title": "self.c.Tr.Bisect.BisectMenuTitle",
+      "labels": [
+        "fmt.Sprintf(self.c.Tr.Bisect.MarkStart",
+        "fmt.Sprintf(self.c.Tr.Bisect.MarkStart",
+        "self.c.Tr.Bisect.ChooseTerms"
+      ],
+      "keys": [
+        "gocui.NewKeyRune('b')",
+        "gocui.NewKeyRune('g')",
+        "gocui.NewKeyRune('t')"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/git_flow_controller.go",
+      "line": 72,
+      "title": "\"git flow\"",
+      "labels": [
+        "fmt.Sprintf(\"finish branch '%s'\"",
+        "\"start feature\"",
+        "\"start hotfix\"",
+        "\"start bugfix\"",
+        "\"start release\""
+      ],
+      "keys": [
+        "gocui.NewKeyRune('f')",
+        "gocui.NewKeyRune('h')",
+        "gocui.NewKeyRune('b')",
+        "gocui.NewKeyRune('r')"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/filtering_menu_action.go",
+      "line": 100,
+      "title": "self.c.Tr.FilteringMenuTitle",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/tags_controller.go",
+      "line": 308,
+      "title": "menuTitle",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/basic_commits_controller.go",
+      "line": 221,
+      "title": "self.c.Tr.Actions.CopyCommitAttributeToClipboard",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/files_controller.go",
+      "line": 700,
+      "title": "self.c.Tr.MergeConflictsTitle",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/files_controller.go",
+      "line": 848,
+      "title": "self.c.Tr.Actions.IgnoreExcludeFile",
+      "labels": [
+        "self.c.Tr.IgnoreFile",
+        "self.c.Tr.ExcludeFile",
+        "self.c.Tr.Cancel",
+        "self.c.Tr.AmendCommitWithConflictsContinue",
+        "self.c.Tr.AmendCommitWithConflictsAmend"
+      ],
+      "keys": [
+        "gocui.NewKeyRune('i')",
+        "gocui.NewKeyRune('e')"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/files_controller.go",
+      "line": 892,
+      "title": "self.c.Tr.AmendCommitTitle",
+      "labels": [
+        "self.c.Tr.Cancel",
+        "self.c.Tr.AmendCommitWithConflictsContinue",
+        "self.c.Tr.AmendCommitWithConflictsAmend",
+        "self.c.Tr.FilterStagedFiles",
+        "self.c.Tr.FilterUnstagedFiles",
+        "self.c.Tr.FilterTrackedFiles"
+      ],
+      "keys": [
+        "gocui.NewKeyRune('s')",
+        "gocui.NewKeyRune('u')",
+        "gocui.NewKeyRune('t')"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/files_controller.go",
+      "line": 945,
+      "title": "self.c.Tr.FilteringMenuTitle",
+      "labels": [
+        "self.c.Tr.FilterStagedFiles",
+        "self.c.Tr.FilterUnstagedFiles",
+        "self.c.Tr.FilterTrackedFiles",
+        "self.c.Tr.FilterUntrackedFiles",
+        "self.c.Tr.NoFilter"
+      ],
+      "keys": [
+        "gocui.NewKeyRune('s')",
+        "gocui.NewKeyRune('u')",
+        "gocui.NewKeyRune('t')",
+        "gocui.NewKeyRune('T')",
+        "gocui.NewKeyRune('r')"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/files_controller.go",
+      "line": 1084,
+      "title": "self.c.Tr.StashOptions",
+      "labels": [
+        "self.c.Tr.StashAllChanges",
+        "self.c.Tr.StashAllChangesKeepIndex",
+        "self.c.Tr.StashIncludeUntrackedChanges",
+        "self.c.Tr.StashStagedChanges",
+        "self.c.Tr.StashUnstagedChanges"
+      ],
+      "keys": [
+        "gocui.NewKeyRune('a')",
+        "gocui.NewKeyRune('i')",
+        "gocui.NewKeyRune('U')",
+        "gocui.NewKeyRune('s')",
+        "gocui.NewKeyRune('u')"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/files_controller.go",
+      "line": 1267,
+      "title": "self.c.Tr.CopyToClipboardMenu",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/files_controller.go",
+      "line": 1491,
+      "title": "submoduleNode.GetPath()",
+      "labels": [
+        "self.c.Tr.DiscardAllChanges",
+        "self.c.Tr.DiscardUnstagedChanges"
+      ],
+      "keys": [
+        "self.c.KeybindingsOpts().GetKey(self.c.UserConfig().Keybinding.Files.ConfirmDiscard)",
+        "gocui.NewKeyRune('u')"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/files_controller.go",
+      "line": 1555,
+      "title": "self.c.Tr.DiscardChangesTitle",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/branches_controller.go",
+      "line": 429,
+      "title": "self.c.Tr.BranchUpstreamOptionsTitle",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/branches_controller.go",
+      "line": 676,
+      "title": "menuTitle",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/branches_controller.go",
+      "line": 872,
+      "title": "fmt.Sprint(self.c.Tr.CreatePullRequestOptions)",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/local_commits_controller.go",
+      "line": 359,
+      "title": "self.c.Tr.Fixup",
+      "labels": [
+        "self.c.Tr.Fixup",
+        "self.c.Tr.FixupKeepMessage",
+        "self.c.Tr.FixupDiscardMessage",
+        "self.c.Tr.FixupKeepMessage"
+      ],
+      "keys": [
+        "gocui.NewKeyRune('f')",
+        "gocui.NewKeyRune('c')",
+        "gocui.NewKeyRune('f')",
+        "gocui.NewKeyRune('c')"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/local_commits_controller.go",
+      "line": 401,
+      "title": "self.c.Tr.SetFixupMessage",
+      "labels": [
+        "self.c.Tr.FixupDiscardMessage",
+        "self.c.Tr.FixupKeepMessage"
+      ],
+      "keys": [
+        "gocui.NewKeyRune('f')",
+        "gocui.NewKeyRune('c')"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/local_commits_controller.go",
+      "line": 861,
+      "title": "\"Amend commit attribute\"",
+      "labels": [
+        "self.c.Tr.ResetAuthor",
+        "self.c.Tr.SetAuthor",
+        "self.c.Tr.AddCoAuthor"
+      ],
+      "keys": [
+        "opts.GetKey(opts.Config.AmendAttribute.ResetAuthor)",
+        "opts.GetKey(opts.Config.AmendAttribute.SetAuthor)",
+        "opts.GetKey(opts.Config.AmendAttribute.AddCoAuthor)"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/local_commits_controller.go",
+      "line": 998,
+      "title": "self.c.Tr.CreateFixupCommit",
+      "labels": [
+        "self.c.Tr.FixupMenu_Fixup",
+        "self.c.Tr.FixupMenu_AmendWithChanges",
+        "self.c.Tr.FixupMenu_AmendWithoutChanges"
+      ],
+      "keys": [
+        "gocui.NewKeyRune('f')",
+        "gocui.NewKeyRune('a')",
+        "gocui.NewKeyRune('r')"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/local_commits_controller.go",
+      "line": 1130,
+      "title": "self.c.Tr.SquashAboveCommits",
+      "labels": [
+        "self.c.Tr.SquashCommitsInCurrentBranch",
+        "self.c.Tr.SquashCommitsAboveSelectedCommit"
+      ],
+      "keys": [
+        "gocui.NewKeyRune('b')",
+        "gocui.NewKeyRune('a')"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/local_commits_controller.go",
+      "line": 1225,
+      "title": "self.c.Tr.LogMenuTitle",
+      "labels": [
+        "self.c.Tr.ToggleShowGitGraphAll",
+        "self.c.Tr.ShowGitGraph",
+        "\"always\"",
+        "\"never\"",
+        "\"when maximised\"",
+        "self.c.Tr.SortCommits"
+      ],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/local_commits_controller.go",
+      "line": 1259,
+      "title": "self.c.Tr.LogMenuTitle",
+      "labels": [
+        "\"always\"",
+        "\"never\"",
+        "\"when maximised\"",
+        "self.c.Tr.SortCommits",
+        "\"topological (topo-order)\"",
+        "\"date-order\"",
+        "\"author-date-order\"",
+        "\"default\""
+      ],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/local_commits_controller.go",
+      "line": 1302,
+      "title": "self.c.Tr.LogMenuTitle",
+      "labels": [
+        "\"topological (topo-order)\"",
+        "\"date-order\"",
+        "\"author-date-order\"",
+        "\"default\""
+      ],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/workspace_reset_controller.go",
+      "line": 183,
+      "title": "\"\"",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/status_controller.go",
+      "line": 168,
+      "title": "self.c.Tr.SelectConfigFile",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/submodules_controller.go",
+      "line": 219,
+      "title": "self.c.Tr.BulkSubmoduleOptions",
+      "labels": [
+        "self.c.Tr.BulkInitSubmodules",
+        "self.c.Tr.BulkUpdateSubmodules",
+        "self.c.Tr.BulkUpdateRecursiveSubmodules",
+        "self.c.Tr.BulkDeinitSubmodules"
+      ],
+      "keys": [
+        "gocui.NewKeyRune('i')",
+        "gocui.NewKeyRune('u')",
+        "gocui.NewKeyRune('r')",
+        "gocui.NewKeyRune('d')"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/commits_files_controller.go",
+      "line": 301,
+      "title": "self.c.Tr.CopyToClipboardMenu",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/helpers/refs_helper.go",
+      "line": 148,
+      "title": "utils.ResolvePlaceholderString(self.c.Tr.RemoteBranchCheckoutTitle",
+      "labels": [
+        "self.c.Tr.CheckoutTypeNewBranch",
+        "self.c.Tr.CheckoutTypeDetachedHead"
+      ],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/helpers/refs_helper.go",
+      "line": 252,
+      "title": "self.c.Tr.SortOrder",
+      "labels": [
+        "[",
+        "fmt.Sprintf(self.c.Tr.Actions.CheckoutCommitAsDetachedHead",
+        "fmt.Sprintf(self.c.Tr.Actions.CheckoutBranchAtCommit"
+      ],
+      "keys": [
+        "row.key",
+        "gocui.NewKeyRune('d')",
+        "key"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/helpers/refs_helper.go",
+      "line": 295,
+      "title": "fmt.Sprintf(\"%s %s\"",
+      "labels": [
+        "fmt.Sprintf(self.c.Tr.Actions.CheckoutCommitAsDetachedHead",
+        "fmt.Sprintf(self.c.Tr.Actions.CheckoutBranchAtCommit",
+        "self.c.Tr.Actions.CheckoutBranch"
+      ],
+      "keys": [
+        "gocui.NewKeyRune('d')",
+        "key",
+        "gocui.NewKeyRune('1')"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/helpers/refs_helper.go",
+      "line": 343,
+      "title": "self.c.Tr.Actions.CheckoutBranchOrCommit",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/helpers/refs_helper.go",
+      "line": 478,
+      "title": "self.c.Tr.MoveCommitsToNewBranch",
+      "labels": [
+        "fmt.Sprintf(self.c.Tr.MoveCommitsToNewBranchFromBaseItem",
+        "fmt.Sprintf(self.c.Tr.MoveCommitsToNewBranchStackedItem"
+      ],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/helpers/commits_helper.go",
+      "line": 249,
+      "title": "self.c.Tr.CommitMenuTitle",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/helpers/refresh_helper.go",
+      "line": 902,
+      "title": "self.c.Tr.SelectRemoteRepository",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/helpers/working_tree_helper.go",
+      "line": 375,
+      "title": "self.c.Tr.MergeConflictOptionsTitle",
+      "labels": [
+        "[",
+        "[",
+        "[",
+        "["
+      ],
+      "keys": [
+        "gocui.NewKeyRune('c')",
+        "gocui.NewKeyRune('i')",
+        "gocui.NewKeyRune('b')",
+        "gocui.NewKeyRune('m')"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/helpers/merge_and_rebase_helper.go",
+      "line": 67,
+      "title": "title",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/helpers/merge_and_rebase_helper.go",
+      "line": 186,
+      "title": "self.c.Tr.FoundConflictsTitle",
+      "labels": [
+        "self.c.Tr.ViewConflictsMenuItem",
+        "fmt.Sprintf(self.c.Tr.AbortMenuItem"
+      ],
+      "keys": [
+        "gocui.NewKeyRune('a')"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/helpers/merge_and_rebase_helper.go",
+      "line": 369,
+      "title": "title",
+      "labels": [
+        "self.c.Tr.RegularMergeFastForward",
+        "self.c.Tr.RegularMergeNonFastForward",
+        "self.c.Tr.RegularMergeNonFastForward",
+        "self.c.Tr.RegularMergeFastForward"
+      ],
+      "keys": [
+        "gocui.NewKeyRune('m')",
+        "gocui.NewKeyRune('n')",
+        "gocui.NewKeyRune('m')",
+        "gocui.NewKeyRune('f')"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/helpers/merge_and_rebase_helper.go",
+      "line": 459,
+      "title": "self.c.Tr.Merge",
+      "labels": [
+        "self.c.Tr.SquashMergeUncommitted",
+        "self.c.Tr.SquashMergeCommitted"
+      ],
+      "keys": [
+        "gocui.NewKeyRune('s')",
+        "gocui.NewKeyRune('S')"
+      ]
+    },
+    {
+      "file": "pkg/gui/controllers/helpers/worktree_helper.go",
+      "line": 76,
+      "title": "self.c.Tr.WorktreeTitle",
+      "labels": [
+        "utils.ResolvePlaceholderString(self.c.Tr.CreateWorktreeFrom",
+        "utils.ResolvePlaceholderString(self.c.Tr.CreateWorktreeFromDetached"
+      ],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/helpers/worktree_helper.go",
+      "line": 232,
+      "title": "self.c.Tr.WorktreeTitle",
+      "labels": [
+        "utils.ResolvePlaceholderString(self.c.Tr.CreateWorktreeFrom",
+        "utils.ResolvePlaceholderString(self.c.Tr.CreateWorktreeFromDetached"
+      ],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/helpers/branches_helper.go",
+      "line": 221,
+      "title": "title",
+      "labels": [
+        "self.c.Tr.SwitchToWorktree",
+        "self.c.Tr.DetachWorktree",
+        "self.c.Tr.RemoveWorktree"
+      ],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/controllers/helpers/repos_helper.go",
+      "line": 140,
+      "title": "self.c.Tr.RecentRepos",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/popup/popup_handler.go",
+      "line": 20,
+      "title": "",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/popup/popup_handler.go",
+      "line": 36,
+      "title": "title",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/popup/popup_handler.go",
+      "line": 58,
+      "title": "title",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/types/common.go",
+      "line": 138,
+      "title": "",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/types/common.go",
+      "line": 152,
+      "title": "",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/services/custom_commands/client.go",
+      "line": 111,
+      "title": "title",
+      "labels": [],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/services/custom_commands/handler_creator.go",
+      "line": 239,
+      "title": "prompt.Title",
+      "labels": [
+        "candidate.label"
+      ],
+      "keys": []
+    },
+    {
+      "file": "pkg/gui/services/custom_commands/handler_creator.go",
+      "line": 264,
+      "title": "prompt.Title",
+      "labels": [],
+      "keys": []
+    }
+  ]
+}
