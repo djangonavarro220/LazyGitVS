@@ -5,6 +5,7 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
 const lazygitConfig = fs.readFileSync(path.join(root, 'src', 'lazygitConfig.ts'), 'utf8');
+const renderStatusBody = extension.slice(extension.indexOf('private renderStatus(): string {'), extension.indexOf('\n  }\n}\nfunction clamp', extension.indexOf('private renderStatus(): string {')));
 
 assert(lazygitConfig.includes("recentRepos: '<enter>'") || extension.includes("key: '<enter>', label: '$(repo) Switch to workspace repository'"), 'Status repo switching must preserve lazygit Status recentRepos=<enter> behavior');
 assert(extension.includes('async function discoverWorkspaceRepositories(): Promise<WorkspaceRepository[]>'), 'LGVS must discover available Git repositories inside the VS Code workspace');
@@ -16,9 +17,9 @@ assert(extension.includes("title: 'Recent repositories'"), 'Repository selector 
 assert(extension.includes("if (!activeWorkspaceRoot || !roots.has(activeWorkspaceRoot)) activeWorkspaceRoot = roots.keys().next().value"), 'Active repo must reset when the workspace repo set changes, not cling to a stale previous root');
 assert(extension.includes('activeWorkspaceRoot = picked.repo.path'), 'Selecting a repository must switch the active Git root used by LGVS commands');
 assert(extension.indexOf('this.workspaceRepos = await discoverWorkspaceRepositories().catch(() => []);') < extension.indexOf('this.files = await changedFiles(this.lazygitGit);'), 'Refresh must discover workspace repos before Git status so nested/non-root repos can become the active root');
-assert(extension.includes('<div class="lg-logo">lazygit</div>'), '1 Status must use the lazygit-style dashboard, not a raw metric/config dump');
-assert(extension.includes('Recent repositories'), '1 Status dashboard must keep the recent repositories action visible');
-assert(extension.includes('All branches log'), '1 Status dashboard must expose lazygit all-branches log behavior');
+assert(extension.includes("return row(active, 'status-repo', 'enter', path.basename(workspaceRoot()), '', 0);"), '1 Status must be a single normal-sized row: enter + repo name, matching lazygit status panel shape');
+assert(!renderStatusBody.includes('<div class="lg-logo">lazygit</div>'), '1 Status must not render a large dashboard/logo in the sidebar');
+assert(!renderStatusBody.includes('All branches log'), '1 Status sidebar must not advertise a/A all-branches actions; lazygit original does not show those on-screen in Status');
 assert(!extension.includes("row(false, staged ? 'staged' : '', 'staged', String(staged))"), '1 Status must not show invented staged/changed/new metrics');
 assert(!extension.includes("row(false, '', 'gui'"), '1 Status must not dump internal gui config rows');
 

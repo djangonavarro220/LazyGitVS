@@ -128,7 +128,11 @@ async function branches(): Promise<Branch[]> {
   });
   const worktrees = await git(['worktree', 'list', '--porcelain']).catch(() => '');
   for (const line of worktrees.split('\n')) if (line.startsWith('branch ')) { const name = line.slice(7).replace(/^refs\/heads\//, ''); if (!items.some(b => b.kind === 'worktree' && b.name === name)) items.push({ name, label: name, current: false, kind: 'worktree', upstream: '' }); }
-  return items;
+  return items.sort((a, b) => {
+    if (a.current !== b.current) return a.current ? -1 : 1;
+    const kindRank = (branch: Branch) => branch.kind === 'local' ? 0 : branch.kind === 'worktree' ? 1 : 2;
+    return kindRank(a) - kindRank(b) || a.label.localeCompare(b.label);
+  });
 }
 async function tags(): Promise<Tag[]> {
   const out = await git(['for-each-ref', '--sort=-creatordate', '--format=%(refname:short)%09%(creatordate:short)%09%(subject)', 'refs/tags']);
@@ -410,9 +414,8 @@ async function showResetMenu(onNuke?: () => void | Promise<void>) {
   await pickGitAction('Reset options', items);
 }
 async function showDiscardFileMenu(file: ChangedFile, confirmKey = 'x') { await pickGitAction(`Discard changes · ${file.path}`, [
-  { key: 'u', label: '$(discard) Discard unstaged changes', description: 'git restore -- file', args: ['restore', '--', file.path], danger: true, confirm: `Discard unstaged changes in ${file.path}?` },
-  { key: 's', label: '$(remove) Unstage staged changes', description: 'git restore --staged -- file', args: ['restore', '--staged', '--', file.path] },
-  { key: confirmKey, label: '$(warning) Discard all changes', description: 'unstage and restore file', danger: true, confirm: `Discard all staged and unstaged changes in ${file.path}?`, run: async () => { await git(['restore', '--staged', '--', file.path]); await git(['restore', '--', file.path]); } }
+  { key: confirmKey, label: '$(warning) Discard all changes', description: 'unstage and restore file', danger: true, confirm: `Discard all staged and unstaged changes in ${file.path}?`, run: async () => { await git(['restore', '--staged', '--', file.path]); await git(['restore', '--', file.path]); } },
+  { key: 'u', label: '$(discard) Discard unstaged changes', description: 'git restore -- file', args: ['restore', '--', file.path], danger: true, confirm: `Discard unstaged changes in ${file.path}?` }
 ]); }
 async function showDiscardHunkMenu(hunk: Hunk) { await pickGitAction('Hunk options', hunk.staged ? [
   { key: 'd', label: '$(remove) Unstage hunk', description: 'git apply --cached --reverse', run: () => applyHunk(hunk) }
@@ -1606,7 +1609,7 @@ class LazyGitVSController {
     const isActiveView = this.activeViewPanel() === viewPanel;
     const showPanelSelection = isActiveView && this.focusArea === 'panel';
     const rows = this.rows(panel, showPanelSelection);
-    const footer = isActiveView && this.statusLine ? `<div class="hint"><div class="statusline">${escapeHtml(this.statusLine)}</div></div>` : '';
+    const footer = '';
     const boom = this.explosion && (viewPanel === 'status' || viewPanel === 'files') ? '<div class="boom"><div class="bomb">💣</div><div class="blast">💥</div></div>' : '';
     try { view.webview.html = `<!doctype html><html><head><meta charset="UTF-8"><style>
       html,body{height:100%;margin:0;}body{font-family:var(--vscode-font-family);font-size:var(--vscode-font-size);line-height:1.4;color:var(--vscode-foreground);background:var(--vscode-sideBar-background);overflow:hidden;}
@@ -1651,7 +1654,7 @@ class LazyGitVSController {
   }
   private fileDisplayPath(filePath: string): string { return this.lazygitGui.showFileTree ? filePath.replace(/\//g, ' › ') : filePath; }
   private rows(panel: Panel, active: boolean): string {
-    if (panel === 'status') return this.renderStatus();
+    if (panel === 'status') return this.renderStatus(active);
     if (panel === 'files') { const files = this.filteredFiles(); return files.length ? files.map((f,i)=>fileRow(active && i===this.selected, `${statusClass(f)} ${this.fileRangeSelected.has(i) ? 'range' : ''}`, f, this.fileDisplayPath(f.path), i)).join('') : '<div class="empty">No files for current filter.</div>'; }
     if (panel === 'hunks') return this.renderHunks(active);
     if (panel === 'branches') { const branches = this.filteredBranches(); return branches.length ? branches.map((b,i)=>row(active && i===this.branchSelected, `branch ${b.current ? 'current' : ''} ${b.kind}`, `${b.current ? '●' : ' '} ${b.kind === 'remote' ? 'R' : b.kind === 'tag' ? 'T' : b.kind === 'worktree' ? 'W' : 'L'}`, b.label, b.kind === 'remote' ? 'remote' : b.kind === 'tag' ? 'tag' : b.kind === 'worktree' ? 'worktree' : (b.upstream || 'local'), i)).join('') : '<div class="empty">No branches.</div>'; }
@@ -1678,21 +1681,8 @@ class LazyGitVSController {
     }
     return this.hunks.length ? this.hunks.map((h,i)=>row(active && i===this.hunkSelected, `hunk ${h.staged?'staged':'unstaged'}`, h.staged?'S':'M', h.summary, '', i)).join('') : '<div class="empty">No hunks for this side.</div>';
   }
-  private renderStatus(): string {
-    const branch = this.branchItems.find(b => b.current)?.name ?? '(detached)';
-    const repo = path.basename(workspaceRoot());
-    const link = (key: string, label: string) => `<div class="lg-link"><kbd>${escapeHtml(key)}</kbd><span>${escapeHtml(label)}</span></div>`;
-    return `<div class="status-dashboard">
-      <div class="lg-logo">lazygit</div>
-      <div class="lg-sub">A simple terminal UI for git commands</div>
-      ${link('enter', 'Recent repositories')}
-      ${link('a', 'All branches log')}
-      ${link('A', 'All branches log, reversed')}
-      ${link('o', 'Open config')}
-      ${link('e', 'Edit config')}
-      ${link('u', 'Check for updates')}
-      <div class="lg-repo">${escapeHtml(repo)} · ${escapeHtml(branch)}</div>
-    </div>`;
+  private renderStatus(active: boolean): string {
+    return row(active, 'status-repo', 'enter', path.basename(workspaceRoot()), '', 0);
   }
 }
 function clamp(index: number, length: number): number { return length ? Math.max(0, Math.min(length - 1, index)) : 0; }

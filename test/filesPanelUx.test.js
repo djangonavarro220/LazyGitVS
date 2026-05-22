@@ -17,7 +17,10 @@ assert(!extension.includes('.row.sel .slot{color:inherit}'), 'Selected Files row
 assert(!extension.includes('<span class="meta">${escapeHtml(fileStateLabel(file))}</span>'), 'Files rows must not render clipped staged/unstaged meta text in the narrow SCM sidebar');
 assert(extension.includes('.row.file{grid-template-columns:7px 32px minmax(0,1fr);}'), 'Files rows should reserve only enough room for two compact status boxes and give the rest to the path');
 assert(!extension.includes('class="focusline'), 'Sidebar panels must not render the noisy Focus: LG panel footer line');
-assert(extension.includes('const footer = isActiveView && this.statusLine ?'), 'Panel footer should be reserved for real status messages only');
+assert(extension.includes("const footer = '';"), 'Panel footer should stay empty; do not leak branch/status hints into every sidebar panel');
+assert(extension.includes("async function showDiscardFileMenu(file: ChangedFile, confirmKey = 'x') { await pickGitAction(`Discard changes · ${file.path}`, [\n  { key: confirmKey, label: '$(warning) Discard all changes'"), 'Discard file menu must keep lazygit original order: discard all first');
+assert(extension.includes("},\n  { key: 'u', label: '$(discard) Discard unstaged changes'"), 'Discard file menu must keep lazygit original order: discard unstaged second');
+assert(!extension.includes("label: '$(remove) Unstage staged changes'"), 'Discard file menu should not grow a non-lazygit unstage option; staging/unstaging is Space');
 assert(extension.includes("this.setFocusArea('viewer');\n    this.renderAll();\n    await this.openCurrent(viewPanel, false);"), 'Focusing the hunk/main viewer must immediately repaint panels without active file selection');
 assert(extension.includes("if (!preserveFocus) { this.ownsModeStatus = false; this.setFocusArea('viewer'); this.renderAll(); }"), 'Opening a non-preserved hunk/file viewer must clear panel selection before showing the viewer');
 
