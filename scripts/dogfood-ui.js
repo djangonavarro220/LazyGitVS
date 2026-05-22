@@ -306,6 +306,24 @@ async function pageText(Runtime) {
     await key(Input, '2');
     await sleep(STEP_DELAY);
 
+    // Modal focus regression: Files d-discard opens a QuickPick. Cancelling it must return
+    // keyboard focus to the same LGVS Files panel, so the next ArrowDown moves the file selection
+    // instead of leaking into the preview/editor.
+    await key(Input, 'd');
+    await sleep(STEP_DELAY);
+    await key(Input, 'Escape');
+    await sleep(STEP_DELAY);
+    await key(Input, 'ArrowDown');
+    await sleep(STEP_DELAY);
+    const afterDiscardModalText = (await pageText(Runtime)).slice(0, 3000);
+    evidence.push({ step: 'files-discard-modal-focus-restore', screenshot: await screenshot(Page, '03-files-discard-modal-focus-restore'), status: status(fixture), textSample: afterDiscardModalText });
+    checks.push({ name: 'Files d-discard modal restores keyboard focus to the Files panel', ok: /LazyGitVS: settings\.json/.test(afterDiscardModalText) && !afterDiscardModalText.includes('Dogfood Modal Sentinel'), textSample: afterDiscardModalText.slice(-1000) });
+    await typeText(Input, 'Dogfood Modal Sentinel');
+    await sleep(300);
+    checks.push({ name: 'Post-modal text input does not leak into the active editor', ok: !fs.readFileSync(path.join(fixture, 'README.md'), 'utf8').includes('Dogfood Modal Sentinel'), readme: fs.readFileSync(path.join(fixture, 'README.md'), 'utf8') });
+    await key(Input, 'ArrowUp');
+    await sleep(STEP_DELAY);
+
     // Return to Files and enter real editor HUNK mode.
     await key(Input, '2');
     await sleep(STEP_DELAY);

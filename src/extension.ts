@@ -580,7 +580,7 @@ class LazyGitVSController {
         if (msg.type === 'copyPath') await this.copyCurrentPath(panel);
         if (msg.type === 'copyInfo') await this.copyCurrentInfo(panel);
         if (msg.type === 'ignoreMenu') await this.ignoreCurrentFile();
-        if (msg.type === 'fetch') await this.runMenu(showPullMenu);
+        if (msg.type === 'fetch') await this.runMenu(showPullMenu, panel);
         if (msg.type === 'statusMenu') await this.statusMenu();
         if (msg.type === 'repoMenu') await this.recentReposMenu();
         if (msg.type === 'helpMenu') await this.helpMenu(panel);
@@ -593,12 +593,12 @@ class LazyGitVSController {
         if (msg.type === 'commitNoVerify') await this.commit('noVerify');
         if (msg.type === 'amendLastCommit') await this.commit('amendNoEdit');
         if (msg.type === 'commitWithEditor') await this.commit('body');
-        if (msg.type === 'pushMenu') await this.runMenu(showPushMenu);
-        if (msg.type === 'pullMenu') await this.runMenu(showPullMenu);
+        if (msg.type === 'pushMenu') await this.runMenu(showPushMenu, panel);
+        if (msg.type === 'pullMenu') await this.runMenu(showPullMenu, panel);
         if (msg.type === 'stashAll') await this.stashAll();
-        if (msg.type === 'stashMenu') await this.runMenu(showStashCreateMenu);
+        if (msg.type === 'stashMenu') await this.runMenu(showStashCreateMenu, panel);
         if (msg.type === 'discardMenu') await this.discardMenu(panel);
-        if (msg.type === 'resetMenu') await this.runMenu(() => showResetMenu(() => this.animateExplosion()));
+        if (msg.type === 'resetMenu') await this.runMenu(() => showResetMenu(() => this.animateExplosion()), panel);
         if (msg.type === 'search') await this.searchPanel();
         if (msg.type === 'clearFilter') await this.clearFilterOrBack(panel);
         if (msg.type === 'statusFilter') await this.statusFilterMenu();
@@ -696,6 +696,19 @@ class LazyGitVSController {
     await this.openCurrent(panel, true).catch(() => undefined);
     this.renderAll();
     await this.revealPanelView(panel);
+  }
+
+  private async restorePanelFocusAfterModal(viewPanel: ViewPanel) {
+    if (this.editorHunkMode || this.editorEditMode) return;
+    this.ownsModeStatus = true;
+    this.activePanel = this.panelForView(viewPanel);
+    this.setFocusArea('panel');
+    void vscode.commands.executeCommand('setContext', 'lazygitvs.keyboardMode', true);
+    this.suppressWebviewAutoFocusUntil = 0;
+    this.persistNavigationState();
+    this.updateModeStatusBar();
+    this.renderAll();
+    await this.revealPanelView(this.activeViewPanel());
   }
 
   private async revealPanelView(panel: ViewPanel) {
@@ -1045,9 +1058,9 @@ class LazyGitVSController {
       { key: key(f.amendLastCommit) || 'A', label: '$(history) Amend last commit', run: async () => this.commit('amendNoEdit') },
       { key: key(f.commitChangesWithEditor) || 'C', label: '$(edit) Commit with body', run: async () => this.commit('body') },
       { key: key(f.stashAllChanges) || 's', label: '$(archive) Stash all changes', run: async () => this.stashAll() },
-      { key: key(f.viewStashOptions) || 'S', label: '$(archive) Stash options', run: async () => this.runMenu(showStashCreateMenu) },
+      { key: key(f.viewStashOptions) || 'S', label: '$(archive) Stash options', run: async () => this.runMenu(showStashCreateMenu, viewPanel) },
       { key: key(u.remove) || 'd', label: '$(trash) Discard menu', run: async () => this.discardMenu(viewPanel) },
-      { key: key(f.viewResetOptions) || 'D', label: '$(debug-restart) Reset / nuke menu', run: async () => this.runMenu(() => showResetMenu(() => this.animateExplosion())) }
+      { key: key(f.viewResetOptions) || 'D', label: '$(debug-restart) Reset / nuke menu', run: async () => this.runMenu(() => showResetMenu(() => this.animateExplosion()), viewPanel) },
     ];
   }
   private hunkCommandCatalog(viewPanel: ViewPanel): GitMenuItem[] {
@@ -1191,21 +1204,40 @@ class LazyGitVSController {
   private async runCommitCommand(typed: string) {
     const item = findMenuItemByKey(this.commitCommandCatalog(), typed);
     if (!item) return;
-    await executeGitMenuItem(item);
-    await this.refresh(true);
+    try {
+      await executeGitMenuItem(item);
+      await this.refresh(false);
+    } finally {
+      await this.restorePanelFocusAfterModal('commits');
+    }
   }
   private async runPanelCommand(viewPanel: ViewPanel, typed: string) {
     const item = findMenuItemByKey(this.panelCommandCatalog(viewPanel), typed);
     if (!item) return;
-    await executeGitMenuItem(item);
-    await this.refresh(true);
+    try {
+      await executeGitMenuItem(item);
+      await this.refresh(false);
+    } finally {
+      await this.restorePanelFocusAfterModal(viewPanel);
+    }
   }
   private async stashAll() { await runGitAction('Stash all changes', ['stash', 'push']); await this.refresh(true); }
-  private async runMenu(menu: () => Promise<void>) { await menu(); await this.refresh(true); }
+  private async runMenu(menu: () => Promise<void>, viewPanel: ViewPanel = this.activeViewPanel()) {
+    try {
+      await menu();
+      await this.refresh(false);
+    } finally {
+      await this.restorePanelFocusAfterModal(viewPanel);
+    }
+  }
   private async discardMenu(viewPanel: ViewPanel) {
     const panel = this.panelForView(viewPanel);
-    if (panel === 'hunks') { const h = this.hunks[this.hunkSelected]; if (!h) return; if (this.hunkSelectionMode === 'line') { const line = hunkSelectableLineIndexes(h)[this.hunkLineSelected]; if (line !== undefined) { if (h.staged) await applyLine(h, line); else await discardUnstagedLine(h, line); } } else await showDiscardHunkMenu(h); await this.loadHunks(false); await this.refresh(true); return; }
-    if (panel === 'files') { const f = this.currentFile(); if (!f) return; await showDiscardFileMenu(f, String(this.lazygitKeymap.files.confirmDiscard ?? 'x')); await this.refresh(true); }
+    try {
+      if (panel === 'hunks') { const h = this.hunks[this.hunkSelected]; if (!h) return; if (this.hunkSelectionMode === 'line') { const line = hunkSelectableLineIndexes(h)[this.hunkLineSelected]; if (line !== undefined) { if (h.staged) await applyLine(h, line); else await discardUnstagedLine(h, line); } } else await showDiscardHunkMenu(h); await this.loadHunks(false); await this.refresh(false); return; }
+      if (panel === 'files') { const f = this.currentFile(); if (!f) return; await showDiscardFileMenu(f, String(this.lazygitKeymap.files.confirmDiscard ?? 'x')); await this.refresh(false); }
+    } finally {
+      await this.restorePanelFocusAfterModal(viewPanel);
+    }
   }
   private async enterHunks() {
     const file = this.currentFile();
