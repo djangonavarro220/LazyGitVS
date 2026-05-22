@@ -5,8 +5,9 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
 
-assert(extension.includes("kind === 'index' ? 'S' : 'U'"), 'Files badges must show S/U lanes, not ambiguous raw M/M porcelain');
-assert(extension.includes("f.untracked ? [' ', '?']"), 'Untracked files should not render duplicate ?/? badges');
+assert(extension.includes('>${escapeHtml(ch)}</span>`'), 'Files badges must render lazygit original short-status letters, not LGVS S/U ownership labels');
+assert(!extension.includes("kind === 'index' ? 'S' : 'U'"), 'Files badges must not show invented S/U labels in the Files panel');
+assert(extension.includes("[f.xy[0] ?? ' ', f.xy[1] ?? ' ']"), 'Files panel should preserve both lazygit short-status columns, including ?? for untracked files');
 assert(!extension.includes('<span class="meta">${escapeHtml(fileStateLabel(file))}</span>'), 'Files rows must not render clipped staged/unstaged meta text in the narrow SCM sidebar');
 assert(extension.includes('.row.file{grid-template-columns:7px 42px minmax(0,1fr);}'), 'Files rows should reserve fixed badge columns and give the rest to the path');
 assert(!extension.includes('class="focusline'), 'Sidebar panels must not render the noisy Focus: LG panel footer line');

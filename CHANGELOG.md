@@ -2,6 +2,11 @@
 
 All notable changes to LazyGitVS will be documented here.
 
+## 0.1.93 - Lazygit file status badges
+
+- Files panel badges now render lazygit's original two-column Git short status letters (`M`, `A`, `?`, etc.) instead of LGVS-specific `S`/`U` labels.
+- Keeps index/staged and worktree/unstaged columns fixed and colored separately for quick scanning.
+
 ## 0.1.91 - High-contrast generated logo
 
 - Uses the selected generated logo option 2 as the project logo source (`resources/logo.png`).

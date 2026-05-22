@@ -426,11 +426,11 @@ function statusClass(f: ChangedFile): string { if (f.untracked) return 'untracke
 function statusKind(ch: string): string { return ch === 'M' ? 'modified' : ch === 'A' ? 'added' : ch === 'D' ? 'deleted' : ch === 'R' ? 'renamed' : ch === 'C' ? 'copied' : ch === 'U' ? 'conflict' : ch === '?' ? 'untracked' : 'clean'; }
 function fileStateLabel(f: ChangedFile): string { if (f.untracked) return 'untracked'; if (f.staged && f.xy[1] !== ' ') return 'staged + unstaged'; if (f.staged) return 'staged'; return 'unstaged'; }
 function fileStatusHtml(f: ChangedFile): string {
-  const [index, worktree] = f.untracked ? [' ', '?'] : [f.xy[0] ?? ' ', f.xy[1] ?? ' '];
+  const [index, worktree] = [f.xy[0] ?? ' ', f.xy[1] ?? ' '];
   const slot = (kind: 'index' | 'worktree', ch: string) => ch === ' '
     ? `<span class="slot empty ${kind}" aria-hidden="true"></span>`
-    : `<span class="slot ${kind} ${statusKind(ch)}" title="${kind === 'index' ? 'staged/index' : 'unstaged/worktree'}: ${escapeHtml(ch)}">${kind === 'index' ? 'S' : 'U'}</span>`;
-  return `<span class="status-pair" title="${escapeHtml(fileStateLabel(f))}">${slot('index', index)}${slot('worktree', worktree)}</span>`;
+    : `<span class="slot ${kind} ${statusKind(ch)}" title="${kind === 'index' ? 'index/staged' : 'worktree/unstaged'}: ${escapeHtml(ch)}">${escapeHtml(ch)}</span>`;
+  return `<span class="status-pair" title="${escapeHtml(f.xy)} · ${escapeHtml(fileStateLabel(f))}">${slot('index', index)}${slot('worktree', worktree)}</span>`;
 }
 async function showChangedFilesQuickPick() {
   const files = await changedFiles();
