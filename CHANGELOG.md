@@ -2,6 +2,11 @@
 
 All notable changes to LazyGitVS will be documented here.
 
+## 0.1.94 - Flat file status letters
+
+- Files panel short-status letters now render flat like VS Code SCM text, without pill/circular badge backgrounds.
+- Selected file rows keep staged/index green and unstaged/worktree red on the original `M`, `A`, `?`, etc. letters.
+
 ## 0.1.93 - Lazygit file status badges
 
 - Files panel badges now render lazygit's original two-column Git short status letters (`M`, `A`, `?`, etc.) instead of LGVS-specific `S`/`U` labels.
