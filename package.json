@@ -153,49 +153,49 @@
         {
           "id": "lazygitvs.statusView",
           "name": "1 Status",
-          "visibility": "collapsed",
-          "when": "lazygitvs.statusViewVisible"
+          "visibility": "collapsed"
         },
         {
           "id": "lazygitvs.filesView",
           "name": "2 Files",
-          "type": "webview"
+          "type": "webview",
+          "visibility": "visible"
         },
         {
           "id": "lazygitvs.branchesView",
           "name": "3 Branches",
           "type": "webview",
-          "visibility": "collapsed"
+          "visibility": "visible"
         },
         {
           "id": "lazygitvs.commitsView",
           "name": "4 Commits",
           "type": "webview",
-          "visibility": "collapsed"
+          "visibility": "visible"
         },
         {
           "id": "lazygitvs.stashView",
           "name": "5 Stash",
           "type": "webview",
-          "visibility": "collapsed"
+          "visibility": "visible"
         },
         {
           "id": "lazygitvs.conflictsView",
           "name": "6 Conflicts",
           "type": "webview",
-          "visibility": "collapsed"
+          "visibility": "visible"
         },
         {
           "id": "lazygitvs.tagsView",
           "name": "7 Tags",
           "type": "webview",
-          "visibility": "collapsed"
+          "visibility": "visible"
         },
         {
           "id": "lazygitvs.remotesView",
           "name": "8 Remotes",
           "type": "webview",
-          "visibility": "collapsed"
+          "visibility": "visible"
         }
       ]
     },

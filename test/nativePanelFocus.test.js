@@ -10,12 +10,17 @@ const views = pkg.contributes.views.scm;
 assert(views.length >= 8, 'LGVS should keep the real multi-panel SCM layout');
 for (const view of views) {
   if (view.id === 'lazygitvs.statusView') {
-    assert.strictEqual(view.when, 'lazygitvs.statusViewVisible', 'Status may be hidden when inactive so it does not reserve an oversized empty SCM pane');
+    assert.strictEqual(view.visibility, 'collapsed', 'Status should default collapsed so it does not reserve an oversized empty SCM pane');
+    assert(!Object.prototype.hasOwnProperty.call(view, 'when'), 'Status should not disappear behind a context key; it stays as a collapsed native header');
   } else {
     assert(!Object.prototype.hasOwnProperty.call(view, 'when'), `SCM view ${view.id} must not be hidden behind activeView context`);
+    assert.strictEqual(view.visibility, 'visible', `SCM view ${view.id} should default open for README/product screenshots`);
   }
 }
 
+assert(extension.includes('private defaultPanelsRevealed = false;'), 'LGVS should reveal the default-open non-status panels only once on dashboard focus');
+assert(extension.includes("PANEL_ORDER.filter((panel): panel is ViewPanel => panel !== 'status')"), 'default focus should open panels 2-8 while leaving 1 Status collapsed');
+assert(extension.includes('await this.revealDefaultOpenPanels();'), 'openDashboard should reveal default-open panels before focusing Files');
 assert(!extension.includes('private async makeRoomForLazyGitViews'), 'do not ship fake room-making helpers for native SCM scrolling');
 assert(!extension.includes("executeCommand('workbench.action.decreaseViewSize')"), 'panel jumps must not resize VS Code views');
 assert(!extension.includes("executeCommand('list.scrollDown')"), 'panel jumps must not blindly scroll whichever list has focus');

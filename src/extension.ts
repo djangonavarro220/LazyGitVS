@@ -512,7 +512,7 @@ class LazyGitVSController {
   private conflictSelected = 0;
   private filterText = '';
   private fileStatusFilter: 'all' | 'staged' | 'unstaged' | 'tracked' | 'untracked' = 'all';
-  private activePanel: Panel = 'status';
+  private activePanel: Panel = 'files';
   private previousPanel: Panel = 'files';
   private hunkSide: 'unstaged' | 'staged' = 'unstaged';
   private hunkSelectionMode: 'hunk' | 'line' = 'hunk';
@@ -545,6 +545,7 @@ class LazyGitVSController {
   private lazygitGit = cloneGitConfig();
   private lazygitConfigFiles: string[] = [];
   private suppressWebviewAutoFocusUntil = 0;
+  private defaultPanelsRevealed = false;
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.unstagedHunkDecoration = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: 'rgba(210, 153, 34, 0.13)', borderWidth: '0 0 0 2px', borderStyle: 'solid', borderColor: '#d29922' });
@@ -576,7 +577,6 @@ class LazyGitVSController {
   private updateActiveViewContext() {
     const viewPanel = this.activeViewPanel();
     void vscode.commands.executeCommand('setContext', 'lazygitvs.activeView', viewPanel);
-    void vscode.commands.executeCommand('setContext', 'lazygitvs.statusViewVisible', viewPanel === 'status');
   }
 
   attach(panel: ViewPanel, view: vscode.WebviewView) {
@@ -702,7 +702,18 @@ class LazyGitVSController {
     });
   }
 
-  focus() { this.loadLazyGitConfig(); return this.focusPanel(this.activeViewPanel()); }
+  async focus() {
+    this.loadLazyGitConfig();
+    await this.revealDefaultOpenPanels();
+    return this.focusPanel(this.activeViewPanel());
+  }
+  private async revealDefaultOpenPanels() {
+    if (this.defaultPanelsRevealed) return;
+    this.defaultPanelsRevealed = true;
+    for (const panel of PANEL_ORDER.filter((panel): panel is ViewPanel => panel !== 'status')) {
+      await this.revealPanelView(panel).catch(() => undefined);
+    }
+  }
   async focusNumberPanel(index: number) {
     const panel = PANEL_ORDER[index - 1];
     if (!panel) return;

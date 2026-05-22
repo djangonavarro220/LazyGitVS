@@ -15,8 +15,8 @@ assert(extension.includes("if (panel === 'status') return this.recentReposMenu()
 assert(extension.includes('class StatusTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem>'), '1 Status should use a native compact TreeView instead of a tall webview');
 assert(extension.includes("vscode.window.createTreeView(VIEW_IDS.status, { treeDataProvider: statusProvider })"), '1 Status must be registered as a native TreeView');
 assert(!extension.includes("registerWebviewViewProvider(VIEW_IDS.status"), '1 Status must not be registered as a webview; webviews keep too much empty vertical space');
-assert(pkg.includes('"when": "lazygitvs.statusViewVisible"'), '1 Status should be hidden when inactive so it does not reserve a huge empty SCM pane');
-assert(extension.includes("setContext', 'lazygitvs.statusViewVisible', viewPanel === 'status'"), 'Status view visibility must track active panel');
+assert(pkg.includes('\"id\": \"lazygitvs.statusView\"') && pkg.includes('\"visibility\": \"collapsed\"'), '1 Status should default collapsed so it only consumes a header row');
+assert(!pkg.includes('\"when\": \"lazygitvs.statusViewVisible\"'), '1 Status should remain visible as a collapsed native header, not disappear behind a context key');
 assert(extension.includes("item.command = { command: 'lazygitvs.statusRecentRepos', title: 'Switch to workspace repository' };"), 'Status row Enter/click must open the recent repository selector');
 assert(extension.includes("title: 'Recent repositories'"), 'Repository selector title should mirror lazygit original wording');
 assert(extension.includes("if (!activeWorkspaceRoot || !roots.has(activeWorkspaceRoot)) activeWorkspaceRoot = roots.keys().next().value"), 'Active repo must reset when the workspace repo set changes, not cling to a stale previous root');
@@ -27,6 +27,7 @@ assert(!extension.includes("const item = new vscode.TreeItem('enter', vscode.Tre
 assert(!extension.includes('<div class="lg-logo">lazygit</div>'), '1 Status must not render a large dashboard/logo in the sidebar');
 assert(!extension.includes('All branches log'), '1 Status sidebar must not advertise a/A all-branches actions; lazygit original does not show those on-screen in Status');
 assert(!extension.includes("row(false, staged ? 'staged' : '', 'staged', String(staged))"), '1 Status must not show invented staged/changed/new metrics');
+assert(extension.includes("private activePanel: Panel = 'files';"), 'LazyGitVS should default to Files so 1 Status stays collapsed until explicitly focused');
 assert(!extension.includes("row(false, '', 'gui'"), '1 Status must not dump internal gui config rows');
 
 console.log('statusRepoSelection tests passed');
