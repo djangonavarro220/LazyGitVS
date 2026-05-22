@@ -16,6 +16,10 @@ assert(extension.includes("title: 'Recent repositories'"), 'Repository selector 
 assert(extension.includes("if (!activeWorkspaceRoot || !roots.has(activeWorkspaceRoot)) activeWorkspaceRoot = roots.keys().next().value"), 'Active repo must reset when the workspace repo set changes, not cling to a stale previous root');
 assert(extension.includes('activeWorkspaceRoot = picked.repo.path'), 'Selecting a repository must switch the active Git root used by LGVS commands');
 assert(extension.indexOf('this.workspaceRepos = await discoverWorkspaceRepositories().catch(() => []);') < extension.indexOf('this.files = await changedFiles(this.lazygitGit);'), 'Refresh must discover workspace repos before Git status so nested/non-root repos can become the active root');
-assert(extension.includes("row(false, 'current', 'repo', repo, workspaceRoot())"), '1 Status must show the active repository so click/Enter target is obvious');
+assert(extension.includes('<div class="lg-logo">lazygit</div>'), '1 Status must use the lazygit-style dashboard, not a raw metric/config dump');
+assert(extension.includes('Recent repositories'), '1 Status dashboard must keep the recent repositories action visible');
+assert(extension.includes('All branches log'), '1 Status dashboard must expose lazygit all-branches log behavior');
+assert(!extension.includes("row(false, staged ? 'staged' : '', 'staged', String(staged))"), '1 Status must not show invented staged/changed/new metrics');
+assert(!extension.includes("row(false, '', 'gui'"), '1 Status must not dump internal gui config rows');
 
 console.log('statusRepoSelection tests passed');
