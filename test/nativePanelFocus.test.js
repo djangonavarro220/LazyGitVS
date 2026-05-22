@@ -24,7 +24,13 @@ assert(extension.includes('if (!this.visible()) {\n        try { await vscode.co
 assert(extension.includes('this.views.get(panel)?.show(false);'), 'panel reveal should use WebviewView.show(false) for the contributed view');
 assert(extension.includes('`${viewId}.focus`, { preserveFocus: false }'), 'panel reveal should focus the target contributed view');
 assert(extension.includes('Date.now() > this.suppressWebviewAutoFocusUntil'), 'webview bootstrap must remain guarded during editor/HUNK transitions');
-assert(extension.includes("executeCommand('setContext', 'lazygitvs.keyboardMode', false);\n    await this.setVimKeyCaptureSuppressed(false);"), 'EDIT mode must release numeric panel jumps so digits type normally');
-assert(extension.includes("executeCommand('setContext', 'lazygitvs.keyboardMode', true);\n    await this.setVimKeyCaptureSuppressed(true);"), 'returning from EDIT to HUNK mode must restore numeric panel jumps');
+assert(extension.includes("executeCommand('setContext', 'lazygitvs.keyboardMode', false);\n    await this.setVimKeyCaptureSuppressed(false);"), 'EDIT mode must release LGVS key capture so Vim/editor typing works normally');
+assert(extension.includes("executeCommand('setContext', 'lazygitvs.keyboardMode', true);\n    await this.setVimKeyCaptureSuppressed(true);"), 'returning from EDIT to HUNK mode must restore LGVS HUNK key capture');
+const broadKeyboardModeEditorBindings = pkg.contributes.keybindings.filter(binding => String(binding.when) === 'lazygitvs.keyboardMode && editorTextFocus');
+assert.deepStrictEqual(broadKeyboardModeEditorBindings, [], 'LGVS must not bind bare editor keys through broad keyboardMode; outside HUNK/LINE/VIEW the editor belongs to VSCodeVim/VS Code');
+for (const key of ['1', '2', '3', '4', '5', '6', '7', '8']) {
+  const editorBindings = pkg.contributes.keybindings.filter(binding => binding.key === key && String(binding.when).includes('editorTextFocus'));
+  assert(editorBindings.every(binding => /lazygitvs\.viewerFocus|lazygitvs\.editorHunkMode/.test(binding.when)), `${key} must only jump panels from LGVS viewer or HUNK/LINE mode, never normal editor EDIT mode`);
+}
 
 console.log('nativePanelFocus tests passed');

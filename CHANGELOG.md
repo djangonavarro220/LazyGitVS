@@ -2,6 +2,11 @@
 
 All notable changes to LazyGitVS will be documented here.
 
+## 0.1.96 - Release editor keys outside HUNK/LINE
+
+- Removed broad LGVS numeric editor keybindings so normal VS Code/VSCodeVim editing owns the editor outside HUNK/LINE mode.
+- Panel number jumps still work from LGVS viewer focus and editor HUNK/LINE mode, but no longer steal keys in normal editor EDIT mode.
+
 ## 0.1.95 - Compact file status letters
 
 - Files panel short-status letters now render as a compact `MM`-style text block instead of spaced-out floating columns.
