@@ -15,6 +15,7 @@ resources/logo.png
 MARKETPLACE.md
 docs/lazygit-*
 docs/dogfooding-*
+docs/assets/**
 docs/plans/**
 dogfood-output/**
 scripts/**
