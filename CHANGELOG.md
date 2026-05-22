@@ -2,6 +2,11 @@
 
 All notable changes to LazyGitVS will be documented here.
 
+## Unreleased - Colored file status boxes
+
+- Files panel short-status letters are back in compact colored square badges so staged/unstaged colors remain visible on selected rows.
+- File path text stays normal foreground; only the status boxes carry Git color.
+
 ## 0.1.96 - Release editor keys outside HUNK/LINE
 
 - Removed broad LGVS numeric editor keybindings so normal VS Code/VSCodeVim editing owns the editor outside HUNK/LINE mode.
