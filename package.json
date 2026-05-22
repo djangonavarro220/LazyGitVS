@@ -50,6 +50,7 @@
     "onView:lazygitvs.commitsView",
     "onView:lazygitvs.stashView",
     "onView:lazygitvs.conflictsView",
+    "onCommand:lazygitvs.statusRecentRepos",
     "onCommand:lazygitvs.focusPanel1",
     "onCommand:lazygitvs.focusPanel2",
     "onCommand:lazygitvs.focusPanel3",
@@ -152,8 +153,8 @@
         {
           "id": "lazygitvs.statusView",
           "name": "1 Status",
-          "type": "webview",
-          "visibility": "collapsed"
+          "visibility": "collapsed",
+          "when": "lazygitvs.statusViewVisible"
         },
         {
           "id": "lazygitvs.filesView",
@@ -308,6 +309,46 @@
         "key": "ctrl+alt+g",
         "command": "lazygitvs.openDashboard",
         "when": "!terminalFocus"
+      },
+      {
+        "key": "1",
+        "command": "lazygitvs.focusPanel1",
+        "when": "focusedView == lazygitvs.statusView"
+      },
+      {
+        "key": "2",
+        "command": "lazygitvs.focusPanel2",
+        "when": "focusedView == lazygitvs.statusView"
+      },
+      {
+        "key": "3",
+        "command": "lazygitvs.focusPanel3",
+        "when": "focusedView == lazygitvs.statusView"
+      },
+      {
+        "key": "4",
+        "command": "lazygitvs.focusPanel4",
+        "when": "focusedView == lazygitvs.statusView"
+      },
+      {
+        "key": "5",
+        "command": "lazygitvs.focusPanel5",
+        "when": "focusedView == lazygitvs.statusView"
+      },
+      {
+        "key": "6",
+        "command": "lazygitvs.focusPanel6",
+        "when": "focusedView == lazygitvs.statusView"
+      },
+      {
+        "key": "7",
+        "command": "lazygitvs.focusPanel7",
+        "when": "focusedView == lazygitvs.statusView"
+      },
+      {
+        "key": "8",
+        "command": "lazygitvs.focusPanel8",
+        "when": "focusedView == lazygitvs.statusView"
       },
       {
         "key": "1",

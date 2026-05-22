@@ -20,7 +20,7 @@ LazyGitVS is a keyboard-first Git workflow for VS Code, inspired by [lazygit](ht
 It is **not** a terminal wrapper. It uses VS Code-native surfaces where they are better: SCM sidebar views, QuickPick menus, input boxes, native diffs, and real editors for hunk/line work.
 
 <p align="center">
-  <img src="docs/assets/readme-hunk-mode.png" alt="LazyGitVS showing panels 1 through 5 in the Source Control sidebar and editor HUNK mode in a full VS Code window" />
+  <img src="docs/assets/readme-hunk-mode.png" alt="LazyGitVS showing compact SCM sidebar panels and editor HUNK mode in a full VS Code window" />
 </p>
 
 Current preview: **0.1.96**

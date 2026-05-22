@@ -9,7 +9,11 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const views = pkg.contributes.views.scm;
 assert(views.length >= 8, 'LGVS should keep the real multi-panel SCM layout');
 for (const view of views) {
-  assert(!Object.prototype.hasOwnProperty.call(view, 'when'), `SCM view ${view.id} must not be hidden behind activeView context`);
+  if (view.id === 'lazygitvs.statusView') {
+    assert.strictEqual(view.when, 'lazygitvs.statusViewVisible', 'Status may be hidden when inactive so it does not reserve an oversized empty SCM pane');
+  } else {
+    assert(!Object.prototype.hasOwnProperty.call(view, 'when'), `SCM view ${view.id} must not be hidden behind activeView context`);
+  }
 }
 
 assert(!extension.includes('private async makeRoomForLazyGitViews'), 'do not ship fake room-making helpers for native SCM scrolling');

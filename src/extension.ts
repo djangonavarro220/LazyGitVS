@@ -468,8 +468,22 @@ class PanelViewProvider implements vscode.WebviewViewProvider {
   resolveWebviewView(view: vscode.WebviewView) { this.app.attach(this.panel, view); }
 }
 
+class StatusTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
+  private readonly onChange = new vscode.EventEmitter<void>();
+  readonly onDidChangeTreeData = this.onChange.event;
+
+  constructor(private readonly app: LazyGitVSController) {}
+
+  refresh() { this.onChange.fire(); }
+  dispose() { this.onChange.dispose(); }
+  getTreeItem(item: vscode.TreeItem) { return item; }
+  getChildren() { return [this.app.statusTreeItem()]; }
+}
+
 class LazyGitVSController {
   private views = new Map<ViewPanel, vscode.WebviewView>();
+  private statusTree?: vscode.TreeView<vscode.TreeItem>;
+  private statusTreeProvider?: StatusTreeProvider;
   private files: ChangedFile[] = [];
   private allHunks: Hunk[] = [];
   private hunks: Hunk[] = [];
@@ -560,7 +574,9 @@ class LazyGitVSController {
   }
 
   private updateActiveViewContext() {
-    void vscode.commands.executeCommand('setContext', 'lazygitvs.activeView', this.activeViewPanel());
+    const viewPanel = this.activeViewPanel();
+    void vscode.commands.executeCommand('setContext', 'lazygitvs.activeView', viewPanel);
+    void vscode.commands.executeCommand('setContext', 'lazygitvs.statusViewVisible', viewPanel === 'status');
   }
 
   attach(panel: ViewPanel, view: vscode.WebviewView) {
@@ -620,6 +636,24 @@ class LazyGitVSController {
     this.render(panel);
     this.refresh(true).catch(err => vscode.window.showErrorMessage(err.message));
   }
+
+  attachStatusTree(provider: StatusTreeProvider, tree: vscode.TreeView<vscode.TreeItem>) {
+    this.statusTreeProvider = provider;
+    this.statusTree = tree;
+    tree.onDidChangeVisibility(() => { if (tree.visible) this.scheduleRefresh(0); }, null, this.context.subscriptions);
+    provider.refresh();
+  }
+
+  statusTreeItem(): vscode.TreeItem {
+    const item = new vscode.TreeItem('enter', vscode.TreeItemCollapsibleState.None);
+    item.description = path.basename(workspaceRoot());
+    item.tooltip = 'Enter: switch to a workspace repository';
+    item.command = { command: 'lazygitvs.statusRecentRepos', title: 'Switch to workspace repository' };
+    item.contextValue = 'lazygitvs.statusRepo';
+    return item;
+  }
+
+  openRecentRepos() { return this.recentReposMenu(); }
 
   private loadLazyGitConfig() {
     const config = readLazyGitConfig();
@@ -692,6 +726,7 @@ class LazyGitVSController {
     this.setFocusArea('panel');
     void vscode.commands.executeCommand('setContext', 'lazygitvs.keyboardMode', true);
     this.activePanel = panel;
+    this.updateActiveViewContext();
     this.suppressWebviewAutoFocusUntil = 0;
     this.persistNavigationState();
     this.updateModeStatusBar();
@@ -706,6 +741,7 @@ class LazyGitVSController {
     if (this.editorHunkMode || this.editorEditMode) return;
     this.ownsModeStatus = true;
     this.activePanel = this.panelForView(viewPanel);
+    this.updateActiveViewContext();
     this.setFocusArea('panel');
     void vscode.commands.executeCommand('setContext', 'lazygitvs.keyboardMode', true);
     this.suppressWebviewAutoFocusUntil = 0;
@@ -729,7 +765,7 @@ class LazyGitVSController {
     setTimeout(() => { this.suppressWebviewAutoFocusUntil = 0; }, 260);
   }
 
-  private visible() { return Array.from(this.views.values()).some(view => view.visible); }
+  private visible() { return Array.from(this.views.values()).some(view => view.visible) || !!this.statusTree?.visible; }
   private scheduleRefresh(delayMs = 250) {
     this.updateModeStatusBar();
     if (!this.visible()) return;
@@ -1622,7 +1658,7 @@ class LazyGitVSController {
     await new Promise(resolve => setTimeout(resolve, 850));
     this.explosion = false; this.statusLine = '💥 Nuked working tree'; this.renderAll();
   }
-  private renderAll() { this.persistNavigationState(); for (const panel of PANEL_ORDER) this.render(panel); }
+  private renderAll() { this.persistNavigationState(); this.statusTreeProvider?.refresh(); for (const panel of PANEL_ORDER) this.render(panel); }
   private render(viewPanel: ViewPanel) {
     const view = this.views.get(viewPanel);
     if (!view) return;
@@ -1723,8 +1759,13 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('lazygitvs-empty', new EmptyProvider()));
   context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('lazygitvs-preview', virtualPreviewProvider));
   const app = new LazyGitVSController(context);
-  for (const panel of PANEL_ORDER) context.subscriptions.push(vscode.window.registerWebviewViewProvider(VIEW_IDS[panel], new PanelViewProvider(app, panel), { webviewOptions: { retainContextWhenHidden: true } }));
+  const statusProvider = new StatusTreeProvider(app);
+  const statusTree = vscode.window.createTreeView(VIEW_IDS.status, { treeDataProvider: statusProvider });
+  app.attachStatusTree(statusProvider, statusTree);
+  context.subscriptions.push(statusTree, statusProvider);
+  for (const panel of PANEL_ORDER.filter(panel => panel !== 'status')) context.subscriptions.push(vscode.window.registerWebviewViewProvider(VIEW_IDS[panel], new PanelViewProvider(app, panel), { webviewOptions: { retainContextWhenHidden: true } }));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.changedFiles', showChangedFilesQuickPick));
+  context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.statusRecentRepos', () => app.openRecentRepos()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.openDashboard', () => app.focus()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.closeDashboard', () => app.close()));
   PANEL_ORDER.forEach((panel, index) => {
