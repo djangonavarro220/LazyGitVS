@@ -16,6 +16,7 @@ MARKETPLACE.md
 docs/lazygit-*
 docs/dogfooding-*
 docs/assets/**
+!docs/assets/readme-hunk-mode.png
 docs/plans/**
 dogfood-output/**
 scripts/**

@@ -10,7 +10,6 @@
 
 <p align="center">
   <a href="https://github.com/djangonavarro220/LazyGitVS/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/djangonavarro220/LazyGitVS/actions/workflows/ci.yml/badge.svg" /></a>
-  <a href="https://marketplace.visualstudio.com/items?itemName=lazygitvs.lazygitvs"><img alt="Visual Studio Marketplace" src="https://img.shields.io/visual-studio-marketplace/v/lazygitvs.lazygitvs?label=Marketplace" /></a>
   <a href="https://github.com/djangonavarro220/LazyGitVS/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/djangonavarro220/LazyGitVS?include_prereleases" /></a>
   <a href="LICENSE.txt"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue" /></a>
 </p>
@@ -23,7 +22,7 @@ It is **not** a terminal wrapper. It uses VS Code-native surfaces where they are
   <img src="docs/assets/readme-hunk-mode.png" alt="LazyGitVS showing panels 1 through 5 in the Source Control sidebar and editor HUNK mode in a full VS Code window" />
 </p>
 
-Current preview: **0.1.91**
+Current preview: **0.1.96**
 
 ## Why this exists
 
