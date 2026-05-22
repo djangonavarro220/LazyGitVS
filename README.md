@@ -1,7 +1,7 @@
 # LazyGitVS
 
 <p align="center">
-  <img src="resources/logo.png" alt="LazyGitVS logo" width="160" />
+  <img src="resources/icon.png" alt="LazyGitVS logo" width="128" />
 </p>
 
 <p align="center">
@@ -10,6 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/djangonavarro220/LazyGitVS/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/djangonavarro220/LazyGitVS/actions/workflows/ci.yml/badge.svg" /></a>
+  <a href="https://marketplace.visualstudio.com/items?itemName=lazygitvs.lazygitvs"><img alt="VS Marketplace version" src="https://vsmarketplacebadges.dev/version-short/lazygitvs.lazygitvs.svg" /></a>
   <a href="https://github.com/djangonavarro220/LazyGitVS/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/djangonavarro220/LazyGitVS?include_prereleases" /></a>
   <a href="LICENSE.txt"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue" /></a>
 </p>

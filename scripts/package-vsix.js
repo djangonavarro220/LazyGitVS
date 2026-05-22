@@ -17,11 +17,16 @@ const outDir = process.env.LGVS_VSIX_OUT_DIR
 const outFile = process.env.LGVS_VSIX_OUT_FILE
   ? path.resolve(process.env.LGVS_VSIX_OUT_FILE)
   : path.join(outDir, `lazygitvs-${pkg.version}.vsix`);
+const relOut = path.relative(root, outFile);
+const isDistBuild = relOut === 'dist' || relOut.startsWith(`dist${path.sep}`);
+const rewriteRelativeLinks = process.env.LGVS_REWRITE_RELATIVE_LINKS === '1' || isDistBuild;
 
 fs.mkdirSync(path.dirname(outFile), { recursive: true });
 
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-const result = spawnSync(npx, ['vsce', 'package', '--no-dependencies', '--out', outFile], {
+const args = ['vsce', 'package', '--no-dependencies', '--out', outFile];
+if (!rewriteRelativeLinks) args.push('--no-rewrite-relative-links');
+const result = spawnSync(npx, args, {
   cwd: root,
   stdio: 'inherit',
   env: process.env
