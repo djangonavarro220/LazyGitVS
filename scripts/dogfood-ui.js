@@ -152,15 +152,19 @@ async function cdpConnect() {
 }
 async function key(Input, key, opts = {}) {
   const mods = (opts.ctrl ? 2 : 0) | (opts.shift ? 8 : 0) | (opts.alt ? 1 : 0) | (opts.meta ? 4 : 0);
-  const codeMap = { Enter: 'Enter', Escape: 'Escape', Tab: 'Tab', Backspace: 'Backspace', ArrowDown: 'ArrowDown', ArrowUp: 'ArrowUp', Space: 'Space' };
+  const codeMap = { Enter: 'Enter', Escape: 'Escape', Tab: 'Tab', Backspace: 'Backspace', ArrowDown: 'ArrowDown', ArrowUp: 'ArrowUp', Space: 'Space', '1': 'Digit1', '2': 'Digit2', '3': 'Digit3', '4': 'Digit4', '5': 'Digit5', '6': 'Digit6', '7': 'Digit7', '8': 'Digit8', '9': 'Digit9', '0': 'Digit0' };
+  const vkeyMap = { Enter: 13, Escape: 27, Tab: 9, Backspace: 8, ArrowDown: 40, ArrowUp: 38, Space: 32 };
   const code = codeMap[key] || (/^[a-z]$/i.test(key) ? `Key${key.toUpperCase()}` : key);
   const text = !opts.ctrl && !opts.alt && !opts.meta && key.length === 1 ? (opts.shift ? key.toUpperCase() : key) : undefined;
-  await Input.dispatchKeyEvent({ type: 'keyDown', key, code, text, modifiers: mods });
-  await Input.dispatchKeyEvent({ type: 'keyUp', key, code, modifiers: mods });
+  const virtualKey = vkeyMap[key] ?? (/^[a-z]$/i.test(key) ? key.toUpperCase().charCodeAt(0) : /^[0-9]$/.test(key) ? key.charCodeAt(0) : undefined);
+  const event = { key, code, modifiers: mods, windowsVirtualKeyCode: virtualKey, nativeVirtualKeyCode: virtualKey };
+  await Input.dispatchKeyEvent({ type: text ? 'keyDown' : 'rawKeyDown', ...event, text });
+  await Input.dispatchKeyEvent({ type: 'keyUp', ...event });
 }
 async function chord(Input, keys) {
   if (keys === 'ctrl+shift+p') return key(Input, 'P', { ctrl: true, shift: true });
   if (keys === 'ctrl+enter') return key(Input, 'Enter', { ctrl: true });
+  if (keys === 'ctrl+1') return key(Input, '1', { ctrl: true });
   throw new Error(`unknown chord ${keys}`);
 }
 async function typeText(Input, text) {
@@ -358,6 +362,25 @@ async function pageText(Runtime) {
     await key(Input, 'e');
     await sleep(STEP_DELAY);
     evidence.push({ step: 'enter-edit-mode', screenshot: await screenshot(Page, '08-edit-mode'), status: status(fixture) });
+    if (useVim) {
+      // In LGVS EDIT mode the hunk keymap is closed. VSCodeVim must behave normally:
+      // i enters insert, Escape leaves insert, and the following x must be a Vim command,
+      // not literal typed text.
+      const vimEditProbe = 'VIMEDITPROBE';
+      await key(Input, 'i');
+      await sleep(500);
+      await typeText(Input, vimEditProbe);
+      await sleep(500);
+      const afterVimInsertText = (await pageText(Runtime)).slice(0, 3000);
+      await key(Input, 'Escape');
+      await sleep(STEP_DELAY);
+      const afterVimEscapeInEditText = (await pageText(Runtime)).slice(0, 3000);
+      await key(Input, 'x');
+      await sleep(500);
+      const afterVimNormalXText = (await pageText(Runtime)).slice(0, 3000);
+      evidence.push({ step: 'vim-escape-in-edit-mode', screenshot: await screenshot(Page, '08-vim-escape-in-edit-mode'), status: status(fixture), textSample: afterVimNormalXText });
+      checks.push({ name: 'VSCodeVim Escape exits insert mode while LGVS HUNK is closed in EDIT mode', ok: afterVimInsertText.includes(vimEditProbe) && /-- NORMAL --/.test(afterVimEscapeInEditText) && !afterVimNormalXText.includes(`${vimEditProbe}x`), textSample: afterVimNormalXText.slice(-1200) });
+    }
     await chord(Input, 'ctrl+enter');
     await sleep(STEP_DELAY);
     evidence.push({ step: 'return-hunk-mode', screenshot: await screenshot(Page, '09-return-hunk'), status: status(fixture) });

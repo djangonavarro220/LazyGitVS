@@ -295,6 +295,11 @@
         "when": "lazygitvs.editorEditMode && editorTextFocus"
       },
       {
+        "key": "escape",
+        "command": "extension.vim_escape",
+        "when": "lazygitvs.editorEditMode && editorTextFocus"
+      },
+      {
         "key": "q",
         "command": "lazygitvs.closeDashboard",
         "when": "webviewId == 'lazygitvs.statusView' || webviewId == 'lazygitvs.filesView' || webviewId == 'lazygitvs.branchesView' || webviewId == 'lazygitvs.commitsView' || webviewId == 'lazygitvs.stashView' || webviewId == 'lazygitvs.conflictsView' || webviewId == 'lazygitvs.tagsView' || webviewId == 'lazygitvs.remotesView'"
