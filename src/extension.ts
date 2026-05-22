@@ -507,6 +507,7 @@ class LazyGitVSController {
   private focusArea: FocusArea = 'none';
   private editorHunkMode = false;
   private editorEditMode = false;
+  private readOnlyHunkMode = false;
   private editorModeFilePath: string | undefined;
   private refreshTimer?: NodeJS.Timeout;
   private intervalTimer?: NodeJS.Timeout;
@@ -739,7 +740,7 @@ class LazyGitVSController {
 
   private async setEditorHunkMode(active: boolean) {
     this.editorHunkMode = active;
-    if (!active) { this.editorEditMode = false; this.editorModeFilePath = undefined; }
+    if (!active) { this.editorEditMode = false; this.readOnlyHunkMode = false; this.editorModeFilePath = undefined; }
     this.setFocusArea(active ? 'editor-hunk' : this.ownsModeStatus ? 'panel' : 'viewer');
     await vscode.commands.executeCommand('setContext', 'lazygitvs.editorHunkMode', active);
     await vscode.commands.executeCommand('setContext', 'lazygitvs.editorEditMode', false);
@@ -1276,6 +1277,7 @@ class LazyGitVSController {
   }
   async editorToggleHunk() {
     if (!this.editorHunkMode) return;
+    if (this.readOnlyHunkMode) { this.statusLine = 'Commit diff is read-only: j/k move · a line · Esc back'; this.updateModeStatusBar(); this.renderAll(); return; }
     const h = this.hunks[this.hunkSelected]; if (!h) return;
     let preferredEditorLine: number | undefined;
     if (this.hunkSelectionMode === 'line') {
@@ -1291,6 +1293,7 @@ class LazyGitVSController {
   }
   async editorDiscardHunk() {
     if (!this.editorHunkMode) return;
+    if (this.readOnlyHunkMode) { this.statusLine = 'Commit diff is read-only: j/k move · a line · Esc back'; this.updateModeStatusBar(); this.renderAll(); return; }
     const h = this.hunks[this.hunkSelected]; if (!h) return;
     let preferredEditorLine: number | undefined;
     if (h.staged && this.hunkSelectionMode === 'line') {
@@ -1520,7 +1523,7 @@ class LazyGitVSController {
   private async enterCommit() {
     if (this.commitFilesFor) {
       const f = this.commitFileItems[this.commitFileSelected];
-      if (f && this.commitFilesFor) await showText(`LazyGitVS ${this.commitFilesFor.hash}:${f.path}`, await git(this.showArgs('--patch', '--stat', this.commitFilesFor.hash, '--', f.path)));
+      if (f) return this.enterCommitFileHunkMode(f);
       return;
     }
     const c = this.currentCommit(); if (!c) return;
@@ -1529,6 +1532,25 @@ class LazyGitVSController {
     this.commitFileSelected = 0;
     this.renderAll();
     await this.openCurrent('commits', true);
+  }
+  private async enterCommitFileHunkMode(file: CommitFile) {
+    const commit = this.commitFilesFor;
+    if (!commit) return;
+    const patch = await git(this.showArgs('--patch', '--stat', commit.hash, '--', file.path));
+    this.allHunks = parseDiffHunks(patch, false);
+    this.hunks = this.allHunks;
+    this.hunkSide = 'unstaged';
+    this.hunkSelectionMode = this.lazygitGui.useHunkModeInStagingView ? 'hunk' : 'line';
+    this.hunkSelected = 0;
+    this.hunkLineSelected = 0;
+    this.editorModeFilePath = file.path;
+    this.readOnlyHunkMode = true;
+    this.statusLine = 'Commit HUNK mode: j/k move · a line · Esc back';
+    await this.setEditorHunkMode(true);
+    this.renderAll();
+    await showText(`LazyGitVS ${commit.hash}:${file.path}`, patch, false, false);
+    await this.forceEditorFocus();
+    await this.revealEditorHunk();
   }
   private async enterStash() {
     if (this.stashFilesFor) {

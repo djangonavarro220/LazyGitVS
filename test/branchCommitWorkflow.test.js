@@ -15,7 +15,11 @@ assert(extension.includes("if(hit(e,u.focusMainView)){e.preventDefault();vscode.
 assert(extension.includes("else if (panel === 'commits') {\n      if (this.commitFilesFor)"), 'Commits panel must distinguish commit list vs commit-files subview');
 assert(extension.includes("await git(this.showArgs('--stat', '--patch', c.hash))"), 'Commit navigation must render git show --stat --patch for the selected commit, like lazygit Patch main pane');
 assert(extension.includes("await this.openCurrent('commits', true);"), 'Commit Enter must push into commit files and immediately preview the first file diff');
-assert(extension.includes("await git(this.showArgs('--patch', '--stat', this.commitFilesFor.hash, '--', f.path))"), 'Commit-file navigation/Enter must render that file patch, not reopen a generic commit menu');
+assert(extension.includes("if (f) return this.enterCommitFileHunkMode(f);"), 'Commit-file Enter must open the selected commit file in HUNK/LINE mode, not just a passive patch preview');
+assert(extension.includes('private async enterCommitFileHunkMode(file: CommitFile)'), 'Commit file HUNK/LINE mode must have an explicit read-only entry path');
+assert(extension.includes("this.allHunks = parseDiffHunks(patch, false);"), 'Commit file HUNK/LINE mode must parse hunks from the selected commit-file patch');
+assert(extension.includes('this.readOnlyHunkMode = true;'), 'Commit file HUNK/LINE mode must be read-only: no stage/unstage mutations on historical commits');
+assert(extension.includes("if (this.readOnlyHunkMode) { this.statusLine = 'Commit diff is read-only: j/k move · a line · Esc back';"), 'Read-only commit hunk mode must block stage/unstage toggles');
 assert(extension.includes("if (viewPanel === 'commits' && this.commitFilesFor) { this.commitFilesFor = undefined; this.commitFileItems = []; this.commitFileSelected = 0; this.renderAll(); await this.openCurrent('commits', true).catch(() => undefined); return; }"), 'Esc/Back from commit files must return to commits and restore selected commit patch preview');
 assert(extension.includes("if(e.key==='Backspace'){e.preventDefault();vscode.postMessage({type:'clearFilter'});return;}"), 'Backspace must clear filters or return from commit files without stealing Escape from VSCodeVim/editor modes');
 assert(!extension.includes('hit(e,u.return)'), 'Sidebar must not bind Escape; LGVS uses Backspace for commit-files back because Escape is reserved for editor HUNK mode');
