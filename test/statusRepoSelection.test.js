@@ -22,8 +22,8 @@ assert(extension.includes("title: 'Recent repositories'"), 'Repository selector 
 assert(extension.includes("if (!activeWorkspaceRoot || !roots.has(activeWorkspaceRoot)) activeWorkspaceRoot = roots.keys().next().value"), 'Active repo must reset when the workspace repo set changes, not cling to a stale previous root');
 assert(extension.includes('activeWorkspaceRoot = picked.repo.path'), 'Selecting a repository must switch the active Git root used by LGVS commands');
 assert(extension.indexOf('this.workspaceRepos = await discoverWorkspaceRepositories().catch(() => []);') < extension.indexOf('this.files = await changedFiles(this.lazygitGit);'), 'Refresh must discover workspace repos before Git status so nested/non-root repos can become the active root');
-assert(extension.includes("const item = new vscode.TreeItem('enter', vscode.TreeItemCollapsibleState.None);"), '1 Status must remain one compact row: enter + repo name');
-assert(extension.includes('item.description = path.basename(workspaceRoot());'), '1 Status must show the current repo name as compact row description');
+assert(extension.includes("const item = new vscode.TreeItem(path.basename(workspaceRoot()), vscode.TreeItemCollapsibleState.None);"), '1 Status must show one compact repo-name row without noisy enter text');
+assert(!extension.includes("const item = new vscode.TreeItem('enter', vscode.TreeItemCollapsibleState.None);"), '1 Status must not render enter as visible row text');
 assert(!extension.includes('<div class="lg-logo">lazygit</div>'), '1 Status must not render a large dashboard/logo in the sidebar');
 assert(!extension.includes('All branches log'), '1 Status sidebar must not advertise a/A all-branches actions; lazygit original does not show those on-screen in Status');
 assert(!extension.includes("row(false, staged ? 'staged' : '', 'staged', String(staged))"), '1 Status must not show invented staged/changed/new metrics');

@@ -351,6 +351,16 @@
         "when": "focusedView == lazygitvs.statusView"
       },
       {
+        "key": "tab",
+        "command": "lazygitvs.focusPanel2",
+        "when": "focusedView == lazygitvs.statusView"
+      },
+      {
+        "key": "shift+tab",
+        "command": "lazygitvs.focusPanel8",
+        "when": "focusedView == lazygitvs.statusView"
+      },
+      {
         "key": "1",
         "command": "lazygitvs.focusPanel1",
         "when": "lazygitvs.viewerFocus && editorTextFocus"
@@ -435,7 +445,7 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "test": "npm run compile && node test/lazygitConfig.test.js && node test/lazygitMenu.test.js && node test/hunkPatch.test.js && node test/gitPrimitives.test.js && node test/stageMatrix.test.js && node test/gitFixtures.test.js && node test/escapeScope.test.js && node test/hunkModeBindings.test.js && node test/originalPreviewScope.test.js && node test/filesPanelUx.test.js && node test/branchCommitWorkflow.test.js && node test/statusRepoSelection.test.js && node test/virtualPreview.test.js && node test/nativePanelFocus.test.js && node test/modalFocus.test.js",
+    "test": "npm run compile && node test/lazygitConfig.test.js && node test/lazygitMenu.test.js && node test/hunkPatch.test.js && node test/gitPrimitives.test.js && node test/stageMatrix.test.js && node test/gitFixtures.test.js && node test/escapeScope.test.js && node test/hunkModeBindings.test.js && node test/originalPreviewScope.test.js && node test/filesPanelUx.test.js && node test/branchCommitWorkflow.test.js && node test/statusRepoSelection.test.js && node test/panelTabNavigation.test.js && node test/virtualPreview.test.js && node test/nativePanelFocus.test.js && node test/modalFocus.test.js",
     "dogfood:ui": "node scripts/dogfood-ui.js",
     "dogfood:ui:no-vim": "LGVS_DOGFOOD_VARIANT=no-vim node scripts/dogfood-ui.js",
     "dogfood:ui:vim": "LGVS_DOGFOOD_VARIANT=vim node scripts/dogfood-ui.js",

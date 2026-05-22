@@ -41,7 +41,7 @@ export const DEFAULT_LAZYGIT_KEYMAP: LazyGitKeymap = {
   universal: {
     quit: 'q', quitAlt1: '<ctrl+c>', return: '<esc>', togglePanel: '<tab>', prevItem: '<up>', nextItem: '<down>', prevItemAlt: 'k', nextItemAlt: 'j',
     prevPage: ',', nextPage: '.', gotoTop: '<', gotoBottom: '>', gotoTopAlt: '<home>', gotoBottomAlt: '<end>', toggleRangeSelect: 'v', rangeSelectDown: '<shift+down>', rangeSelectUp: '<shift+up>',
-    prevBlock: '<left>', nextBlock: '<right>', prevBlockAlt: 'h', nextBlockAlt: 'l', jumpToBlock: ['1', '2', '3', '4', '5'], focusMainView: '0',
+    prevBlock: '<left>', nextBlock: '<right>', prevBlockAlt: 'h', nextBlockAlt: 'l', prevBlockAlt2: '<backtab>', nextBlockAlt2: '<tab>', jumpToBlock: ['1', '2', '3', '4', '5'], focusMainView: '0',
     select: '<space>', goInto: '<enter>', remove: 'd', edit: 'e', openFile: 'o', push: 'P', pull: 'p', refresh: 'R', startSearch: '/', copyToClipboard: 'y'
   },
   files: { copyPath: '<c-o>', openStatusFilter: '<c-b>', commitChanges: 'c', commitChangesWithoutHook: 'w', amendLastCommit: 'A', commitChangesWithEditor: 'C', refreshFiles: 'r', stashAllChanges: 's', viewStashOptions: 'S', toggleStagedAll: 'a', viewResetOptions: 'D', viewUpstreamResetOptions: 'g', confirmDiscard: 'x', ignoreFile: 'i', fetch: 'f' },
