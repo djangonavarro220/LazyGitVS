@@ -51,6 +51,7 @@
     "onView:lazygitvs.stashView",
     "onView:lazygitvs.conflictsView",
     "onCommand:lazygitvs.statusRecentRepos",
+    "onCommand:lazygitvs.statusEnter",
     "onCommand:lazygitvs.focusPanel1",
     "onCommand:lazygitvs.focusPanel2",
     "onCommand:lazygitvs.focusPanel3",
@@ -116,6 +117,10 @@
         "title": "LazyGitVS: Discard/Unstage Editor Hunk"
       },
       {
+        "command": "lazygitvs.statusEnter",
+        "title": "LazyGitVS: Select Status Repository"
+      },
+      {
         "command": "lazygitvs.focusPanel1",
         "title": "LazyGitVS: Focus 1 Status"
       },
@@ -153,7 +158,7 @@
         {
           "id": "lazygitvs.statusView",
           "name": "1 Status",
-          "visibility": "collapsed"
+          "visibility": "hidden"
         },
         {
           "id": "lazygitvs.filesView",
@@ -352,7 +357,7 @@
       },
       {
         "key": "enter",
-        "command": "lazygitvs.statusRecentRepos",
+        "command": "lazygitvs.statusEnter",
         "when": "focusedView == lazygitvs.statusView"
       },
       {

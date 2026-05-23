@@ -477,7 +477,7 @@ class StatusTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
   refresh() { this.onChange.fire(); }
   dispose() { this.onChange.dispose(); }
   getTreeItem(item: vscode.TreeItem) { return item; }
-  getChildren() { return [this.app.statusTreeItem()]; }
+  getChildren() { return this.app.statusTreeItems(); }
 }
 
 class LazyGitVSController {
@@ -644,15 +644,37 @@ class LazyGitVSController {
     provider.refresh();
   }
 
-  statusTreeItem(): vscode.TreeItem {
-    const item = new vscode.TreeItem(path.basename(workspaceRoot()), vscode.TreeItemCollapsibleState.None);
-    item.tooltip = 'Enter: switch to a workspace repository';
-    item.command = { command: 'lazygitvs.statusRecentRepos', title: 'Switch to workspace repository' };
-    item.contextValue = 'lazygitvs.statusRepo';
-    return item;
+  statusTreeItems(): vscode.TreeItem[] {
+    const repos = this.workspaceRepos;
+    if (!repos.length) {
+      const item = new vscode.TreeItem(path.basename(workspaceRoot()), vscode.TreeItemCollapsibleState.None);
+      item.tooltip = 'Enter: switch to a workspace repository';
+      item.command = { command: 'lazygitvs.statusEnter', title: 'Switch to workspace repository' };
+      item.contextValue = 'lazygitvs.statusRepo';
+      return [item];
+    }
+    const current = activeWorkspaceRoot ?? repos[0]?.path;
+    return repos.map(repo => {
+      const isCurrent = repo.path === current;
+      const item = new vscode.TreeItem(repo.name, vscode.TreeItemCollapsibleState.None);
+      item.id = repo.path;
+      item.description = isCurrent ? `${repo.branch} · current` : repo.branch;
+      item.tooltip = repo.path;
+      if (isCurrent) item.iconPath = new vscode.ThemeIcon('check');
+      item.command = { command: 'lazygitvs.statusEnter', title: 'Select repository', arguments: [repo.path] };
+      item.contextValue = isCurrent ? 'lazygitvs.statusRepo.current' : 'lazygitvs.statusRepo';
+      return item;
+    });
   }
 
   openRecentRepos() { return this.recentReposMenu(); }
+
+  async statusEnter(repoPath?: string) {
+    const selected = this.statusTree?.selection?.[0];
+    const selectedRepoPath = repoPath ?? (typeof selected?.id === 'string' ? selected.id : undefined);
+    if (selectedRepoPath) return this.selectRepository(selectedRepoPath);
+    return this.recentReposMenu();
+  }
 
   private loadLazyGitConfig() {
     const config = readLazyGitConfig();
@@ -740,11 +762,14 @@ class LazyGitVSController {
     this.suppressWebviewAutoFocusUntil = 0;
     this.persistNavigationState();
     this.updateModeStatusBar();
+    if (panel === 'status') await this.refresh(false).catch(() => undefined);
     this.renderAll();
     await this.revealPanelView(panel);
+    if (panel === 'status') await this.revealCurrentStatusRepo().catch(() => undefined);
     await this.openCurrent(panel, true).catch(() => undefined);
     this.renderAll();
     await this.revealPanelView(panel);
+    if (panel === 'status') await this.revealCurrentStatusRepo().catch(() => undefined);
   }
 
   private async restorePanelFocusAfterModal(viewPanel: ViewPanel) {
@@ -773,6 +798,13 @@ class LazyGitVSController {
     await reveal();
     for (const delay of [80, 180]) setTimeout(() => { void reveal(); }, delay);
     setTimeout(() => { this.suppressWebviewAutoFocusUntil = 0; }, 260);
+  }
+
+  private async revealCurrentStatusRepo() {
+    this.statusTreeProvider?.refresh();
+    const items = this.statusTreeItems();
+    const item = items.find(item => item.id === activeWorkspaceRoot) ?? items[0];
+    if (item) await this.statusTree?.reveal(item, { select: true, focus: true }).then(undefined, () => undefined);
   }
 
   private visible() { return Array.from(this.views.values()).some(view => view.visible) || !!this.statusTree?.visible; }
@@ -1070,15 +1102,33 @@ class LazyGitVSController {
     this.workspaceRepos = repos;
     if (!repos.length) { vscode.window.showInformationMessage('LazyGitVS: no Git repositories found in this workspace.'); return; }
     const current = workspaceRoot();
-    const picked = await vscode.window.showQuickPick(repos.map(repo => ({
+    const items = repos.map(repo => ({
       label: `${repo.path === current ? '$(check) ' : ''}${repo.name}`,
       description: repo.branch,
       detail: repo.path,
       repo
-    })), { title: 'Recent repositories', placeHolder: 'Switch to a workspace repository' });
+    }));
+    const qp = vscode.window.createQuickPick<typeof items[number]>();
+    qp.title = 'Recent repositories';
+    qp.placeholder = 'Switch to a workspace repository';
+    qp.items = items;
+    qp.activeItems = items.filter(item => item.repo.path === current).slice(0, 1);
+    const picked = await new Promise<typeof items[number] | undefined>(resolve => {
+      let settled = false;
+      qp.onDidAccept(() => { settled = true; resolve(qp.activeItems[0]); qp.hide(); });
+      qp.onDidHide(() => { if (!settled) resolve(undefined); qp.dispose(); });
+      qp.show();
+    });
     if (!picked) return;
-    activeWorkspaceRoot = picked.repo.path;
-    this.statusLine = `Repository: ${picked.repo.name}`;
+    await this.selectRepository(picked.repo.path);
+  }
+  private async selectRepository(repoPath: string) {
+    const repos = this.workspaceRepos.length ? this.workspaceRepos : await discoverWorkspaceRepositories();
+    const repo = repos.find(repo => repo.path === repoPath);
+    if (!repo) return this.recentReposMenu();
+    activeWorkspaceRoot = repo.path;
+    this.workspaceRepos = repos;
+    this.statusLine = `Repository: ${repo.name}`;
     await this.refresh(true);
     await this.focusPanel('status');
   }
@@ -1765,6 +1815,7 @@ export function activate(context: vscode.ExtensionContext) {
   for (const panel of PANEL_ORDER.filter(panel => panel !== 'status')) context.subscriptions.push(vscode.window.registerWebviewViewProvider(VIEW_IDS[panel], new PanelViewProvider(app, panel), { webviewOptions: { retainContextWhenHidden: true } }));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.changedFiles', showChangedFilesQuickPick));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.statusRecentRepos', () => app.openRecentRepos()));
+  context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.statusEnter', (repoPath?: string) => app.statusEnter(repoPath)));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.openDashboard', () => app.focus()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.closeDashboard', () => app.close()));
   PANEL_ORDER.forEach((panel, index) => {

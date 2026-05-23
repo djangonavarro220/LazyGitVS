@@ -261,7 +261,7 @@ async function pageText(Runtime) {
     evidence.push({ step: 'open-lgvs-scm-sidebar', screenshot: await screenshot(Page, '02-open-lgvs-scm-sidebar'), status: status(fixture), textSample: sidebarText });
     checks.push({ name: 'Light theme dogfood profile is active', ok: THEME.toLowerCase().includes('light'), theme: THEME });
     checks.push({ name: `${useVim ? 'VSCodeVim' : 'No Vim'} dogfood variant is active`, ok: true, variant: VARIANT, vimExtension: useVim, vimVersion: vimExtension?.version });
-    checks.push({ name: 'SCM sidebar exposes the full native LazyGitVS panel set', ok: ['1 STATUS', '2 FILES', '3 BRANCHES', '4 COMMITS', '5 STASH', '6 CONFLICTS', '7 TAGS', '8 REMOTES'].every(label => sidebarText.includes(label)), textSample: sidebarText.slice(0, 1200) });
+    checks.push({ name: 'SCM sidebar exposes default LazyGitVS panels while Status stays hidden until 1', ok: !sidebarText.includes('1 STATUS') && ['2 FILES', '3 BRANCHES', '4 COMMITS', '5 STASH', '6 CONFLICTS', '7 TAGS', '8 REMOTES'].every(label => sidebarText.includes(label)), textSample: sidebarText.slice(0, 1200) });
     checks.push({ name: 'No noisy focus footer in LGVS panels', ok: !/Focus:\s+LG panel/i.test(sidebarText), textSample: sidebarText.slice(-800) });
     checks.push({ name: 'Right chat / secondary side bar stays closed in screenshots', ok: !/CHAT\s+Build with Agent/i.test(sidebarText), textSample: sidebarText.slice(-800) });
 
@@ -271,6 +271,7 @@ async function pageText(Runtime) {
       await sleep(650);
       const jumpText = await pageText(Runtime);
       evidence.push({ step: `panel-jump-${panelKey}`, screenshot: await screenshot(Page, `02-panel-jump-${panelKey}`), status: status(fixture), textSample: jumpText.slice(0, 1200) });
+      if (panelKey === '1') checks.push({ name: 'Pressing 1 reveals Status with current repository selected', ok: jumpText.includes('1 STATUS') && /current/i.test(jumpText), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '7') checks.push({ name: 'Pressing 7 reveals Tags in the SCM sidebar', ok: jumpText.includes('7 TAGS'), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '8') checks.push({ name: 'Pressing 8 reveals Remotes in the SCM sidebar', ok: jumpText.includes('8 REMOTES'), textSample: jumpText.slice(0, 1200) });
     }
