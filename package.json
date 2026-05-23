@@ -351,6 +351,11 @@
         "when": "focusedView == lazygitvs.statusView"
       },
       {
+        "key": "enter",
+        "command": "lazygitvs.statusRecentRepos",
+        "when": "focusedView == lazygitvs.statusView"
+      },
+      {
         "key": "tab",
         "command": "lazygitvs.focusPanel2",
         "when": "focusedView == lazygitvs.statusView"

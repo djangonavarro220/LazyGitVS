@@ -21,8 +21,8 @@ assert(extension.includes("this.allHunks = parseDiffHunks(patch, false);"), 'Com
 assert(extension.includes('this.readOnlyHunkMode = true;'), 'Commit file HUNK/LINE mode must be read-only: no stage/unstage mutations on historical commits');
 assert(extension.includes("if (this.readOnlyHunkMode) { this.statusLine = 'Commit diff is read-only: j/k move · a line · Esc back';"), 'Read-only commit hunk mode must block stage/unstage toggles');
 assert(extension.includes("if (viewPanel === 'commits' && this.commitFilesFor) { this.commitFilesFor = undefined; this.commitFileItems = []; this.commitFileSelected = 0; this.renderAll(); await this.openCurrent('commits', true).catch(() => undefined); return; }"), 'Esc/Back from commit files must return to commits and restore selected commit patch preview');
-assert(extension.includes("if(e.key==='Backspace'){e.preventDefault();vscode.postMessage({type:'clearFilter'});return;}"), 'Backspace must clear filters or return from commit files without stealing Escape from VSCodeVim/editor modes');
-assert(!extension.includes('hit(e,u.return)'), 'Sidebar must not bind Escape; LGVS uses Backspace for commit-files back because Escape is reserved for editor HUNK mode');
+assert(extension.includes("if(e.key==='Backspace'){e.preventDefault();vscode.postMessage({type:'clearFilter'});return;}"), 'Backspace must clear filters or return from commit files');
+assert(extension.includes("if(hit(e,u.return)){e.preventDefault();vscode.postMessage({type:'back'});return;}"), 'Esc must honor lazygit universal.return and return from commit files to the commit list when the LGVS webview owns focus');
 
 function sh(command, cwd, input) {
   return cp.execFileSync(command[0], command.slice(1), { cwd, input, encoding: 'utf8', stdio: input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'] });

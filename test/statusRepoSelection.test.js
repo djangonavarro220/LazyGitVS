@@ -18,6 +18,8 @@ assert(!extension.includes("registerWebviewViewProvider(VIEW_IDS.status"), '1 St
 assert(pkg.includes('\"id\": \"lazygitvs.statusView\"') && pkg.includes('\"visibility\": \"collapsed\"'), '1 Status should default collapsed so it only consumes a header row');
 assert(!pkg.includes('\"when\": \"lazygitvs.statusViewVisible\"'), '1 Status should remain visible as a collapsed native header, not disappear behind a context key');
 assert(extension.includes("item.command = { command: 'lazygitvs.statusRecentRepos', title: 'Switch to workspace repository' };"), 'Status row Enter/click must open the recent repository selector');
+const keybindings = JSON.parse(pkg).contributes.keybindings;
+assert(keybindings.some(binding => binding.key === 'enter' && binding.command === 'lazygitvs.statusRecentRepos' && binding.when === 'focusedView == lazygitvs.statusView'), 'Pressing 1 then Enter must open the repository selector even when VS Code focuses the native Status view container/header instead of the row');
 assert(extension.includes("title: 'Recent repositories'"), 'Repository selector title should mirror lazygit original wording');
 assert(extension.includes("if (!activeWorkspaceRoot || !roots.has(activeWorkspaceRoot)) activeWorkspaceRoot = roots.keys().next().value"), 'Active repo must reset when the workspace repo set changes, not cling to a stale previous root');
 assert(extension.includes('activeWorkspaceRoot = picked.repo.path'), 'Selecting a repository must switch the active Git root used by LGVS commands');

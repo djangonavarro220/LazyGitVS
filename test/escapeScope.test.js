@@ -16,7 +16,8 @@ assert.strictEqual(hunkExit.when, 'lazygitvs.editorHunkMode && editorTextFocus',
 assert(vimEditEscape, 'Escape should be handed back to VSCodeVim while LGVS EDIT mode is active');
 assert.strictEqual(vimEditEscape.when, 'lazygitvs.editorEditMode && editorTextFocus', 'Vim Escape handoff must be scoped to LGVS EDIT mode only');
 
-assert(!extension.includes("if(hit(e,u.return)||e.key==='Backspace')"), 'Sidebar/webview must not steal Esc globally; only Backspace may clear filters');
-assert(!extension.includes('hit(e,u.return)'), 'Sidebar/webview must not bind lazygit universal.return (<esc>) outside editor hunk/line mode');
+assert(!extension.includes("if(hit(e,u.return)||e.key==='Backspace')"), 'Do not conflate Esc/back with Backspace clear-filter behavior');
+assert(extension.includes("if(hit(e,u.return)){e.preventDefault();vscode.postMessage({type:'back'});return;}"), 'Sidebar webviews must honor lazygit universal.return (<esc>) as Back, e.g. leaving commit-file view');
+assert(extension.includes("if(e.key==='Backspace'){e.preventDefault();vscode.postMessage({type:'clearFilter'});return;}"), 'Backspace should remain the clear-filter/back fallback for keyboard layouts that do not want Esc');
 
 console.log('escapeScope tests passed');
