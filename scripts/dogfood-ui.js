@@ -77,11 +77,21 @@ function makeFixture() {
   write(path.join(dir, 'settings.json'), JSON.stringify({ alpha: 'ONE', beta: 'two', gamma: 'THREE', delta: 'FOUR' }, null, 2) + '\n');
   append(path.join(dir, 'README.md'), 'unstaged readme line\n');
   write(path.join(dir, 'src/app.ts'), 'export const value = 2;\n\nexport function greet() {\n  return "hello dogfood";\n}\n');
+  const secondaryRepo = `${dir}-other-repo`;
+  ensureDir(secondaryRepo);
+  git(secondaryRepo, 'init');
+  git(secondaryRepo, 'config', 'user.email', 'lgvs@example.test');
+  git(secondaryRepo, 'config', 'user.name', 'LGVS Dogfood');
+  write(path.join(secondaryRepo, 'OTHER_REPO_SENTINEL.md'), 'secondary repository baseline\n');
+  git(secondaryRepo, 'add', '.');
+  git(secondaryRepo, 'commit', '-m', 'initial secondary');
+  append(path.join(secondaryRepo, 'OTHER_REPO_SENTINEL.md'), 'secondary repository changed\n');
   // Keep the primary keyboard flow on tracked files. Untracked files are useful,
   // but if they sort first they turn Enter into the no-hunk untracked edge case
   // and mask the real HUNK/LINE staging path.
   return dir;
 }
+function secondaryFixtureRepo(fixture) { return `${fixture}-other-repo`; }
 function status(cwd) { return git(cwd, 'status', '--short'); }
 function diffCachedNames(cwd) { return git(cwd, 'diff', '--cached', '--name-only'); }
 function diffNames(cwd) { return git(cwd, 'diff', '--name-only'); }
@@ -152,8 +162,8 @@ async function cdpConnect() {
 }
 async function key(Input, key, opts = {}) {
   const mods = (opts.ctrl ? 2 : 0) | (opts.shift ? 8 : 0) | (opts.alt ? 1 : 0) | (opts.meta ? 4 : 0);
-  const codeMap = { Enter: 'Enter', Escape: 'Escape', Tab: 'Tab', Backspace: 'Backspace', ArrowDown: 'ArrowDown', ArrowUp: 'ArrowUp', Space: 'Space', '1': 'Digit1', '2': 'Digit2', '3': 'Digit3', '4': 'Digit4', '5': 'Digit5', '6': 'Digit6', '7': 'Digit7', '8': 'Digit8', '9': 'Digit9', '0': 'Digit0' };
-  const vkeyMap = { Enter: 13, Escape: 27, Tab: 9, Backspace: 8, ArrowDown: 40, ArrowUp: 38, Space: 32 };
+  const codeMap = { Enter: 'Enter', Escape: 'Escape', Tab: 'Tab', Backspace: 'Backspace', ArrowDown: 'ArrowDown', ArrowUp: 'ArrowUp', Home: 'Home', End: 'End', Space: 'Space', '1': 'Digit1', '2': 'Digit2', '3': 'Digit3', '4': 'Digit4', '5': 'Digit5', '6': 'Digit6', '7': 'Digit7', '8': 'Digit8', '9': 'Digit9', '0': 'Digit0' };
+  const vkeyMap = { Enter: 13, Escape: 27, Tab: 9, Backspace: 8, ArrowDown: 40, ArrowUp: 38, Home: 36, End: 35, Space: 32 };
   const code = codeMap[key] || (/^[a-z]$/i.test(key) ? `Key${key.toUpperCase()}` : key);
   const text = !opts.ctrl && !opts.alt && !opts.meta && key.length === 1 ? (opts.shift ? key.toUpperCase() : key) : undefined;
   const virtualKey = vkeyMap[key] ?? (/^[a-z]$/i.test(key) ? key.toUpperCase().charCodeAt(0) : /^[0-9]$/.test(key) ? key.charCodeAt(0) : undefined);
@@ -199,6 +209,7 @@ async function pageText(Runtime) {
   ensureDir(variantShots);
   const started = new Date().toISOString();
   const fixture = makeFixture();
+  const secondaryRepo = secondaryFixtureRepo(fixture);
   const codePath = await downloadAndUnzipVSCode('stable');
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-code-user-'));
   write(path.join(userData, 'User', 'settings.json'), JSON.stringify({
@@ -213,6 +224,7 @@ async function pageText(Runtime) {
   const launchArgs = [
     codePath,
     fixture,
+    secondaryRepo,
     `--extensionDevelopmentPath=${ROOT}`,
     `--user-data-dir=${userData}`,
     `--extensions-dir=${extensionsDir}`,
@@ -271,10 +283,35 @@ async function pageText(Runtime) {
       await sleep(650);
       const jumpText = await pageText(Runtime);
       evidence.push({ step: `panel-jump-${panelKey}`, screenshot: await screenshot(Page, `02-panel-jump-${panelKey}`), status: status(fixture), textSample: jumpText.slice(0, 1200) });
-      if (panelKey === '1') checks.push({ name: 'Pressing 1 reveals Status with current repository selected', ok: jumpText.includes('1 STATUS') && /current/i.test(jumpText), textSample: jumpText.slice(0, 1200) });
+      if (panelKey === '1') checks.push({ name: 'Pressing 1 reveals Status with current repository selected', ok: jumpText.includes('1 STATUS') && jumpText.includes('other-repo') && /current/i.test(jumpText), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '7') checks.push({ name: 'Pressing 7 reveals Tags in the SCM sidebar', ok: jumpText.includes('7 TAGS'), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '8') checks.push({ name: 'Pressing 8 reveals Remotes in the SCM sidebar', ok: jumpText.includes('8 REMOTES'), textSample: jumpText.slice(0, 1200) });
     }
+
+    await key(Input, '1');
+    await sleep(STEP_DELAY);
+    await key(Input, 'Enter');
+    await sleep(STEP_DELAY);
+    await key(Input, 'ArrowDown');
+    await sleep(STEP_DELAY);
+    await key(Input, 'Enter');
+    await sleep(1800);
+    const secondaryStatusText = (await pageText(Runtime)).slice(0, 3000);
+    evidence.push({ step: 'status-enter-select-other-repo', screenshot: await screenshot(Page, '02-status-enter-select-other-repo'), status: status(secondaryRepo), textSample: secondaryStatusText });
+    checks.push({ name: 'Status Enter switches from the current repository row to other-repo', ok: /other-repo[\s\S]*current/i.test(secondaryStatusText), textSample: secondaryStatusText.slice(0, 1200) });
+    await key(Input, '2');
+    await sleep(STEP_DELAY);
+    const secondaryFilesText = (await pageText(Runtime)).slice(0, 3000);
+    evidence.push({ step: 'files-after-other-repo-select', screenshot: await screenshot(Page, '02-files-after-other-repo-select'), status: status(secondaryRepo), textSample: secondaryFilesText });
+    checks.push({ name: 'Files panel shows the selected repository changes after Status Enter', ok: secondaryFilesText.includes('OTHER_REPO_SENTINEL.md'), textSample: secondaryFilesText.slice(0, 1200) });
+    await key(Input, '1');
+    await sleep(STEP_DELAY);
+    await key(Input, 'Enter');
+    await sleep(STEP_DELAY);
+    await key(Input, 'ArrowUp');
+    await sleep(STEP_DELAY);
+    await key(Input, 'Enter');
+    await sleep(1800);
 
     // Panel jump previews can legitimately leave editor focus; reset to the LGVS SCM sidebar before list navigation.
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
@@ -322,16 +359,17 @@ async function pageText(Runtime) {
     await sleep(STEP_DELAY);
     const afterDiscardModalText = (await pageText(Runtime)).slice(0, 3000);
     evidence.push({ step: 'files-discard-modal-focus-restore', screenshot: await screenshot(Page, '03-files-discard-modal-focus-restore'), status: status(fixture), textSample: afterDiscardModalText });
-    checks.push({ name: 'Files d-discard modal restores keyboard focus to the Files panel', ok: /LazyGitVS: settings\.json/.test(afterDiscardModalText) && !afterDiscardModalText.includes('Dogfood Modal Sentinel'), textSample: afterDiscardModalText.slice(-1000) });
+    checks.push({ name: 'Files d-discard modal restores keyboard focus to the Files panel', ok: /LazyGitVS: (settings\.json|README\.md)/.test(afterDiscardModalText) && !afterDiscardModalText.includes('Dogfood Modal Sentinel'), textSample: afterDiscardModalText.slice(-1000) });
     await typeText(Input, 'Dogfood Modal Sentinel');
     await sleep(300);
     checks.push({ name: 'Post-modal text input does not leak into the active editor', ok: !fs.readFileSync(path.join(fixture, 'README.md'), 'utf8').includes('Dogfood Modal Sentinel'), readme: fs.readFileSync(path.join(fixture, 'README.md'), 'utf8') });
-    await key(Input, 'ArrowUp');
+
+    // Re-anchor keyboard focus in the LGVS Files tree before entering real editor HUNK mode.
+    await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
+    await key(Input, '2');
     await sleep(STEP_DELAY);
 
     // Return to Files and enter real editor HUNK mode.
-    await key(Input, '2');
-    await sleep(STEP_DELAY);
     await key(Input, 'Enter');
     await sleep(1800);
     const hunkText = (await pageText(Runtime)).slice(0, 3000);

@@ -28,6 +28,12 @@ assert(extension.includes("qp.title = 'Recent repositories';"), 'Repository sele
 assert(extension.includes("if (!activeWorkspaceRoot || !roots.has(activeWorkspaceRoot)) activeWorkspaceRoot = roots.keys().next().value"), 'Active repo must reset when the workspace repo set changes, not cling to a stale previous root');
 assert(extension.includes('activeWorkspaceRoot = repo.path'), 'Selecting a repository must switch the active Git root used by LGVS commands');
 assert(extension.indexOf('this.workspaceRepos = await discoverWorkspaceRepositories().catch(() => []);') < extension.indexOf('this.files = await changedFiles(this.lazygitGit);'), 'Refresh must discover workspace repos before Git status so nested/non-root repos can become the active root');
+const dogfoodUi = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
+assert(dogfoodUi.includes('const secondaryRepo = `${dir}-other-repo`;'), 'Dogfood must create a second repository so Status selection is testable for real');
+assert(dogfoodUi.includes('secondaryFixtureRepo(fixture)'), 'Dogfood must launch VS Code with the second repository as another workspace folder');
+assert(dogfoodUi.includes("OTHER_REPO_SENTINEL.md"), 'Dogfood second repo must have a unique changed file that proves LGVS switched roots');
+assert(dogfoodUi.includes("Status Enter switches from the current repository row to other-repo"), 'Dogfood must press 1, move to the other repo row, press Enter, and verify current repo changes');
+assert(dogfoodUi.includes("Files panel shows the selected repository changes after Status Enter"), 'Dogfood must verify Files reflects the selected repository, not only the Status label');
 assert(extension.includes("const item = new vscode.TreeItem(path.basename(workspaceRoot()), vscode.TreeItemCollapsibleState.None);"), '1 Status must show one compact repo-name row without noisy enter text');
 assert(!extension.includes("const item = new vscode.TreeItem('enter', vscode.TreeItemCollapsibleState.None);"), '1 Status must not render enter as visible row text');
 assert(!extension.includes('<div class="lg-logo">lazygit</div>'), '1 Status must not render a large dashboard/logo in the sidebar');
