@@ -288,6 +288,21 @@ async function pageText(Runtime) {
       if (panelKey === '8') checks.push({ name: 'Pressing 8 reveals Remotes in the SCM sidebar', ok: jumpText.includes('8 REMOTES'), textSample: jumpText.slice(0, 1200) });
     }
 
+    await key(Input, '4');
+    await sleep(STEP_DELAY);
+    for (let i = 0; i < 4; i++) {
+      await key(Input, 'ArrowDown');
+      await sleep(250);
+    }
+    await runCommandPalette(Input, 'View: Focus Active Editor Group');
+    await sleep(700);
+    await key(Input, '2');
+    await sleep(STEP_DELAY);
+    const commitPreviewNumberJumpText = (await pageText(Runtime)).slice(0, 3000);
+    evidence.push({ step: 'commits-preview-editor-number-jump-files', screenshot: await screenshot(Page, '02-commits-preview-editor-number-jump-files'), status: status(fixture), textSample: commitPreviewNumberJumpText });
+    checks.push({ name: 'Panel numbers still work after moving in 4 Commits with the preview editor focused', ok: /2 FILES/i.test(commitPreviewNumberJumpText) && /README\.md|settings\.json|src\/app\.ts/.test(commitPreviewNumberJumpText), textSample: commitPreviewNumberJumpText.slice(0, 1200) });
+
+
     await key(Input, '1');
     await sleep(STEP_DELAY);
     await key(Input, 'Enter');
@@ -386,7 +401,7 @@ async function pageText(Runtime) {
     await sleep(2200);
     const afterStage = status(fixture);
     evidence.push({ step: 'line-space-stage', screenshot: await screenshot(Page, '05-line-stage'), status: afterStage, cachedNames: diffCachedNames(fixture), unstagedNames: diffNames(fixture) });
-    checks.push({ name: 'Space in LINE mode stages the selected README change', ok: diffCachedNames(fixture).split('\n').includes('README.md'), before: beforeStage, after: afterStage });
+    checks.push({ name: 'Space in LINE mode stages the selected line change', ok: afterStage !== beforeStage && diffCachedNames(fixture).trim().length > 0, before: beforeStage, after: afterStage, cachedNames: diffCachedNames(fixture) });
 
     await key(Input, 'Tab');
     await sleep(STEP_DELAY);

@@ -39,7 +39,8 @@ const broadKeyboardModeEditorBindings = pkg.contributes.keybindings.filter(bindi
 assert.deepStrictEqual(broadKeyboardModeEditorBindings, [], 'LGVS must not bind bare editor keys through broad keyboardMode; outside HUNK/LINE/VIEW the editor belongs to VSCodeVim/VS Code');
 for (const key of ['1', '2', '3', '4', '5', '6', '7', '8']) {
   const editorBindings = pkg.contributes.keybindings.filter(binding => binding.key === key && String(binding.when).includes('editorTextFocus'));
-  assert(editorBindings.every(binding => /lazygitvs\.viewerFocus|lazygitvs\.editorHunkMode/.test(binding.when)), `${key} must only jump panels from LGVS viewer or HUNK/LINE mode, never normal editor EDIT mode`);
+  assert(editorBindings.every(binding => /lazygitvs\.viewerFocus|lazygitvs\.editorHunkMode|lazygitvs\.panelFocus/.test(binding.when)), `${key} must only jump panels from LGVS-owned focus lanes, never normal editor EDIT mode`);
+  assert(editorBindings.some(binding => String(binding.when).includes('lazygitvs.panelFocus && editorTextFocus')), `${key} must still jump panels when a panel-owned preview editor has text focus, e.g. moving through 4 Commits`);
 }
 
 console.log('nativePanelFocus tests passed');

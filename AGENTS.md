@@ -59,6 +59,8 @@ npm run package
 
 `npm run dogfood:ui` launches a real VS Code Extension Development Host via `@vscode/test-electron`, Xvfb/CDP, keyboard input, screenshots, and Git-state assertions. It uses a light theme by default because light themes expose cheap CSS sins that dark themes politely hide.
 
+After every UI/focus/keybinding bug fix, send the user at least one fresh dogfood screenshot that demonstrates the fixed path. Do not just say “dogfood passed”; attach the relevant `dogfood-output/screenshots/.../*.png` evidence in the final update.
+
 Dogfood should cover the extension broadly, not only the last bug being fixed. Keep at least:
 
 - opening/focusing the SCM sidebar
