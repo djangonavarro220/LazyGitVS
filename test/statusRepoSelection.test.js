@@ -16,7 +16,8 @@ assert(extension.includes('class StatusTreeProvider implements vscode.TreeDataPr
 assert(extension.includes("vscode.window.createTreeView(VIEW_IDS.status, { treeDataProvider: statusProvider })"), '1 Status must be registered as a native TreeView');
 assert(!extension.includes("registerWebviewViewProvider(VIEW_IDS.status"), '1 Status must not be registered as a webview; webviews keep too much empty vertical space');
 assert(pkg.includes('\"id\": \"lazygitvs.statusView\"') && pkg.includes('\"visibility\": \"hidden\"'), '1 Status should default hidden and materialize only when the user presses 1');
-assert(!pkg.includes('\"when\": \"lazygitvs.statusViewVisible\"'), '1 Status should be hidden by VS Code visibility, not by a fake context-key gate');
+assert(pkg.includes('\"when\": \"lazygitvs.statusViewVisible\"'), '1 Status should disappear again when focus leaves panel 1');
+assert(extension.includes("executeCommand('setContext', 'lazygitvs.statusViewVisible', viewPanel === 'status')"), 'LGVS must drive Status visibility from active focus panel, not leave 1 Status stuck open');
 assert(extension.includes('statusTreeItems(): vscode.TreeItem[]'), '1 Status must render the workspace repositories as native tree rows');
 assert(extension.includes("item.command = { command: 'lazygitvs.statusEnter', title: 'Select repository', arguments: [repo.path] };"), 'Status repo rows must be selectable with Enter');
 const keybindings = JSON.parse(pkg).contributes.keybindings;
@@ -34,6 +35,7 @@ assert(dogfoodUi.includes('secondaryFixtureRepo(fixture)'), 'Dogfood must launch
 assert(dogfoodUi.includes("OTHER_REPO_SENTINEL.md"), 'Dogfood second repo must have a unique changed file that proves LGVS switched roots');
 assert(dogfoodUi.includes("Status Enter switches from the current repository row to other-repo"), 'Dogfood must press 1, move to the other repo row, press Enter, and verify current repo changes');
 assert(dogfoodUi.includes("Files panel shows the selected repository changes after Status Enter"), 'Dogfood must verify Files reflects the selected repository, not only the Status label');
+assert(dogfoodUi.includes("Moving from 1 Status to 2 Files hides Status again"), 'Dogfood must prove 1 Status disappears when focus leaves panel 1');
 assert(extension.includes("const item = new vscode.TreeItem(path.basename(workspaceRoot()), vscode.TreeItemCollapsibleState.None);"), '1 Status must show one compact repo-name row without noisy enter text');
 assert(!extension.includes("const item = new vscode.TreeItem('enter', vscode.TreeItemCollapsibleState.None);"), '1 Status must not render enter as visible row text');
 assert(!extension.includes('<div class="lg-logo">lazygit</div>'), '1 Status must not render a large dashboard/logo in the sidebar');

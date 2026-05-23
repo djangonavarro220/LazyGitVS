@@ -158,6 +158,7 @@
         {
           "id": "lazygitvs.statusView",
           "name": "1 Status",
+          "when": "lazygitvs.statusViewVisible",
           "visibility": "hidden"
         },
         {

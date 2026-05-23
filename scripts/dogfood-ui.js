@@ -284,8 +284,19 @@ async function pageText(Runtime) {
       const jumpText = await pageText(Runtime);
       evidence.push({ step: `panel-jump-${panelKey}`, screenshot: await screenshot(Page, `02-panel-jump-${panelKey}`), status: status(fixture), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '1') checks.push({ name: 'Pressing 1 reveals Status with current repository selected', ok: jumpText.includes('1 STATUS') && jumpText.includes('other-repo') && /current/i.test(jumpText), textSample: jumpText.slice(0, 1200) });
+      if (panelKey === '2') checks.push({ name: 'Moving from 1 Status to 2 Files hides Status again', ok: !jumpText.includes('1 STATUS') && /-- FILES · LG --/.test(jumpText), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '7') checks.push({ name: 'Pressing 7 reveals Tags in the SCM sidebar', ok: jumpText.includes('7 TAGS'), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '8') checks.push({ name: 'Pressing 8 reveals Remotes in the SCM sidebar', ok: jumpText.includes('8 REMOTES'), textSample: jumpText.slice(0, 1200) });
+    }
+
+    for (const [panelKey, panelName] of [['3', 'BRANCHES'], ['4', 'COMMITS'], ['5', 'STASH']]) {
+      await key(Input, panelKey);
+      await sleep(STEP_DELAY);
+      await key(Input, 'Escape');
+      await sleep(STEP_DELAY);
+      const escText = await pageText(Runtime);
+      evidence.push({ step: `panel-${panelKey}-escape-stays`, screenshot: await screenshot(Page, `02-panel-${panelKey}-escape-stays`), status: status(fixture), textSample: escText.slice(0, 1200) });
+      checks.push({ name: `Escape on ${panelKey} ${panelName} keeps the current panel`, ok: new RegExp(`-- ${panelName} · LG --`).test(escText), textSample: escText.slice(0, 1200) });
     }
 
     await key(Input, '4');
@@ -333,7 +344,7 @@ async function pageText(Runtime) {
 
     // Regression: nearby staged edits in the same file must remain navigable as separate hunks.
     await key(Input, '2');
-    await sleep(STEP_DELAY);
+    await sleep(700);
     await key(Input, 'ArrowDown');
     await sleep(STEP_DELAY);
     await key(Input, 'Enter');

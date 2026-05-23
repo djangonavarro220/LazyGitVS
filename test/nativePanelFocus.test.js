@@ -11,7 +11,7 @@ assert(views.length >= 8, 'LGVS should keep the real multi-panel SCM layout');
 for (const view of views) {
   if (view.id === 'lazygitvs.statusView') {
     assert.strictEqual(view.visibility, 'hidden', 'Status should default hidden and materialize only when the user presses 1');
-    assert(!Object.prototype.hasOwnProperty.call(view, 'when'), 'Status should not use a fake activeView context gate');
+    assert.strictEqual(view.when, 'lazygitvs.statusViewVisible', 'Status should only stay visible while panel 1 owns focus');
   } else {
     assert(!Object.prototype.hasOwnProperty.call(view, 'when'), `SCM view ${view.id} must not be hidden behind activeView context`);
     assert.strictEqual(view.visibility, 'visible', `SCM view ${view.id} should default open for README/product screenshots`);

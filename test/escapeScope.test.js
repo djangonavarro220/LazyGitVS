@@ -19,5 +19,7 @@ assert.strictEqual(vimEditEscape.when, 'lazygitvs.editorEditMode && editorTextFo
 assert(!extension.includes("if(hit(e,u.return)||e.key==='Backspace')"), 'Do not conflate Esc/back with Backspace clear-filter behavior');
 assert(extension.includes("if(hit(e,u.return)){e.preventDefault();vscode.postMessage({type:'back'});return;}"), 'Sidebar webviews must honor lazygit universal.return (<esc>) as Back, e.g. leaving commit-file view');
 assert(extension.includes("if(e.key==='Backspace'){e.preventDefault();vscode.postMessage({type:'clearFilter'});return;}"), 'Backspace should remain the clear-filter/back fallback for keyboard layouts that do not want Esc');
+assert(!extension.includes("await this.focusPanel('files');\n  }\n  private async focusMainView"), 'Esc on normal panels like 3/4/5 must not fall back to Files');
+assert(extension.includes('await this.focusPanel(viewPanel);'), 'Esc on a normal panel should keep focus on the current panel');
 
 console.log('escapeScope tests passed');

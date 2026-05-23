@@ -577,6 +577,7 @@ class LazyGitVSController {
   private updateActiveViewContext() {
     const viewPanel = this.activeViewPanel();
     void vscode.commands.executeCommand('setContext', 'lazygitvs.activeView', viewPanel);
+    void vscode.commands.executeCommand('setContext', 'lazygitvs.statusViewVisible', viewPanel === 'status');
   }
 
   attach(panel: ViewPanel, view: vscode.WebviewView) {
@@ -1058,7 +1059,7 @@ class LazyGitVSController {
     if (viewPanel === 'files' && this.activePanel === 'hunks') { this.activePanel = 'files'; this.updateModeStatusBar(); this.renderAll(); return; }
     if (viewPanel === 'commits' && this.commitFilesFor) { this.commitFilesFor = undefined; this.commitFileItems = []; this.commitFileSelected = 0; this.renderAll(); await this.openCurrent('commits', true).catch(() => undefined); return; }
     if (viewPanel === 'stash' && this.stashFilesFor) { this.stashFilesFor = undefined; this.stashFileItems = []; this.stashFileSelected = 0; this.renderAll(); return; }
-    await this.focusPanel('files');
+    await this.focusPanel(viewPanel);
   }
   private async focusMainView(viewPanel: ViewPanel) {
     this.ownsModeStatus = false;
