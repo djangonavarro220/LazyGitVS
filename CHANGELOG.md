@@ -2,8 +2,11 @@
 
 All notable changes to LazyGitVS will be documented here.
 
-## Unreleased - Colored file status boxes
+## 0.1.97 - README screenshot and default panel layout
 
+- `1 Status` now defaults collapsed while the main LGVS panels open visibly in the SCM sidebar.
+- Opens on `2 Files` by default so the sidebar shows the useful workflow immediately.
+- Updates the README/Marketplace hero screenshot with the full VS Code window and editor HUNK mode.
 - Files panel short-status letters are back in compact colored square badges so staged/unstaged colors remain visible on selected rows.
 - File path text stays normal foreground; only the status boxes carry Git color.
 
