@@ -12,6 +12,8 @@ assert(!configSource.includes("push: 'P'"), 'Do not keep LGVS-only universal.pus
 assert(!configSource.includes("pull: 'p'"), 'Do not keep LGVS-only universal.pull in the default keymap; it silently ignores lazygit user configs');
 assert(extensionSource.includes("hit(e,u.pushFiles,u.push)"), 'Webview key routing must prefer lazygit universal.pushFiles, with legacy u.push only as fallback');
 assert(extensionSource.includes("hit(e,u.pullFiles,u.pull)"), 'Webview key routing must prefer lazygit universal.pullFiles, with legacy u.pull only as fallback');
+assert(extensionSource.includes("function keysEqual(expected,typed){ if(expected.startsWith('<')&&expected.endsWith('>'))return expected.toLowerCase()===typed.toLowerCase(); return expected===typed; }"), 'Webview key matching must be case-sensitive for printable lazygit keys: p must not match P/pushFiles');
+assert(!extensionSource.includes("String(b).toLowerCase() === k.toLowerCase()"), 'Webview hit() must not compare every key case-insensitively; that makes p trigger P actions');
 assert(extensionSource.includes("key(u.pushFiles) || key(u.push) || 'P'"), 'Context command catalogs/help should show P as lazygit pushFiles');
 assert(extensionSource.includes("key(u.pullFiles) || key(u.pull) || 'p'"), 'Context command catalogs/help should show p as lazygit pullFiles');
 assert(extensionSource.includes("if(panel==='files'&&hit(e,f.copyFileInfoToClipboard))"), 'Files y must copy file info; lazygit config key is files.copyFileInfoToClipboard');
