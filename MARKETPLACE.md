@@ -1,6 +1,6 @@
 # Marketplace release notes
 
-LazyGitVS is prepared for Visual Studio Marketplace, but publishing requires a Microsoft/Azure DevOps publisher account and a Marketplace PAT.
+LazyGitVS is published on the Visual Studio Marketplace. Updates are released through GitHub Actions and require the Marketplace PAT repository secret.
 
 ## Intended publisher
 
@@ -12,9 +12,9 @@ lazygitvs
 
 Before publishing, `package.json` `publisher` must exactly match the publisher ID created in Marketplace. Change it only with an explicit publisher decision, not vibes.
 
-## Human-only blocker
+## Human-only setup
 
-Publisher creation and PAT creation require Microsoft login in the browser, usually with 2FA/CAPTCHA. Do not put the PAT in git.
+Publisher and PAT management require Microsoft login in the browser, usually with 2FA/CAPTCHA. Do not put the PAT in git.
 
 Create publisher:
 
@@ -40,12 +40,12 @@ VSCE_PAT
 Tag format must match `package.json` exactly:
 
 ```bash
-# package.json version 0.1.91 -> tag v0.1.91
-git tag v0.1.91
-git push origin v0.1.91
+# package.json version 0.1.97 -> tag v0.1.97
+git tag v0.1.97
+git push origin v0.1.97
 ```
 
-The publish workflow runs tests, packages the VSIX, publishes it to the Visual Studio Marketplace, and attaches the VSIX to the GitHub release.
+The publish workflow checks release consistency, runs tests, packages the VSIX, publishes it to the Visual Studio Marketplace, and attaches the VSIX to the GitHub release.
 
 For local/manual verification, use an environment variable, not a committed file:
 

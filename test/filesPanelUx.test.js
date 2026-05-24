@@ -27,5 +27,9 @@ assert(extension.includes("},\n  { key: 'u', label: '$(discard) Discard unstaged
 assert(!extension.includes("label: '$(remove) Unstage staged changes'"), 'Discard file menu should not grow a non-lazygit unstage option; staging/unstaging is Space');
 assert(extension.includes("this.setFocusArea('viewer');\n    this.renderAll();\n    await this.openCurrent(viewPanel, false);"), 'Focusing the hunk/main viewer must immediately repaint panels without active file selection');
 assert(extension.includes("if (!preserveFocus) { this.ownsModeStatus = false; this.setFocusArea('viewer'); this.renderAll(); }"), 'Opening a non-preserved hunk/file viewer must clear panel selection before showing the viewer');
+assert(extension.includes('Content-Security-Policy'), 'Webviews with scripts enabled must set an explicit CSP');
+assert(extension.includes('script nonce="${nonce}"'), 'Webview scripts must use a nonce instead of blanket script-src permissions');
+assert(extension.includes('const keymap=${scriptJson(this.lazygitKeymap)};'), 'Embedded webview JSON must escape script-breaking characters like < and U+2028');
+assert(extension.includes("showWarningMessage('Discard selected line?', { modal: true }, 'Discard')"), 'Discarding an unstaged LINE from HUNK mode must require modal confirmation');
 
 console.log('filesPanelUx tests passed');

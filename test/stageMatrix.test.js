@@ -61,6 +61,13 @@ test('LGVS source keeps explicit stage/unstage commands for common git states', 
   assert.match(extensionSource, /\['apply', '--cached', '--reverse', '--whitespace=nowarn', '--recount'\]/, 'staged hunk/line unstage must reverse-apply to the index');
 });
 
+test('range stage/unstage is scoped to selected files, never repo-wide', () => {
+  assert.match(extensionSource, /async function toggleStageSelected\(files: ChangedFile\[\]\)/, 'range selection must use a dedicated selected-files helper');
+  assert.match(extensionSource, /git\(\['add', '--', \.\.\.paths\]\)/, 'range stage must pass only selected paths to git add');
+  assert.match(extensionSource, /await toggleStageSelected\(ranged\)/, 'Files range toggle must route through selected-files helper');
+  assert.doesNotMatch(extensionSource, /toggleStageAll\(ranged\)/, 'Files range toggle must not call repo-wide stage-all helper');
+});
+
 test('file toggle: modified tracked file stages then unstages without touching worktree', dir => {
   commitBase(dir, 'app.txt', 'one\ntwo\nthree\n');
   write(path.join(dir, 'app.txt'), 'one\nTWO\nthree\n');

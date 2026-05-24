@@ -18,6 +18,8 @@ assert(!extension.includes("registerWebviewViewProvider(VIEW_IDS.status"), '1 St
 assert(pkg.includes('\"id\": \"lazygitvs.statusView\"') && pkg.includes('\"visibility\": \"hidden\"'), '1 Status should default hidden and materialize only when the user presses 1');
 assert(pkg.includes('\"when\": \"lazygitvs.statusViewVisible\"'), '1 Status should disappear again when focus leaves panel 1');
 assert(extension.includes("executeCommand('setContext', 'lazygitvs.statusViewVisible', viewPanel === 'status')"), 'LGVS must drive Status visibility from active focus panel, not leave 1 Status stuck open');
+assert(extension.includes('await this.updateActiveViewContext();\n    this.suppressWebviewAutoFocusUntil = 0;'), 'Panel focus must await active-view context before revealing the native Status tree');
+assert(extension.includes('await Promise.all([\n      vscode.commands.executeCommand'), 'Status visibility context updates must be awaitable instead of fire-and-pray');
 assert(extension.includes('statusTreeItems(): vscode.TreeItem[]'), '1 Status must render the workspace repositories as native tree rows');
 assert(extension.includes("item.command = { command: 'lazygitvs.statusEnter', title: 'Select repository', arguments: [repo.path] };"), 'Status repo rows must be selectable with Enter');
 const keybindings = JSON.parse(pkg).contributes.keybindings;

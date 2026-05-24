@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Version tag to publish, e.g. v0.1.91. Defaults to the current ref.'
+        description: 'Version tag to publish, e.g. v<version>. Defaults to the current ref.'
         required: false
         type: string
 
@@ -30,6 +30,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Checkout requested tag
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.tag != ''
+        shell: bash
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch --force origin "refs/tags/$INPUT_TAG:refs/tags/$INPUT_TAG"
+          git checkout --detach "$INPUT_TAG"
+
       - name: Resolve publish tag
         id: version
         shell: bash
@@ -44,8 +54,25 @@ jobs:
             echo "Tag $TAG does not match package.json version $EXPECTED" >&2
             exit 1
           fi
+          HEAD_SHA="$(git rev-parse HEAD)"
+          TAG_SHA="$(git rev-list -n 1 "$TAG")"
+          if [ "$HEAD_SHA" != "$TAG_SHA" ]; then
+            echo "Checked out commit $HEAD_SHA does not match $TAG ($TAG_SHA)" >&2
+            exit 1
+          fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Verify Marketplace token
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${VSCE_PAT:-}" ]; then
+            echo "::error::VSCE_PAT is not configured; Marketplace publish cannot run."
+            exit 1
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -56,11 +83,36 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Release consistency check
+        run: npm run check:release
+
       - name: Tests
         run: npm test
 
+      - name: UI dogfood
+        run: npm run dogfood:ui
+        env:
+          LGVS_DOGFOOD_THEME: Default Light Modern
+
       - name: Package VSIX
         run: npm run package:dist
+
+      - name: Upload dogfood screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dogfood-output-${{ steps.version.outputs.version }}
+          path: dogfood-output/
+          if-no-files-found: ignore
+
+      - name: Publish to Visual Studio Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VSIX="$(ls dist/*.vsix | head -1)"
+          npx vsce publish --packagePath "$VSIX" -p "$VSCE_PAT"
 
       - name: Create GitHub release
         env:
@@ -75,7 +127,7 @@ jobs:
 
           - Built and tested by GitHub Actions.
           - VSIX attached below.
-          - Marketplace publish runs from this workflow when VSCE_PAT is configured.
+          - Published to the Visual Studio Marketplace by this workflow.
           EOF
           if gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
             gh release edit "${{ steps.version.outputs.tag }}" \
@@ -87,19 +139,6 @@ jobs:
               --title "LazyGitVS ${{ steps.version.outputs.version }}" \
               --notes-file "$NOTES_FILE"
           fi
-
-      - name: Publish to Visual Studio Marketplace
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ -z "${VSCE_PAT:-}" ]; then
-            echo "::error::VSCE_PAT is not configured; Marketplace publish cannot run."
-            exit 1
-          fi
-          VSIX="$(ls dist/*.vsix | head -1)"
-          npx vsce publish --packagePath "$VSIX" -p "$VSCE_PAT"
 
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v4

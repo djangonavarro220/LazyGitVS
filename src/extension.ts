@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
+import * as crypto from 'crypto';
 import * as path from 'path';
 import { cloneGitConfig, cloneGuiConfig, cloneKeymap, readLazyGitConfig } from './lazygitConfig';
 import { decorateMenuItems, findMenuItemByKey } from './lazygitMenu';
@@ -231,6 +232,17 @@ function revealVisibleEditorLine(filePath: string, line: number) {
 }
 async function toggleStage(file: ChangedFile) { if (file.staged) { if (file.xy[0] === 'A') await git(['rm', '--cached', '--', file.path]); else await git(['restore', '--staged', '--', file.path]); } else await git(['add', '--', file.path]); }
 async function toggleStageAll(files: ChangedFile[]) { if (files.some(f => f.untracked || f.xy[1] !== ' ')) await git(['add', '-A']); else await git(['restore', '--staged', '.']); }
+async function toggleStageSelected(files: ChangedFile[]) {
+  const paths = files.map(f => f.path).filter(Boolean);
+  if (!paths.length) return;
+  if (files.some(f => f.untracked || f.xy[1] !== ' ')) await git(['add', '--', ...paths]);
+  else {
+    for (const file of files) {
+      if (file.xy[0] === 'A') await git(['rm', '--cached', '--', file.path]);
+      else await git(['restore', '--staged', '--', file.path]);
+    }
+  }
+}
 async function editPath(filePath: string): Promise<vscode.TextEditor> {
   const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(workspaceRoot(), filePath)));
   return vscode.window.showTextDocument(doc, { preview: false, viewColumn: vscode.ViewColumn.Active });
@@ -568,7 +580,7 @@ class LazyGitVSController {
     context.subscriptions.push(this.modeStatusBarItem);
     this.loadLazyGitConfig();
     this.restoreNavigationState();
-    this.updateActiveViewContext();
+    void this.updateActiveViewContext();
     const watcher = vscode.workspace.createFileSystemWatcher('**/*');
     watcher.onDidChange(() => this.scheduleRefresh(), null, context.subscriptions);
     watcher.onDidCreate(() => this.scheduleRefresh(), null, context.subscriptions);
@@ -580,10 +592,12 @@ class LazyGitVSController {
     context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => this.updateEditorHunkDecorations()));
   }
 
-  private updateActiveViewContext() {
+  private async updateActiveViewContext() {
     const viewPanel = this.activeViewPanel();
-    void vscode.commands.executeCommand('setContext', 'lazygitvs.activeView', viewPanel);
-    void vscode.commands.executeCommand('setContext', 'lazygitvs.statusViewVisible', viewPanel === 'status');
+    await Promise.all([
+      vscode.commands.executeCommand('setContext', 'lazygitvs.activeView', viewPanel),
+      vscode.commands.executeCommand('setContext', 'lazygitvs.statusViewVisible', viewPanel === 'status')
+    ]);
   }
 
   attach(panel: ViewPanel, view: vscode.WebviewView) {
@@ -767,7 +781,7 @@ class LazyGitVSController {
     this.setFocusArea('panel');
     void vscode.commands.executeCommand('setContext', 'lazygitvs.keyboardMode', true);
     this.activePanel = panel;
-    this.updateActiveViewContext();
+    await this.updateActiveViewContext();
     this.suppressWebviewAutoFocusUntil = 0;
     this.persistNavigationState();
     this.updateModeStatusBar();
@@ -785,7 +799,7 @@ class LazyGitVSController {
     if (this.editorHunkMode || this.editorEditMode) return;
     this.ownsModeStatus = true;
     this.activePanel = this.panelForView(viewPanel);
-    this.updateActiveViewContext();
+    await this.updateActiveViewContext();
     this.setFocusArea('panel');
     void vscode.commands.executeCommand('setContext', 'lazygitvs.keyboardMode', true);
     this.suppressWebviewAutoFocusUntil = 0;
@@ -1050,7 +1064,7 @@ class LazyGitVSController {
     if (panel === 'files') {
       const visible = this.filteredFiles();
       const ranged = Array.from(this.fileRangeSelected).map(i => visible[i]).filter(Boolean);
-      if (ranged.length > 1) { await toggleStageAll(ranged); this.fileRangeAnchor = undefined; this.fileRangeSelected.clear(); await this.refresh(true); return; }
+      if (ranged.length > 1) { await toggleStageSelected(ranged); this.fileRangeAnchor = undefined; this.fileRangeSelected.clear(); await this.refresh(true); return; }
       const f = this.currentFile(); if (!f) return; await toggleStage(f); await this.refresh(true);
     }
     else await this.enter(viewPanel);
@@ -1377,7 +1391,7 @@ class LazyGitVSController {
   private async discardMenu(viewPanel: ViewPanel) {
     const panel = this.panelForView(viewPanel);
     try {
-      if (panel === 'hunks') { const h = this.hunks[this.hunkSelected]; if (!h) return; if (this.hunkSelectionMode === 'line') { const line = hunkSelectableLineIndexes(h)[this.hunkLineSelected]; if (line !== undefined) { if (h.staged) await applyLine(h, line); else await discardUnstagedLine(h, line); } } else await showDiscardHunkMenu(h); await this.loadHunks(false); await this.refresh(false); return; }
+      if (panel === 'hunks') { const h = this.hunks[this.hunkSelected]; if (!h) return; if (this.hunkSelectionMode === 'line') { const line = hunkSelectableLineIndexes(h)[this.hunkLineSelected]; if (line !== undefined) { if (h.staged) await applyLine(h, line); else { const ok = await vscode.window.showWarningMessage('Discard selected line?', { modal: true }, 'Discard'); if (ok !== 'Discard') return; await discardUnstagedLine(h, line); } } } else await showDiscardHunkMenu(h); await this.loadHunks(false); await this.refresh(false); return; }
       if (panel === 'files') { const f = this.currentFile(); if (!f) return; await showDiscardFileMenu(f, String(this.lazygitKeymap.files.confirmDiscard ?? 'x')); await this.refresh(false); }
     } finally {
       await this.restorePanelFocusAfterModal(viewPanel);
@@ -1793,15 +1807,17 @@ class LazyGitVSController {
     const rows = this.rows(panel, showPanelSelection);
     const footer = '';
     const boom = this.explosion && (viewPanel === 'status' || viewPanel === 'files') ? '<div class="boom"><div class="bomb">💣</div><div class="blast">💥</div></div>' : '';
-    try { view.webview.html = `<!doctype html><html><head><meta charset="UTF-8"><style>
+    const nonce = crypto.randomBytes(16).toString('base64');
+    const csp = `default-src 'none'; img-src ${view.webview.cspSource} data:; style-src ${view.webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';`;
+    try { view.webview.html = `<!doctype html><html><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>
       html,body{height:100%;margin:0;}body{font-family:var(--vscode-font-family);font-size:var(--vscode-font-size);line-height:1.4;color:var(--vscode-foreground);background:var(--vscode-sideBar-background);overflow:hidden;}
       .root{position:relative;height:100%;display:flex;flex-direction:column;}.title{display:${panel === viewPanel ? 'none' : 'block'};padding:4px 8px;color:var(--vscode-descriptionForeground);border-bottom:1px solid var(--vscode-sideBarSectionHeader-border);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.rows{overflow:auto;flex:1;padding:2px 0;}
       .root.wrap-staging .row.hunk{height:auto;min-height:20px;white-space:normal;align-items:start;padding-top:2px;padding-bottom:2px}.root.wrap-staging .row.hunk .path{overflow:visible;text-overflow:clip;white-space:normal}.row{display:grid;grid-template-columns:7px 36px minmax(0,1fr) minmax(0,20%);align-items:center;column-gap:2px;height:20px;padding:0 2px;box-sizing:border-box;white-space:nowrap;min-width:0;color:var(--vscode-list-foreground,var(--vscode-foreground));cursor:default;border-left:2px solid transparent;}.row.file{grid-template-columns:7px 28px minmax(0,1fr);}.row.branch{grid-template-columns:7px 18px minmax(0,1fr) minmax(0,42px);}.row.commit{grid-template-columns:7px 44px minmax(0,1fr);}.row.commit .meta{display:none}.row.sel{background:var(--vscode-list-activeSelectionBackground);color:var(--vscode-list-activeSelectionForeground);outline:1px solid var(--vscode-list-focusOutline);outline-offset:-1px;}.row.range:not(.sel){background:var(--vscode-list-inactiveSelectionBackground);}.row:not(.sel):hover{background:var(--vscode-list-hoverBackground);}.cursor{width:7px;color:var(--vscode-focusBorder);}.status{color:var(--vscode-descriptionForeground);font-size:11px;overflow:hidden;text-overflow:clip;}.path,.summary{overflow:hidden;text-overflow:ellipsis;min-width:0;}.meta{opacity:.68;margin-left:2px;overflow:hidden;text-overflow:ellipsis;justify-self:end;min-width:0;font-size:10px;}.empty{color:var(--vscode-descriptionForeground);padding:4px 6px;}
       .status-pair{display:grid;grid-template-columns:12px 12px;column-gap:2px;align-items:center;font-family:var(--vscode-editor-font-family);font-size:10px}.slot{display:inline-grid;place-items:center;width:12px;height:14px;border-radius:2px;font-size:10px;font-weight:700;line-height:1;box-sizing:border-box;color:var(--vscode-button-foreground,#fff)}.slot.empty{visibility:hidden;background:transparent;border-color:transparent;box-shadow:none}.slot.index{background:var(--vscode-gitDecoration-addedResourceForeground,#6a9955)}.slot.worktree{background:var(--vscode-gitDecoration-modifiedResourceForeground,#e06c75)}.slot.deleted,.slot.conflict{background:var(--vscode-errorForeground,#f85149)}.slot.untracked{background:var(--vscode-gitDecoration-untrackedResourceForeground,#d7ba7d);color:var(--vscode-sideBar-background,#1e1e1e)}.row.file.staged{border-left-color:var(--vscode-gitDecoration-addedResourceForeground,#6a9955)}.row.file.unstaged{border-left-color:var(--vscode-gitDecoration-modifiedResourceForeground,#e06c75)}.row.file.mixed{border-left-color:var(--vscode-gitDecoration-conflictingResourceForeground,#569cd6)}.row.file.untracked{border-left-color:var(--vscode-gitDecoration-untrackedResourceForeground,#d7ba7d)}.status-dashboard{padding:7px 9px 10px;display:flex;flex-direction:column;gap:5px;min-width:0}.lg-logo{font-family:var(--vscode-editor-font-family);font-size:20px;font-weight:800;letter-spacing:.5px;color:var(--vscode-foreground);line-height:1.05}.lg-sub{color:var(--vscode-descriptionForeground);font-size:11px;margin-bottom:4px}.lg-link{display:flex;align-items:center;gap:5px;min-height:19px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.lg-link span{overflow:hidden;text-overflow:ellipsis}.lg-repo{margin-top:6px;padding-top:6px;border-top:1px solid var(--vscode-sideBarSectionHeader-border);color:var(--vscode-descriptionForeground);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.current .path,.current .status{font-weight:700}.danger .status{color:var(--vscode-errorForeground)}.hint{color:var(--vscode-descriptionForeground);font-size:11px;line-height:1.35;padding:4px 8px 5px;border-top:1px solid var(--vscode-sideBarSectionHeader-border);background:var(--vscode-sideBar-background);}kbd{font-family:var(--vscode-editor-font-family);font-size:10px;color:var(--vscode-keybindingLabel-foreground);background:var(--vscode-keybindingLabel-background);border:1px solid var(--vscode-keybindingLabel-border);border-bottom-color:var(--vscode-keybindingLabel-bottomBorder);border-radius:3px;padding:0 3px;margin-right:2px;}.statusline{color:var(--vscode-descriptionForeground);padding-top:3px;}
       .boom{position:absolute;inset:0;display:grid;place-items:center;background:color-mix(in srgb,var(--vscode-sideBar-background) 55%,transparent);z-index:5;pointer-events:none;}.bomb{font-size:46px;animation:bomb .45s ease-in forwards}.blast{position:absolute;font-size:76px;opacity:0;animation:blast .5s ease-out .35s forwards}@keyframes bomb{to{transform:scale(.35) rotate(20deg);opacity:0}}@keyframes blast{0%{transform:scale(.2);opacity:0}35%{opacity:1}100%{transform:scale(1.6);opacity:0}}
-    </style></head><body tabindex="0"><div class="root ${this.lazygitGui.wrapLinesInStagingView ? 'wrap-staging' : ''}">${boom}<div class="title">${title}</div><div class="rows">${rows}</div>${footer}</div><script>
+    </style></head><body tabindex="0"><div class="root ${this.lazygitGui.wrapLinesInStagingView ? 'wrap-staging' : ''}">${boom}<div class="title">${title}</div><div class="rows">${rows}</div>${footer}</div><script nonce="${nonce}">
       const vscode=acquireVsCodeApi(); const panel='${viewPanel}'; const shouldFocus=${isActiveView && !this.editorHunkMode && !this.editorEditMode && Date.now() > this.suppressWebviewAutoFocusUntil ? 'true' : 'false'}; function markPanelFocus(){vscode.postMessage({type:'focusArea',area:'panel'});} window.addEventListener('focus',markPanelFocus); document.body.addEventListener('focus',markPanelFocus); setTimeout(()=>{document.querySelector('.row.sel')?.scrollIntoView({block:'nearest'}); if(shouldFocus){ document.body.focus(); markPanelFocus(); }},0);
-      const keymap=${JSON.stringify(this.lazygitKeymap)};
+      const keymap=${scriptJson(this.lazygitKeymap)};
       const panels={1:'status',2:'files',3:'branches',4:'commits',5:'stash',6:'conflicts',7:'tags',8:'remotes'};
       function norm(e){ let key=e.key; if(key===' ')key='<space>'; else if(key==='Enter')key='<enter>'; else if(key==='Escape')key='<esc>'; else if(key==='Tab')key=e.shiftKey?'<backtab>':'<tab>'; else if(key==='Backspace')key='<backspace>'; else if(key==='ArrowDown')key='<down>'; else if(key==='ArrowUp')key='<up>'; else if(key==='ArrowLeft')key='<left>'; else if(key==='ArrowRight')key='<right>'; const mods=[]; if(e.ctrlKey)mods.push('ctrl'); if(e.altKey)mods.push('alt'); if(e.metaKey)mods.push('meta'); return mods.length?'<'+mods.join('+')+'+'+String(key).replace(/^<|>$/g,'')+'>':key; }
       function keysEqual(expected,typed){ if(expected.startsWith('<')&&expected.endsWith('>'))return expected.toLowerCase()===typed.toLowerCase(); return expected===typed; }
@@ -1872,6 +1888,7 @@ function clamp(index: number, length: number): number { return length ? Math.max
 function row(sel: boolean, klass: string, status: string, main: string, meta = '', index?: number): string { const data = typeof index === 'number' ? ` data-index="${index}"` : ''; return `<div class="row ${sel ? 'sel' : ''} ${klass}"${data}><span class="cursor">${sel ? '›' : ' '}</span><span class="status">${escapeHtml(status)}</span><span class="path">${escapeHtml(main)}</span>${meta ? `<span class="meta">${escapeHtml(meta)}</span>` : ''}</div>`; }
 function fileRow(sel: boolean, klass: string, file: ChangedFile, main: string, index: number): string { return `<div class="row file ${sel ? 'sel' : ''} ${klass}" data-index="${index}" title="${escapeHtml(file.xy)} · ${escapeHtml(fileStateLabel(file))} · ${escapeHtml(file.path)}"><span class="cursor">${sel ? '›' : ' '}</span><span class="status">${fileStatusHtml(file)}</span><span class="path">${escapeHtml(main)}</span></div>`; }
 function escapeHtml(s: string): string { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!)); }
+function scriptJson(value: unknown): string { return JSON.stringify(value).replace(/[<>&\u2028\u2029]/g, c => ({ '<': '\\u003c', '>': '\\u003e', '&': '\\u0026', '\u2028': '\\u2028', '\u2029': '\\u2029' }[c]!)); }
 function stripAnsi(s: string): string { return s.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, ''); }
 async function showText(title: string, content: string, preserveFocus = false, preview = false) {
   const uri = virtualPreviewProvider.set(title, stripAnsi(content));

@@ -12,7 +12,7 @@
   <a href="https://github.com/djangonavarro220/LazyGitVS/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/djangonavarro220/LazyGitVS/actions/workflows/ci.yml/badge.svg" /></a>
   <a href="https://marketplace.visualstudio.com/items?itemName=lazygitvs.lazygitvs"><img alt="VS Marketplace version" src="https://vsmarketplacebadges.dev/version-short/lazygitvs.lazygitvs.svg" /></a>
   <a href="https://github.com/djangonavarro220/LazyGitVS/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/djangonavarro220/LazyGitVS?include_prereleases" /></a>
-  <a href="LICENSE.txt"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue" /></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue" /></a>
 </p>
 
 LazyGitVS is a keyboard-first Git workflow for VS Code, inspired by [lazygit](https://github.com/jesseduffield/lazygit).
@@ -23,7 +23,7 @@ It is **not** a terminal wrapper. It uses VS Code-native surfaces where they are
   <img src="docs/assets/readme-hunk-mode.png" alt="LazyGitVS showing compact SCM sidebar panels and editor HUNK mode in a full VS Code window" />
 </p>
 
-Current preview: **0.1.96**
+Current preview: **0.1.97**
 
 ## Why this exists
 
@@ -54,7 +54,7 @@ Search: LazyGitVS
 From a downloaded VSIX:
 
 ```bash
-code --install-extension lazygitvs-0.1.91.vsix --force
+code --install-extension lazygitvs-0.1.97.vsix --force
 ```
 
 ## Requirements
@@ -223,13 +223,13 @@ npm run package:dist  Portable repo-local VSIX in dist/
 Default local dogfood builds write to:
 
 ```text
-../releases/LazyGitVS/lazygitvs-${version}.vsix
+../releases/LazyGitVS/lazygitvs-<commit>.vsix
 ```
 
 Portable CI/release builds write to:
 
 ```text
-dist/lazygitvs-${version}.vsix
+dist/lazygitvs-0.1.97.vsix
 ```
 
 ## CI and releases
@@ -245,11 +245,11 @@ GitHub Actions runs on pushes and pull requests:
 Version tags publish release artifacts:
 
 ```bash
-git tag v0.1.91
-git push origin v0.1.91
+git tag v0.1.97
+git push origin v0.1.97
 ```
 
-The tag workflow creates a GitHub Release with the VSIX. If `VSCE_PAT` is configured as a repository secret, it also publishes the same VSIX to the Visual Studio Marketplace.
+The tag workflow creates a GitHub Release with the VSIX and publishes the same VSIX to the Visual Studio Marketplace. `VSCE_PAT` must be configured as a repository secret or the publish job fails loudly instead of pretending success.
 
 ## License
 

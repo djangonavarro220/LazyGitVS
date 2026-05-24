@@ -40,7 +40,7 @@ npm run package
 Default dogfood/local output:
 
 ```text
-../releases/LazyGitVS/lazygitvs-<version>.vsix
+../releases/LazyGitVS/lazygitvs-<commit>.vsix
 ```
 
 Portable repo-local output for CI/public artifacts:
@@ -69,5 +69,5 @@ Keep local paths/env files out of Git.
 ## Install local VSIX
 
 ```bash
-code --install-extension ../releases/LazyGitVS/lazygitvs-<version>.vsix --force
+code --install-extension ../releases/LazyGitVS/lazygitvs-<commit>.vsix --force
 ```
