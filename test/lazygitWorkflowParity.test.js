@@ -14,6 +14,11 @@ assert(extensionSource.includes("hit(e,u.pushFiles,u.push)"), 'Webview key routi
 assert(extensionSource.includes("hit(e,u.pullFiles,u.pull)"), 'Webview key routing must prefer lazygit universal.pullFiles, with legacy u.pull only as fallback');
 assert(extensionSource.includes("function keysEqual(expected,typed){ if(expected.startsWith('<')&&expected.endsWith('>'))return expected.toLowerCase()===typed.toLowerCase(); return expected===typed; }"), 'Webview key matching must be case-sensitive for printable lazygit keys: p must not match P/pushFiles');
 assert(!extensionSource.includes("String(b).toLowerCase() === k.toLowerCase()"), 'Webview hit() must not compare every key case-insensitively; that makes p trigger P actions');
+assert(extensionSource.includes("if(hit(e,u.pushFiles,u.push)){e.preventDefault();vscode.postMessage({type:'push'});return;}"), 'LazyGit P is Push, not a Push options menu');
+assert(extensionSource.includes("if(hit(e,u.pullFiles,u.pull)){e.preventDefault();vscode.postMessage({type:'pull'});return;}"), 'LazyGit p is Pull, not a Pull/fetch options menu');
+assert(extensionSource.includes("if (msg.type === 'push') await this.push();"), 'Push keypress must execute the push workflow directly');
+assert(extensionSource.includes("if (msg.type === 'pull') await this.pull();"), 'Pull keypress must execute the pull workflow directly');
+assert(extensionSource.includes("if (msg.type === 'fetch') await this.fetch();"), 'Files f is Fetch directly in lazygit, not the pull/fetch menu');
 assert(extensionSource.includes("key(u.pushFiles) || key(u.push) || 'P'"), 'Context command catalogs/help should show P as lazygit pushFiles');
 assert(extensionSource.includes("key(u.pullFiles) || key(u.pull) || 'p'"), 'Context command catalogs/help should show p as lazygit pullFiles');
 assert(extensionSource.includes("if(panel==='files'&&hit(e,f.copyFileInfoToClipboard))"), 'Files y must copy file info; lazygit config key is files.copyFileInfoToClipboard');

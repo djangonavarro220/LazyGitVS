@@ -601,7 +601,7 @@ class LazyGitVSController {
         if (msg.type === 'copyPath') await this.copyCurrentPath(panel);
         if (msg.type === 'copyInfo') await this.copyCurrentInfo(panel);
         if (msg.type === 'ignoreMenu') await this.ignoreCurrentFile();
-        if (msg.type === 'fetch') await this.runMenu(showPullMenu, panel);
+        if (msg.type === 'fetch') await this.fetch();
         if (msg.type === 'statusMenu') await this.statusMenu();
         if (msg.type === 'repoMenu') await this.recentReposMenu();
         if (msg.type === 'helpMenu') await this.helpMenu(panel);
@@ -614,6 +614,8 @@ class LazyGitVSController {
         if (msg.type === 'commitNoVerify') await this.commit('noVerify');
         if (msg.type === 'amendLastCommit') await this.commit('amendNoEdit');
         if (msg.type === 'commitWithEditor') await this.commit('body');
+        if (msg.type === 'push') await this.push();
+        if (msg.type === 'pull') await this.pull();
         if (msg.type === 'pushMenu') await this.runMenu(showPushMenu, panel);
         if (msg.type === 'pullMenu') await this.runMenu(showPullMenu, panel);
         if (msg.type === 'stashAll') await this.stashAll();
@@ -1142,8 +1144,8 @@ class LazyGitVSController {
     const key = (value: string | string[] | undefined) => this.keyLabel(value);
     return [
       { key: key(f.openStatusFilter) || 'F', label: '$(filter) File status filter', run: async () => this.statusFilterMenu() },
-      { key: key(u.pushFiles) || key(u.push) || 'P', label: '$(cloud-upload) Push', run: async () => this.runMenu(showPushMenu, viewPanel) },
-      { key: key(u.pullFiles) || key(u.pull) || 'p', label: '$(cloud-download) Pull', run: async () => this.runMenu(showPullMenu, viewPanel) },
+      { key: key(u.pushFiles) || key(u.push) || 'P', label: '$(cloud-upload) Push', run: async () => this.push() },
+      { key: key(u.pullFiles) || key(u.pull) || 'p', label: '$(cloud-download) Pull', run: async () => this.pull() },
       { key: key(f.toggleStagedAll) || 'a', label: '$(check-all) Toggle stage all files', run: async () => this.stageAll() },
       { key: key(f.commitChanges) || 'c', label: '$(git-commit) Commit', run: async () => this.commit() },
       { key: key(f.commitChangesWithoutHook) || 'w', label: '$(shield) Commit without pre-commit hook', run: async () => this.commit('noVerify') },
@@ -1293,6 +1295,9 @@ class LazyGitVSController {
   }
   private async stageAll() { if (!this.files.length) return; await toggleStageAll(this.files); await this.refresh(true); }
   private async commit(mode?: 'commit' | 'body' | 'amend' | 'amendNoEdit' | 'noVerify') { await commitFlow(mode); await this.refresh(true); }
+  private async push() { await runGitAction('Push', ['push']); await this.refresh(true); }
+  private async pull() { await runGitAction('Pull', ['pull']); await this.refresh(true); }
+  private async fetch() { await runGitAction('Fetch', ['fetch']); await this.refresh(true); }
   private async runCommitCommand(typed: string) {
     const item = findMenuItemByKey(this.commitCommandCatalog(), typed);
     if (!item) return;
@@ -1742,7 +1747,7 @@ class LazyGitVSController {
         const c=keymap.commits; if(panel==='commits'&&hit(e,c.checkoutCommit,c.copyCommitAttributeToClipboard,c.newBranch,c.renameCommit,c.amendToCommit,c.createFixupCommit,c.markCommitAsFixup,c.cherryPickCopy,c.revertCommit,c.createTag,c.tagCommit,c.viewResetOptions,c.openInBrowser,c.openLogMenu)){e.preventDefault();vscode.postMessage({type:'commitAction',key:norm(e)});return;}
         const b=keymap.branches, st=keymap.stash; if(panel==='status'&&['o','e','a','A','u','<enter>'].includes(norm(e))){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='hunks'&&hit(e,u.select,u.togglePanel,u.remove,m.toggleSelectHunk)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='branches'&&hit(e,u.select,u.new,u.remove,b.checkoutBranchByName,b.checkoutPreviousBranch,b.renameBranch,b.mergeIntoCurrentBranch,b.rebaseBranch,b.forceCheckoutBranch,b.setUpstream,b.fastForward,b.createTag)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='stash'&&hit(e,u.goInto,st.apply,st.popStash,st.newBranch,st.renameStash,u.remove)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='tags'&&hit(e,u.select,u.new,u.remove,b.createTag,b.pushTag)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='remotes'&&hit(e,u.new,u.edit,u.remove,b.fetchRemote,b.addForkRemote)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='conflicts'&&(hit(e,u.goInto,u.openFile)||['1','2','b','m'].includes(norm(e)))){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;}
         if(hit(e,u.select)){e.preventDefault();vscode.postMessage({type:'toggle'});return;} if(panel==='status'&&hit(e,u.goInto)){e.preventDefault();vscode.postMessage({type:'repoMenu'});return;} if(hit(e,u.goInto)){e.preventDefault();vscode.postMessage({type:'enter'});return;} if(hit(e,u.openFile)){e.preventDefault();vscode.postMessage({type:'openFile'});return;} if(hit(e,u.edit)){e.preventDefault();vscode.postMessage({type:'editFile'});return;} if(panel==='files'&&hit(e,f.copyFileInfoToClipboard)){e.preventDefault();vscode.postMessage({type:'copyInfo'});return;} if(panel==='files'&&hit(e,f.copyPath,u.copyToClipboard)){e.preventDefault();vscode.postMessage({type:'copyPath'});return;} if(panel!=='files'&&hit(e,u.copyToClipboard)){e.preventDefault();vscode.postMessage({type:'copyInfo'});return;} if(panel==='files'&&hit(e,f.ignoreFile)){e.preventDefault();vscode.postMessage({type:'ignoreMenu'});return;} if(panel==='files'&&hit(e,f.fetch)){e.preventDefault();vscode.postMessage({type:'fetch'});return;}
-        if(panel==='files'&&hit(e,f.toggleStagedAll)){e.preventDefault();vscode.postMessage({type:'stageAll'});return;} if(panel==='files'&&hit(e,f.commitChangesWithoutHook)){e.preventDefault();vscode.postMessage({type:'commitNoVerify'});return;} if(panel==='files'&&hit(e,f.amendLastCommit)){e.preventDefault();vscode.postMessage({type:'amendLastCommit'});return;} if(panel==='files'&&hit(e,f.commitChangesWithEditor)){e.preventDefault();vscode.postMessage({type:'commitWithEditor'});return;} if((panel==='files'||panel==='status')&&hit(e,f.commitChanges)){e.preventDefault();vscode.postMessage({type:'commit'});return;} if(hit(e,u.pushFiles,u.push)){e.preventDefault();vscode.postMessage({type:'pushMenu'});return;} if(hit(e,u.pullFiles,u.pull)){e.preventDefault();vscode.postMessage({type:'pullMenu'});return;}
+        if(panel==='files'&&hit(e,f.toggleStagedAll)){e.preventDefault();vscode.postMessage({type:'stageAll'});return;} if(panel==='files'&&hit(e,f.commitChangesWithoutHook)){e.preventDefault();vscode.postMessage({type:'commitNoVerify'});return;} if(panel==='files'&&hit(e,f.amendLastCommit)){e.preventDefault();vscode.postMessage({type:'amendLastCommit'});return;} if(panel==='files'&&hit(e,f.commitChangesWithEditor)){e.preventDefault();vscode.postMessage({type:'commitWithEditor'});return;} if((panel==='files'||panel==='status')&&hit(e,f.commitChanges)){e.preventDefault();vscode.postMessage({type:'commit'});return;} if(hit(e,u.pushFiles,u.push)){e.preventDefault();vscode.postMessage({type:'push'});return;} if(hit(e,u.pullFiles,u.pull)){e.preventDefault();vscode.postMessage({type:'pull'});return;}
         if((panel==='files'||panel==='status')&&hit(e,f.stashAllChanges)){e.preventDefault();vscode.postMessage({type:'stashAll'});return;} if((panel==='files'||panel==='status')&&hit(e,f.viewStashOptions)){e.preventDefault();vscode.postMessage({type:'stashMenu'});return;} if(hit(e,u.remove)){e.preventDefault();vscode.postMessage({type:'discardMenu'});return;} if((panel==='files'||panel==='status')&&hit(e,f.viewResetOptions)){e.preventDefault();vscode.postMessage({type:'resetMenu'});return;}
         if(hit(e,u.togglePanel)){e.preventDefault();vscode.postMessage({type:'togglePanel'});return;} if(hit(e,u.return)){e.preventDefault();vscode.postMessage({type:'back'});return;} if(e.key==='Backspace'){e.preventDefault();vscode.postMessage({type:'clearFilter'});return;} if(hit(e,u.refresh,f.refreshFiles)){e.preventDefault();vscode.postMessage({type:'refresh'});return;} if(hit(e,u.quit)){e.preventDefault();vscode.postMessage({type:'close'});return;} if(panel==='hunks'&&hit(e,m.toggleSelectHunk)){e.preventDefault();vscode.postMessage({type:'toggleHunkSelection'});return;} });
     </script></body></html>`; } catch { this.views.delete(viewPanel); }
