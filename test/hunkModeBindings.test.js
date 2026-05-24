@@ -15,10 +15,22 @@ const lineMode = keybindings.find(binding => binding.command === 'lazygitvs.edit
 assert(lineMode, 'HUNK/LINE mode toggle must be bound in editor HUNK mode');
 assert.strictEqual(lineMode.key, 'a', 'LazyGit uses a to toggle hunk/line selection mode');
 
+const editMode = keybindings.find(binding => binding.command === 'lazygitvs.editorHunkEdit' && binding.when === hunkWhen);
+assert(editMode, 'HUNK edit mode must be bound in editor HUNK mode');
+assert.strictEqual(editMode.key, 'e', 'LazyGitVS uses e to hand the real editor back to Vim/typing');
+const vimEditBindings = keybindings.filter(binding => binding.command === 'lazygitvs.editorHunkEdit' && binding.key === 'e' && String(binding.when).includes('vim.mode')).map(binding => binding.when).sort();
+assert.deepStrictEqual(vimEditBindings, [
+  "editorTextFocus && lazygitvs.editorHunkMode && vim.mode == 'Normal' && !inDebugRepl && !inlineEditIsVisible",
+  "editorTextFocus && vim.active && lazygitvs.editorHunkMode && vim.mode != 'Insert' && !inDebugRepl && !inlineEditIsVisible"
+], 'e binding must mirror VSCodeVim contexts so HUNK→EDIT beats Vim normal-mode e motion');
+
 const sideToggleKeys = keybindings.filter(binding => binding.command === 'lazygitvs.editorHunkToggleSide' && binding.when === hunkWhen).map(binding => binding.key).sort();
 assert.deepStrictEqual(sideToggleKeys, ['ctrl+i', 'tab'], 'LazyGit uses tab to toggle staged/unstaged; ctrl+i covers keyboards that deliver Tab as ^I');
-const vimTabBindings = keybindings.filter(binding => binding.command === 'lazygitvs.editorHunkToggleSide' && binding.key === 'tab' && String(binding.when).includes('vim.active')).map(binding => binding.when).sort();
-assert.deepStrictEqual(vimTabBindings, ["editorTextFocus && vim.active && lazygitvs.editorHunkMode && vim.mode != 'Insert' && !inDebugRepl && !inlineEditIsVisible"], 'Tab binding must mirror VSCodeVim extension.vim_tab context plus LGVS mode so it can beat Vim in HUNK mode');
+const vimTabBindings = keybindings.filter(binding => binding.command === 'lazygitvs.editorHunkToggleSide' && binding.key === 'tab' && String(binding.when).includes('vim.mode')).map(binding => binding.when).sort();
+assert.deepStrictEqual(vimTabBindings, [
+  "editorTextFocus && lazygitvs.editorHunkMode && vim.mode == 'Normal' && !inDebugRepl && !inlineEditIsVisible",
+  "editorTextFocus && vim.active && lazygitvs.editorHunkMode && vim.mode != 'Insert' && !inDebugRepl && !inlineEditIsVisible"
+], 'Tab binding must mirror VSCodeVim extension.vim_tab context plus LGVS mode so it can beat Vim in HUNK mode');
 const vimCtrlIBindings = keybindings.filter(binding => binding.command === 'lazygitvs.editorHunkToggleSide' && binding.key === 'ctrl+i' && String(binding.when).includes('vim.use<C-i>')).map(binding => binding.when);
 assert.deepStrictEqual(vimCtrlIBindings, ["editorTextFocus && vim.active && lazygitvs.editorHunkMode && vim.use<C-i> && !inDebugRepl"], 'Ctrl+I binding must mirror VSCodeVim ctrl+i context plus LGVS mode');
 

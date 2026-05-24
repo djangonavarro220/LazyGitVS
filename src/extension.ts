@@ -1455,6 +1455,13 @@ class LazyGitVSController {
     setTimeout(() => void this.forceEditorFocus().then(() => this.placeCursorAtEditorHunkStart()), 220);
     setTimeout(() => void this.forceEditorFocus().then(() => this.placeCursorAtEditorHunkStart()), 450);
   }
+  async editorEditEscape() {
+    if (!this.editorEditMode) return;
+    await this.forceEditorFocus();
+    await vscode.commands.executeCommand('setContext', 'vim.active', this.vscodeVimPresent);
+    try { await vscode.commands.executeCommand('extension.vim_escape'); }
+    catch { /* VSCodeVim is not installed/enabled; normal VS Code Escape has nothing LGVS-specific to do here. */ }
+  }
   async returnToEditorHunkMode() {
     if (!this.editorEditMode) return;
     const filePath = this.editorModeFilePath ?? this.currentFile()?.path;
@@ -1834,6 +1841,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkPrev', () => app.editorNextHunk(-1)));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkToggle', () => app.editorToggleHunk()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkEdit', () => app.enterEditorEditMode()));
+  context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorEditEscape', () => app.editorEditEscape()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkReturn', () => app.returnToEditorHunkMode()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkToggleMode', () => app.editorToggleHunkSelectionMode()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkToggleSide', () => app.editorToggleHunkSide()));
