@@ -40,6 +40,54 @@ This repo builds **LazyGitVS / LGVS**, a VS Code extension that adapts real lazy
 8. **Release discipline:** no release, tag, Marketplace publish, version bump, or public/private repo visibility change unless the human explicitly asks for that release/visibility action. Published extension != permission to make the repo public. GitHub release flow is: bump version + changelog, validate, create source commit, then tag/publish only on explicit request.
 9. **Keep host-specific workflow notes out of this repo.** Public docs must be portable; local delivery paths and operator notes belong in ignored local files, not in Git.
 
+## Pre-commit dependency checks
+
+Before every commit, inspect the staged diff and update all coupled files in the same commit. Do not leave bookkeeping for “later”; later is how stale docs become lies.
+
+Run/check:
+
+```bash
+git diff --staged --stat
+git diff --staged
+npm test
+```
+
+For UI/focus/keybinding/sidebar/editor/HUNK/LINE/preview/status-bar changes, also run `npm run dogfood:ui` before committing. If packaging/release files changed, run the relevant package command too.
+
+Update these files when their trigger applies:
+
+1. **Version/release metadata**
+   - If and only if the human explicitly asked for a release/versioned VSIX/Marketplace publish: bump `package.json` and `package-lock.json` together.
+   - Update `CHANGELOG.md` for release/version bumps.
+   - Never bump versions for ordinary source/test/doc commits.
+
+2. **Lazygit parity tracker**
+   - If a lazygit parity item is added, fixed, partially implemented, newly discovered, or intentionally deferred: update `docs/lazygit-parity-gap-report.md` in the same commit.
+   - Move items between `[ ]` and `[x]`; do not duplicate stale entries.
+   - If upstream lazygit behavior/source changed or was re-audited, update the relevant audit docs under `docs/lazygit-*`.
+
+3. **Tests**
+   - Any behavior change needs a test change or a very clear reason in the final response.
+   - Any new test file must be added to the `npm test` script in `package.json`.
+   - Keybinding/menu/parity changes need source-level parity tests plus real Git-state tests when Git behavior is touched.
+
+4. **VS Code extension manifest**
+   - If adding/removing commands, views, activation events, settings, keybindings, menus, or contributed UI: update `package.json` contributions/activationEvents.
+   - If dependencies change: update `package.json` and `package-lock.json`; do not hand-edit only one.
+
+5. **User-facing docs**
+   - If commands, keys, install flow, packaging, Marketplace behavior, or visible UX changes: update `README.md`, `BUILDING.md`, `MARKETPLACE.md`, or other relevant docs.
+   - Public docs must be portable: no local absolute paths, private delivery notes, tokens, or operator-only shortcuts.
+
+6. **Generated/artifact hygiene**
+   - Before commit, verify `git status --short` contains only intended source/docs/test/config files.
+   - Never commit `node_modules/`, `out/`, `dist/`, `.vscode-test/`, `dogfood-output/`, screenshots, logs, VSIX files, or local env files.
+
+7. **Final pre-commit sanity**
+   - Re-read the final staged diff.
+   - Confirm no debug prints, absolute local paths, secrets, stale version strings, stale parity checklist items, or untracked required files.
+   - Commit only after validation passes.
+
 ## Mandatory validation
 
 For any functional change:
