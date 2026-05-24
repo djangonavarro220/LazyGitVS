@@ -267,21 +267,6 @@
         "when": "lazygitvs.editorHunkMode && editorTextFocus"
       },
       {
-        "key": "tab",
-        "command": "lazygitvs.editorHunkToggleSide",
-        "when": "editorTextFocus && vim.active && lazygitvs.editorHunkMode && vim.mode != 'Insert' && !inDebugRepl && !inlineEditIsVisible"
-      },
-      {
-        "key": "tab",
-        "command": "lazygitvs.editorHunkToggleSide",
-        "when": "editorTextFocus && lazygitvs.editorHunkMode && vim.mode == 'Normal' && !inDebugRepl && !inlineEditIsVisible"
-      },
-      {
-        "key": "ctrl+i",
-        "command": "lazygitvs.editorHunkToggleSide",
-        "when": "editorTextFocus && vim.active && lazygitvs.editorHunkMode && vim.use<C-i> && !inDebugRepl"
-      },
-      {
         "key": "ctrl+i",
         "command": "lazygitvs.editorHunkToggleSide",
         "when": "lazygitvs.editorHunkMode && editorTextFocus"
@@ -305,26 +290,6 @@
         "key": "e",
         "command": "lazygitvs.editorHunkEdit",
         "when": "lazygitvs.editorHunkMode && editorTextFocus"
-      },
-      {
-        "key": "e",
-        "command": "lazygitvs.editorHunkEdit",
-        "when": "editorTextFocus && vim.active && lazygitvs.editorHunkMode && vim.mode != 'Insert' && !inDebugRepl && !inlineEditIsVisible"
-      },
-      {
-        "key": "e",
-        "command": "lazygitvs.editorHunkEdit",
-        "when": "editorTextFocus && lazygitvs.editorHunkMode && vim.mode == 'Normal' && !inDebugRepl && !inlineEditIsVisible"
-      },
-      {
-        "key": "ctrl+enter",
-        "command": "lazygitvs.editorHunkReturn",
-        "when": "lazygitvs.editorEditMode && editorTextFocus"
-      },
-      {
-        "key": "escape",
-        "command": "lazygitvs.editorEditEscape",
-        "when": "lazygitvs.editorEditMode && editorTextFocus"
       },
       {
         "key": "q",

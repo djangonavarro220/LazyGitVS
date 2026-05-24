@@ -10,13 +10,11 @@ const escapeBindings = pkg.contributes.keybindings.filter(binding => binding.key
 const hunkExit = escapeBindings.find(binding => binding.command === 'lazygitvs.editorHunkExit');
 const vimEditEscape = escapeBindings.find(binding => binding.command === 'lazygitvs.editorEditEscape');
 
-assert.strictEqual(escapeBindings.length, 2, 'LGVS must contribute only the HUNK exit and EDIT-mode Vim Escape handoff bindings');
+assert.strictEqual(escapeBindings.length, 1, 'LGVS must contribute Escape only while it owns HUNK/LINE mode; Vim/VS Code owns Escape elsewhere');
 assert(hunkExit, 'Escape should exit LGVS editor hunk/line mode');
 assert.strictEqual(hunkExit.when, 'lazygitvs.editorHunkMode && editorTextFocus', 'HUNK Escape must be scoped to LGVS editor HUNK/LINE mode only');
-assert(vimEditEscape, 'Escape should route through LGVS EDIT-mode handoff before calling VSCodeVim');
-assert.strictEqual(vimEditEscape.when, 'lazygitvs.editorEditMode && editorTextFocus', 'Vim Escape handoff must be scoped to LGVS EDIT mode only');
-assert(extension.includes("vscode.commands.registerCommand('lazygitvs.editorEditEscape'"), 'LGVS must register the EDIT Escape handoff command so activation/routing is under our control');
-assert(extension.includes("executeCommand('extension.vim_escape')"), 'EDIT Escape handoff must explicitly invoke VSCodeVim Escape');
+assert(!vimEditEscape, 'EDIT/Vim mode Escape must not be routed through LGVS');
+assert(!pkg.contributes.keybindings.some(binding => binding.command === 'lazygitvs.editorEditEscape'), 'No LGVS EDIT-mode Escape keybinding: Vim/VS Code owns the keyboard outside HUNK/LINE');
 
 assert(!extension.includes("if(hit(e,u.return)||e.key==='Backspace')"), 'Do not conflate Esc/back with Backspace clear-filter behavior');
 assert(extension.includes("if(hit(e,u.return)){e.preventDefault();vscode.postMessage({type:'back'});return;}"), 'Sidebar webviews must honor lazygit universal.return (<esc>) as Back, e.g. leaving commit-file view');
