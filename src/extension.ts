@@ -154,8 +154,10 @@ async function remotes(): Promise<Remote[]> {
   }
   return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
 }
-async function commits(): Promise<Commit[]> {
-  const out = await git(['log', '--decorate=short', '--max-count=80', '--pretty=format:%h%x09%D%x09%s']);
+async function commits(ref?: string): Promise<Commit[]> {
+  const args = ['log', '--decorate=short', '--max-count=80', '--pretty=format:%h%x09%D%x09%s'];
+  if (ref) args.push(ref, '--');
+  const out = await git(args);
   return out.split('\n').filter(Boolean).map(line => {
     const [hash, refs, ...subject] = line.split('\t');
     return { hash, refs, subject: subject.join('\t') };
@@ -494,6 +496,8 @@ class LazyGitVSController {
   private commitItems: Commit[] = [];
   private commitFileItems: CommitFile[] = [];
   private commitFilesFor: Commit | undefined;
+  private commitListForBranch: Branch | undefined;
+  private cherryPickCommitHashes: string[] = [];
   private stashItems: Stash[] = [];
   private stashFileItems: StashFile[] = [];
   private stashFilesFor: Stash | undefined;
@@ -512,6 +516,8 @@ class LazyGitVSController {
   private conflictSelected = 0;
   private filterText = '';
   private fileStatusFilter: 'all' | 'staged' | 'unstaged' | 'tracked' | 'untracked' = 'all';
+  private branchSortMode: 'default' | 'name' | 'recent' = 'default';
+  private fileSortMode: 'config' | 'name' | 'status' = 'config';
   private activePanel: Panel = 'files';
   private previousPanel: Panel = 'files';
   private hunkSide: 'unstaged' | 'staged' = 'unstaged';
@@ -886,7 +892,7 @@ class LazyGitVSController {
       this.branchItems = await branches().catch(() => []);
       this.tagItems = await tags().catch(() => []);
       this.remoteItems = await remotes().catch(() => []);
-      this.commitItems = await commits().catch(() => []);
+      this.commitItems = await commits(this.commitListForBranch?.name).catch(() => []);
       this.stashItems = await stashes().catch(() => []);
       this.conflictItems = await conflictFiles().catch(() => []);
       if (previousPath && this.selectionEpoch === refreshSelectionEpoch) { const i = this.filteredFiles().findIndex(f => f.path === previousPath); if (i >= 0) this.selected = i; }
@@ -935,7 +941,12 @@ class LazyGitVSController {
     if (this.fileStatusFilter === 'untracked') items = items.filter(f => f.untracked);
     return this.sortFilesByLazyGitConfig(this.applyTextFilter(items, f => f.path));
   }
-  private filteredBranches(): Branch[] { return this.applyTextFilter(this.branchItems, b => b.label); }
+  private filteredBranches(): Branch[] {
+    const items = this.applyTextFilter(this.branchItems, b => b.label);
+    if (this.branchSortMode === 'name') return [...items].sort((a, b) => a.label.localeCompare(b.label));
+    if (this.branchSortMode === 'recent') return [...items].sort((a, b) => Number(b.current) - Number(a.current) || a.kind.localeCompare(b.kind) || a.label.localeCompare(b.label));
+    return items;
+  }
   private filteredTags(): Tag[] { return this.applyTextFilter(this.tagItems, t => `${t.name} ${t.subject}`); }
   private filteredRemotes(): Remote[] { return this.applyTextFilter(this.remoteItems, r => `${r.name} ${r.fetchUrl} ${r.pushUrl}`); }
   private filteredCommits(): Commit[] { return this.applyTextFilter(this.commitItems, c => `${c.hash} ${c.subject} ${c.refs}`); }
@@ -943,6 +954,8 @@ class LazyGitVSController {
   private filteredConflicts(): ConflictFile[] { return this.applyTextFilter(this.conflictItems, f => f.path); }
   private applyTextFilter<T>(items: T[], text: (item: T) => string): T[] { const q = this.filterText.trim().toLowerCase(); return q ? items.filter(item => text(item).toLowerCase().includes(q)) : items; }
   private sortFilesByLazyGitConfig(items: ChangedFile[]): ChangedFile[] {
+    if (this.fileSortMode === 'name') return [...items].sort((a, b) => a.path.localeCompare(b.path));
+    if (this.fileSortMode === 'status') return [...items].sort((a, b) => a.xy.localeCompare(b.xy) || a.path.localeCompare(b.path));
     const order = this.lazygitGui.fileTreeSortOrder;
     const normalize = (value: string) => this.lazygitGui.fileTreeSortCaseSensitive ? value : value.toLocaleLowerCase();
     const weight = (filePath: string) => filePath.includes('/') ? 1 : 0;
@@ -1049,7 +1062,7 @@ class LazyGitVSController {
     if (panel === 'status') return this.recentReposMenu();
     if (panel === 'files') return this.enterHunks();
     if (panel === 'hunks') return this.openCurrent('files', false);
-    if (panel === 'branches') { this.statusLine = 'Branches: Enter is unused in lazygit; Space checks out, 0 focuses the log.'; this.renderAll(); return; }
+    if (panel === 'branches') return this.enterBranchCommits();
     if (panel === 'tags') return this.tagMenu();
     if (panel === 'remotes') return this.remoteMenu();
     if (panel === 'commits') return this.enterCommit();
@@ -1089,6 +1102,24 @@ class LazyGitVSController {
       { key: 'e', label: '$(eye-closed) Exclude file locally', description: '.git/info/exclude', run: async () => appendIgnore('.git/info/exclude', f.path) }
     ]);
     await this.refresh(true);
+  }
+  private async toggleFileTree() {
+    this.lazygitGui.showFileTree = !this.lazygitGui.showFileTree;
+    this.statusLine = `File tree ${this.lazygitGui.showFileTree ? 'on' : 'off'}`;
+    this.renderAll();
+    await this.restorePanelFocusAfterModal('files');
+  }
+  private async fileSortMenu() {
+    const picked = await vscode.window.showQuickPick([
+      { label: 'config', description: 'Use lazygit gui.fileTreeSortOrder', mode: 'config' as const },
+      { label: 'name', description: 'Sort by path/name', mode: 'name' as const },
+      { label: 'status', description: 'Sort by Git short status', mode: 'status' as const }
+    ], { title: 'Files sort order' });
+    if (!picked) return;
+    this.fileSortMode = picked.mode;
+    this.statusLine = `Files sort: ${picked.label}`;
+    this.renderAll();
+    await this.restorePanelFocusAfterModal('files');
   }
   private statusCommandCatalog(): GitMenuItem[] {
     return [
@@ -1144,6 +1175,8 @@ class LazyGitVSController {
     const key = (value: string | string[] | undefined) => this.keyLabel(value);
     return [
       { key: key(f.openStatusFilter) || 'F', label: '$(filter) File status filter', run: async () => this.statusFilterMenu() },
+      { key: key((f as any).toggleTreeView) || '-', label: '$(list-tree) Toggle file tree', run: async () => this.toggleFileTree() },
+      { key: key((f as any).sortOrder) || '=', label: '$(sort-precedence) Sort files', description: this.fileSortMode, run: async () => this.fileSortMenu() },
       { key: key(u.pushFiles) || key(u.push) || 'P', label: '$(cloud-upload) Push', run: async () => this.push() },
       { key: key(u.pullFiles) || key(u.pull) || 'p', label: '$(cloud-download) Pull', run: async () => this.pull() },
       { key: key(f.toggleStagedAll) || 'a', label: '$(check-all) Toggle stage all files', run: async () => this.stageAll() },
@@ -1183,8 +1216,21 @@ class LazyGitVSController {
     if (b && b.kind === 'local') items.push({ key: key(k.setUpstream) || 'u', label: '$(repo-push) Set upstream', description: `origin/${b.name}`, args: ['branch', '--set-upstream-to', `origin/${b.name}`, b.name] });
     if (b && b.kind === 'local') items.push({ key: key(k.fastForward) || 'f', label: '$(repo-pull) Fast-forward from upstream', description: b.name, args: ['merge', '--ff-only', `origin/${b.name}`] });
     if (b) items.push({ key: key(k.createTag) || 'T', label: '$(tag) Create tag here', description: b.name, run: async () => { const tag = await vscode.window.showInputBox({ title: `Create tag at ${b.name}`, validateInput: v => v.trim() ? undefined : 'Tag name required.' }); if (tag?.trim()) await git(['tag', tag.trim(), b.name]); } });
+    items.push({ key: key(k.sortOrder) || 's', label: '$(sort-precedence) Sort branches', description: this.branchSortMode, run: async () => this.branchSortMenu() });
     if (b && !b.current) items.push({ key: key(u.remove) || 'd', label: '$(trash) Delete branch', description: b.name, danger: true, confirm: `Delete branch ${b.name}?`, run: async () => { await git(['branch', b.kind === 'remote' ? '-dr' : '-d', b.name]); } });
     return items;
+  }
+  private async branchSortMenu() {
+    const picked = await vscode.window.showQuickPick([
+      { label: 'default', description: 'lazygit-style local/worktree/remote grouping', mode: 'default' as const },
+      { label: 'name', description: 'Alphabetical', mode: 'name' as const },
+      { label: 'recent', description: 'Current first, then kind/name', mode: 'recent' as const }
+    ], { title: 'Branch sort order' });
+    if (!picked) return;
+    this.branchSortMode = picked.mode;
+    this.statusLine = `Branch sort: ${picked.label}`;
+    this.renderAll();
+    await this.restorePanelFocusAfterModal('branches');
   }
   private tagCommandCatalog(): GitMenuItem[] {
     const t = this.currentTag();
@@ -1232,7 +1278,8 @@ class LazyGitVSController {
       { key: key(k.amendToCommit) || 'A', label: '$(history) Amend HEAD with staged changes', description: 'git commit --amend --no-edit', danger: true, confirm: 'Amend HEAD with staged changes?', args: ['commit', '--amend', '--no-edit'] },
       { key: key(k.createFixupCommit) || 'F', label: '$(tools) Create fixup commit', description: c.hash, args: ['commit', '--fixup', c.hash] },
       { key: key(k.markCommitAsFixup) || 'f', label: '$(tools) Mark commit as fixup target', description: 'copy fixup target', run: async () => copyText(c.hash, 'fixup target copied') },
-      { key: key(k.cherryPickCopy) || 'C', label: '$(copy) Cherry-pick commit', description: c.hash, args: ['cherry-pick', c.hash] },
+      { key: key(k.cherryPickCopy) || 'C', label: '$(copy) Copy commit for cherry-pick', description: c.hash, run: async () => { this.cherryPickCommitHashes = [c.hash]; this.statusLine = `Copied ${c.hash} for cherry-pick`; this.renderAll(); } },
+      { key: key(k.pasteCommits) || 'V', label: '$(git-pull-request-go-to-changes) Paste copied commits', description: this.cherryPickCommitHashes.join(' '), danger: true, confirm: this.cherryPickCommitHashes.length ? `Cherry-pick ${this.cherryPickCommitHashes.join(', ')}?` : undefined, run: async () => { if (!this.cherryPickCommitHashes.length) { vscode.window.showInformationMessage('LazyGitVS: no copied commits to cherry-pick.'); return; } await git(['cherry-pick', ...this.cherryPickCommitHashes]); } },
       { key: key(k.revertCommit) || 't', label: '$(reply) Revert commit', description: c.hash, danger: true, confirm: `Create a revert commit for ${c.hash}?`, args: ['revert', c.hash] },
       { key: key(k.createTag) || key(k.tagCommit) || 'T', label: '$(tag) Tag commit', description: c.hash, run: async () => { const tag = await vscode.window.showInputBox({ title: `Tag ${c.hash}`, validateInput: v => v.trim() ? undefined : 'Tag name required.' }); if (tag?.trim()) await git(['tag', tag.trim(), c.hash]); } },
       { key: key(k.viewResetOptions) || 'g', label: '$(debug-restart) Reset options', description: c.hash, run: async () => showCommitResetMenu(c) },
@@ -1620,6 +1667,19 @@ class LazyGitVSController {
 
   private diffArgs(...args: string[]): string[] { return ['diff', ...gitDiffConfigArgs(this.lazygitGit, true), ...args]; }
   private showArgs(...args: string[]): string[] { return ['show', ...gitDiffConfigArgs(this.lazygitGit, true), ...args]; }
+  private async enterBranchCommits() {
+    const b = this.currentBranch();
+    if (!b) return;
+    this.commitListForBranch = b;
+    this.commitFilesFor = undefined;
+    this.commitFileItems = [];
+    this.commitSelected = 0;
+    this.commitItems = await commits(b.name);
+    this.statusLine = `Commits for ${b.name}`;
+    this.renderAll();
+    await this.focusPanel('commits');
+    await this.openCurrent('commits', true).catch(() => undefined);
+  }
   private async enterCommit() {
     if (this.commitFilesFor) {
       const f = this.commitFileItems[this.commitFileSelected];
@@ -1749,10 +1809,10 @@ class LazyGitVSController {
       document.querySelector('.rows')?.addEventListener('click',e=>{ const row=e.target.closest('.row[data-index]'); if(!row)return; document.body.focus(); vscode.postMessage({type:'select',index:Number(row.dataset.index)}); });
       document.querySelector('.rows')?.addEventListener('dblclick',e=>{ const row=e.target.closest('.row[data-index]'); if(!row)return; document.body.focus(); vscode.postMessage({type:'select',index:Number(row.dataset.index)}); vscode.postMessage({type:'enter'}); });
       window.addEventListener('keydown',e=>{ const u=keymap.universal, f=keymap.files, m=keymap.main; const jump=Array.isArray(u.jumpToBlock)?u.jumpToBlock:[]; const jumpIndex=jump.indexOf(e.key); const jumpPanel = jumpIndex>=0 ? panels[String(jumpIndex+1)] : panels[e.key]; if(jumpPanel){e.preventDefault();vscode.postMessage({type:'switchPanel',panel:jumpPanel});return;}
-        if(e.key==='?'){e.preventDefault();vscode.postMessage({type:'helpMenu'});return;} if(hit(e,u.focusMainView)){e.preventDefault();vscode.postMessage({type:'focusMainView'});return;} if(e.shiftKey&&e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:1});return;} if(e.shiftKey&&e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:-1});return;} if(e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;} if(hit(e,u.prevPage)){e.preventDefault();vscode.postMessage({type:'move',delta:-10});return;} if(hit(e,u.nextPage)){e.preventDefault();vscode.postMessage({type:'move',delta:10});return;} if(hit(e,u.gotoTop,u.gotoTopAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'top'});return;} if(hit(e,u.gotoBottom,u.gotoBottomAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'bottom'});return;} if(hit(e,u.toggleRangeSelect)){e.preventDefault();vscode.postMessage({type:'rangeToggle'});return;} if(hit(e,u.startSearch)){e.preventDefault();vscode.postMessage({type:'search'});return;} if(panel==='files'&&hit(e,f.openStatusFilter)){e.preventDefault();vscode.postMessage({type:'statusFilter'});return;} if(hit(e,u.nextItem,u.nextItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(hit(e,u.prevItem,u.prevItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;}
+        if(e.key==='?'){e.preventDefault();vscode.postMessage({type:'helpMenu'});return;} if(hit(e,u.focusMainView)){e.preventDefault();vscode.postMessage({type:'focusMainView'});return;} if(e.shiftKey&&e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:1});return;} if(e.shiftKey&&e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:-1});return;} if(e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;} if(hit(e,u.prevPage)){e.preventDefault();vscode.postMessage({type:'move',delta:-10});return;} if(hit(e,u.nextPage)){e.preventDefault();vscode.postMessage({type:'move',delta:10});return;} if(hit(e,u.gotoTop,u.gotoTopAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'top'});return;} if(hit(e,u.gotoBottom,u.gotoBottomAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'bottom'});return;} if(hit(e,u.toggleRangeSelect)){e.preventDefault();vscode.postMessage({type:'rangeToggle'});return;} if(hit(e,u.startSearch)){e.preventDefault();vscode.postMessage({type:'search'});return;} if(panel==='files'&&hit(e,f.openStatusFilter)){e.preventDefault();vscode.postMessage({type:'statusFilter'});return;} if(panel==='files'&&hit(e,f.toggleTreeView)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='files'&&hit(e,f.sortOrder)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(hit(e,u.nextItem,u.nextItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(hit(e,u.prevItem,u.prevItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;}
         if(hit(e,u.nextBlock,u.nextBlockAlt,u.nextBlockAlt2)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:1});return;} if(hit(e,u.prevBlock,u.prevBlockAlt,u.prevBlockAlt2)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:-1});return;}
-        const c=keymap.commits; if(panel==='commits'&&hit(e,c.checkoutCommit,c.copyCommitAttributeToClipboard,c.newBranch,c.renameCommit,c.amendToCommit,c.createFixupCommit,c.markCommitAsFixup,c.cherryPickCopy,c.revertCommit,c.createTag,c.tagCommit,c.viewResetOptions,c.openInBrowser,c.openLogMenu)){e.preventDefault();vscode.postMessage({type:'commitAction',key:norm(e)});return;}
-        const b=keymap.branches, st=keymap.stash; if(panel==='status'&&['o','e','a','A','u','<enter>'].includes(norm(e))){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='hunks'&&hit(e,u.select,u.togglePanel,u.remove,m.toggleSelectHunk)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='branches'&&hit(e,u.select,u.new,u.remove,b.checkoutBranchByName,b.checkoutPreviousBranch,b.renameBranch,b.mergeIntoCurrentBranch,b.rebaseBranch,b.forceCheckoutBranch,b.setUpstream,b.fastForward,b.createTag)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='stash'&&hit(e,u.goInto,st.apply,st.popStash,st.newBranch,st.renameStash,u.remove)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='tags'&&hit(e,u.select,u.new,u.remove,b.createTag,b.pushTag)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='remotes'&&hit(e,u.new,u.edit,u.remove,b.fetchRemote,b.addForkRemote)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='conflicts'&&(hit(e,u.goInto,u.openFile)||['1','2','b','m'].includes(norm(e)))){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;}
+        const c=keymap.commits; if(panel==='commits'&&hit(e,c.checkoutCommit,c.copyCommitAttributeToClipboard,c.newBranch,c.renameCommit,c.amendToCommit,c.createFixupCommit,c.markCommitAsFixup,c.cherryPickCopy,c.pasteCommits,c.revertCommit,c.createTag,c.tagCommit,c.viewResetOptions,c.openInBrowser,c.openLogMenu)){e.preventDefault();vscode.postMessage({type:'commitAction',key:norm(e)});return;}
+        const b=keymap.branches, st=keymap.stash; if(panel==='status'&&['o','e','a','A','u','<enter>'].includes(norm(e))){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='hunks'&&hit(e,u.select,u.togglePanel,u.remove,m.toggleSelectHunk)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='branches'&&hit(e,u.select,u.new,u.remove,b.checkoutBranchByName,b.checkoutPreviousBranch,b.renameBranch,b.mergeIntoCurrentBranch,b.rebaseBranch,b.forceCheckoutBranch,b.setUpstream,b.fastForward,b.createTag,b.sortOrder)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='stash'&&hit(e,u.goInto,st.apply,st.popStash,st.newBranch,st.renameStash,u.remove)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='tags'&&hit(e,u.select,u.new,u.remove,b.createTag,b.pushTag)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='remotes'&&hit(e,u.new,u.edit,u.remove,b.fetchRemote,b.addForkRemote)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='conflicts'&&(hit(e,u.goInto,u.openFile)||['1','2','b','m'].includes(norm(e)))){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;}
         if(hit(e,u.select)){e.preventDefault();vscode.postMessage({type:'toggle'});return;} if(panel==='status'&&hit(e,u.goInto)){e.preventDefault();vscode.postMessage({type:'repoMenu'});return;} if(hit(e,u.goInto)){e.preventDefault();vscode.postMessage({type:'enter'});return;} if(hit(e,u.openFile)){e.preventDefault();vscode.postMessage({type:'openFile'});return;} if(hit(e,u.edit)){e.preventDefault();vscode.postMessage({type:'editFile'});return;} if(panel==='files'&&hit(e,f.copyFileInfoToClipboard)){e.preventDefault();vscode.postMessage({type:'copyInfo'});return;} if(panel==='files'&&hit(e,f.copyPath,u.copyToClipboard)){e.preventDefault();vscode.postMessage({type:'copyPath'});return;} if(panel!=='files'&&hit(e,u.copyToClipboard)){e.preventDefault();vscode.postMessage({type:'copyInfo'});return;} if(panel==='files'&&hit(e,f.ignoreFile)){e.preventDefault();vscode.postMessage({type:'ignoreMenu'});return;} if(panel==='files'&&hit(e,f.fetch)){e.preventDefault();vscode.postMessage({type:'fetch'});return;}
         if(panel==='files'&&hit(e,f.toggleStagedAll)){e.preventDefault();vscode.postMessage({type:'stageAll'});return;} if(panel==='files'&&hit(e,f.commitChangesWithoutHook)){e.preventDefault();vscode.postMessage({type:'commitNoVerify'});return;} if(panel==='files'&&hit(e,f.amendLastCommit)){e.preventDefault();vscode.postMessage({type:'amendLastCommit'});return;} if(panel==='files'&&hit(e,f.commitChangesWithEditor)){e.preventDefault();vscode.postMessage({type:'commitWithEditor'});return;} if((panel==='files'||panel==='status')&&hit(e,f.commitChanges)){e.preventDefault();vscode.postMessage({type:'commit'});return;} if(hit(e,u.pushFiles,u.push)){e.preventDefault();vscode.postMessage({type:'push'});return;} if(hit(e,u.pullFiles,u.pull)){e.preventDefault();vscode.postMessage({type:'pull'});return;}
         if((panel==='files'||panel==='status')&&hit(e,f.stashAllChanges)){e.preventDefault();vscode.postMessage({type:'stashAll'});return;} if((panel==='files'||panel==='status')&&hit(e,f.viewStashOptions)){e.preventDefault();vscode.postMessage({type:'stashMenu'});return;} if(hit(e,u.remove)){e.preventDefault();vscode.postMessage({type:'discardMenu'});return;} if((panel==='files'||panel==='status')&&hit(e,f.viewResetOptions)){e.preventDefault();vscode.postMessage({type:'resetMenu'});return;}

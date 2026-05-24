@@ -9,7 +9,10 @@ const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8'
 const lazygitConfig = fs.readFileSync(path.join(root, 'src', 'lazygitConfig.ts'), 'utf8');
 
 assert(extension.includes("else if (panel === 'branches') { const b = this.currentBranch(); if (b) await showText(`LazyGitVS Branch ${b.name}`, await git(branchLogArgs(this.lazygitGit, b.name)), preserveFocus, preserveFocus); }"), 'Branches navigation must render the selected branch log in the right/main pane, like lazygit localBranches GetOnRenderToMain');
-assert(extension.includes("if (panel === 'branches') { this.statusLine = 'Branches: Enter is unused in lazygit; Space checks out, 0 focuses the log.'; this.renderAll(); return; }"), 'Branches Enter must do nothing useful: lazygit does not enter branch commits from Branches; Space checks out and 0 focuses the log');
+assert(extension.includes("if (panel === 'branches') return this.enterBranchCommits();"), 'Branches Enter must switch to the commits panel scoped to the selected branch, matching lazygit View commits for selected branch');
+assert(extension.includes('private async enterBranchCommits()'), 'Branch Enter needs an explicit branch-scoped commits entry path');
+assert(extension.includes('this.commitListForBranch = b;'), 'Branch-scoped commits must retain the selected branch context');
+assert(extension.includes("await commits(b.name)"), 'Branch-scoped commits should load git log for the selected branch, not the global commit list');
 assert(lazygitConfig.includes("focusMainView: '0'"), 'LazyGitVS must preserve lazygit universal.focusMainView=0 for focusing the right/main preview pane');
 assert(extension.includes("if(hit(e,u.focusMainView)){e.preventDefault();vscode.postMessage({type:'focusMainView'});return;}"), 'Webview key handling must route lazygit focusMainView to the right/main preview instead of overloading Enter');
 assert(extension.includes("else if (panel === 'commits') {\n      if (this.commitFilesFor)"), 'Commits panel must distinguish commit list vs commit-files subview');
@@ -23,6 +26,17 @@ assert(extension.includes("if (this.readOnlyHunkMode) { this.statusLine = 'Commi
 assert(extension.includes("if (viewPanel === 'commits' && this.commitFilesFor) { this.commitFilesFor = undefined; this.commitFileItems = []; this.commitFileSelected = 0; this.renderAll(); await this.openCurrent('commits', true).catch(() => undefined); return; }"), 'Esc/Back from commit files must return to commits and restore selected commit patch preview');
 assert(extension.includes("if(e.key==='Backspace'){e.preventDefault();vscode.postMessage({type:'clearFilter'});return;}"), 'Backspace must clear filters or return from commit files');
 assert(extension.includes("if(hit(e,u.return)){e.preventDefault();vscode.postMessage({type:'back'});return;}"), 'Esc must honor lazygit universal.return and return from commit files to the commit list when the LGVS webview owns focus');
+
+assert(extension.includes('private cherryPickCommitHashes: string[] = [];'), 'Commit C must copy commits into a cherry-pick buffer, not cherry-pick immediately');
+assert(extension.includes("label: '$(copy) Copy commit for cherry-pick'"), 'Commit C label must reflect lazygit copy-for-later semantics');
+assert(extension.includes('this.cherryPickCommitHashes = [c.hash];'), 'Commit C must store the selected commit hash for later paste');
+assert(extension.includes("key(k.pasteCommits) || 'V'"), 'Commit V must paste/cherry-pick previously copied commits');
+assert(!extension.includes("{ key: key(k.cherryPickCopy) || 'C', label: '$(copy) Cherry-pick commit', description: c.hash, args: ['cherry-pick', c.hash] }"), 'Commit C must not directly run git cherry-pick; that is fake lazygit parity');
+
+assert(extension.includes('private branchSortMode'), 'Branches need a real sort mode for lazygit branch sortOrder, not a missing key');
+assert(extension.includes('private async branchSortMenu()'), 'Branch sortOrder should open a sort menu instead of being unimplemented');
+assert(extension.includes('private async toggleFileTree()'), 'Files - should toggle the file tree display instead of being unimplemented');
+assert(extension.includes('private async fileSortMenu()'), 'Files = should expose a sort menu instead of leaving tree/sort parity missing');
 
 function sh(command, cwd, input) {
   return cp.execFileSync(command[0], command.slice(1), { cwd, input, encoding: 'utf8', stdio: input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'] });
