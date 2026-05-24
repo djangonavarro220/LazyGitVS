@@ -15,7 +15,11 @@ assert(extension.includes('.slot.worktree{background:var(--vscode-gitDecoration-
 assert(!extension.includes('.row.file.staged .path{color:'), 'Files path text must stay normal foreground; only the status boxes carry git colors');
 assert(!extension.includes('.row.sel .slot{color:inherit}'), 'Selected Files rows must keep colored status boxes instead of washing them into selection foreground');
 assert(!extension.includes('<span class="meta">${escapeHtml(fileStateLabel(file))}</span>'), 'Files rows must not render clipped staged/unstaged meta text in the narrow SCM sidebar');
-assert(extension.includes('.row.file{grid-template-columns:7px 32px minmax(0,1fr);}'), 'Files rows should reserve only enough room for two compact status boxes and give the rest to the path');
+assert(!extension.includes('grid-template-columns:7px 52px minmax(0,1fr)'), 'Sidebar rows must not waste a fat fixed status column in narrow SCM views');
+assert(extension.includes('.row{display:grid;grid-template-columns:7px 36px minmax(0,1fr)'), 'Default sidebar rows should use a compact status column and spend width on content');
+assert(extension.includes('.row.file{grid-template-columns:7px 28px minmax(0,1fr);}'), 'Files rows should tighten the badge column so file names start earlier');
+assert(extension.includes('.row.branch{grid-template-columns:7px 18px minmax(0,1fr) minmax(0,42px);}'), 'Branch rows should not waste horizontal space on a status column wider than the branch kind');
+assert(extension.includes('.row.commit{grid-template-columns:7px 44px minmax(0,1fr);}'), 'Commit rows should show the short hash then spend the remaining width on the subject');
 assert(!extension.includes('class="focusline'), 'Sidebar panels must not render the noisy Focus: LG panel footer line');
 assert(extension.includes("const footer = '';"), 'Panel footer should stay empty; do not leak branch/status hints into every sidebar panel');
 assert(extension.includes("async function showDiscardFileMenu(file: ChangedFile, confirmKey = 'x') { await pickGitAction(`Discard changes · ${file.path}`, [\n  { key: confirmKey, label: '$(warning) Discard all changes'"), 'Discard file menu must keep lazygit original order: discard all first');
