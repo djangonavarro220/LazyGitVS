@@ -7,6 +7,7 @@ import { decorateMenuItems, findMenuItemByKey } from './lazygitMenu';
 import { assertPatchableHunk, hunkBodyLines, hunkChangedEditorLine, hunkSelectableLineIndexes, hunkStartLine, parseDiffHunks, singleLinePatch, type Hunk } from './hunkPatch';
 
 type ChangedFile = { xy: string; path: string; staged: boolean; untracked: boolean };
+type FileTreeRow = { kind: 'dir'; path: string; depth: number; collapsed: boolean; file?: never } | { kind: 'file'; path: string; depth: number; file: ChangedFile };
 type LazyGitGitRuntimeConfig = ReturnType<typeof cloneGitConfig>;
 type Branch = { name: string; label: string; current: boolean; kind: 'local' | 'remote' | 'tag' | 'worktree'; upstream: string };
 type Tag = { name: string; date: string; subject: string };
@@ -517,6 +518,7 @@ class LazyGitVSController {
   private selected = 0;
   private fileRangeAnchor: number | undefined;
   private fileRangeSelected = new Set<number>();
+  private collapsedFileDirs = new Set<string>();
   private hunkSelected = 0;
   private branchSelected = 0;
   private tagSelected = 0;
@@ -645,6 +647,7 @@ class LazyGitVSController {
         if (msg.type === 'search') await this.searchPanel();
         if (msg.type === 'clearFilter') await this.clearFilterOrBack(panel);
         if (msg.type === 'statusFilter') await this.statusFilterMenu();
+        if (msg.type === 'diffingMenu') await this.diffingMenu();
         if (msg.type === 'refresh') await this.refresh(true);
         if (msg.type === 'close') await this.close();
         if (msg.type === 'back') await this.back(panel);
@@ -909,7 +912,7 @@ class LazyGitVSController {
       this.commitItems = await commits(this.commitListForBranch?.name).catch(() => []);
       this.stashItems = await stashes().catch(() => []);
       this.conflictItems = await conflictFiles().catch(() => []);
-      if (previousPath && this.selectionEpoch === refreshSelectionEpoch) { const i = this.filteredFiles().findIndex(f => f.path === previousPath); if (i >= 0) this.selected = i; }
+      if (previousPath && this.selectionEpoch === refreshSelectionEpoch) { const i = this.fileTreeRows().findIndex(row => row.kind === 'file' && row.file.path === previousPath); if (i >= 0) this.selected = i; }
       this.clampSelections();
       if (this.activePanel === 'hunks' || this.editorHunkMode) await this.loadHunks(false);
       this.updateModeStatusBar();
@@ -932,7 +935,7 @@ class LazyGitVSController {
   private activeViewPanel(): ViewPanel { return this.activePanel === 'hunks' ? 'files' : this.activePanel; }
   private panelForView(panel: ViewPanel): Panel { return panel === 'files' ? this.activePanel === 'hunks' ? 'hunks' : 'files' : panel; }
   private clampSelections() {
-    this.selected = clamp(this.selected, this.filteredFiles().length);
+    this.selected = clamp(this.selected, this.fileTreeRows().length);
     this.hunkSelected = clamp(this.hunkSelected, this.hunks.length);
     this.branchSelected = clamp(this.branchSelected, this.filteredBranches().length);
     this.tagSelected = clamp(this.tagSelected, this.filteredTags().length);
@@ -946,7 +949,7 @@ class LazyGitVSController {
   }
   private activeIndex(panel: Panel): number { return panel === 'hunks' ? (this.hunkSelectionMode === 'line' ? this.hunkLineSelected : this.hunkSelected) : panel === 'branches' ? this.branchSelected : panel === 'tags' ? this.tagSelected : panel === 'remotes' ? this.remoteSelected : panel === 'commits' ? (this.commitFilesFor ? this.commitFileSelected : this.commitSelected) : panel === 'stash' ? (this.stashFilesFor ? this.stashFileSelected : this.stashSelected) : panel === 'conflicts' ? this.conflictSelected : this.selected; }
   private setActiveIndex(panel: Panel, value: number) { if (panel === 'hunks') { if (this.hunkSelectionMode === 'line') this.hunkLineSelected = value; else this.hunkSelected = value; } else if (panel === 'branches') this.branchSelected = value; else if (panel === 'tags') this.tagSelected = value; else if (panel === 'remotes') this.remoteSelected = value; else if (panel === 'commits') { if (this.commitFilesFor) this.commitFileSelected = value; else this.commitSelected = value; } else if (panel === 'stash') { if (this.stashFilesFor) this.stashFileSelected = value; else this.stashSelected = value; } else if (panel === 'conflicts') this.conflictSelected = value; else this.selected = value; }
-  private activeLength(panel: Panel): number { return panel === 'status' ? 0 : panel === 'hunks' ? (this.hunkSelectionMode === 'line' ? (this.hunks[this.hunkSelected] ? hunkSelectableLineIndexes(this.hunks[this.hunkSelected]).length : 0) : this.hunks.length) : panel === 'branches' ? this.filteredBranches().length : panel === 'tags' ? this.filteredTags().length : panel === 'remotes' ? this.filteredRemotes().length : panel === 'commits' ? (this.commitFilesFor ? this.commitFileItems.length : this.filteredCommits().length) : panel === 'stash' ? (this.stashFilesFor ? this.stashFileItems.length : this.filteredStashes().length) : panel === 'conflicts' ? this.filteredConflicts().length : this.filteredFiles().length; }
+  private activeLength(panel: Panel): number { return panel === 'status' ? 0 : panel === 'hunks' ? (this.hunkSelectionMode === 'line' ? (this.hunks[this.hunkSelected] ? hunkSelectableLineIndexes(this.hunks[this.hunkSelected]).length : 0) : this.hunks.length) : panel === 'branches' ? this.filteredBranches().length : panel === 'tags' ? this.filteredTags().length : panel === 'remotes' ? this.filteredRemotes().length : panel === 'commits' ? (this.commitFilesFor ? this.commitFileItems.length : this.filteredCommits().length) : panel === 'stash' ? (this.stashFilesFor ? this.stashFileItems.length : this.filteredStashes().length) : panel === 'conflicts' ? this.filteredConflicts().length : this.fileTreeRows().length; }
   private filteredFiles(): ChangedFile[] {
     let items = this.files;
     if (this.fileStatusFilter === 'staged') items = items.filter(f => f.staged);
@@ -955,6 +958,39 @@ class LazyGitVSController {
     if (this.fileStatusFilter === 'untracked') items = items.filter(f => f.untracked);
     return this.sortFilesByLazyGitConfig(this.applyTextFilter(items, f => f.path));
   }
+  private fileTreeRows(): FileTreeRow[] {
+    const files = this.filteredFiles();
+    if (!this.lazygitGui.showFileTree) return files.map(file => ({ kind: 'file', path: file.path, depth: 0, file }));
+    const rows: FileTreeRow[] = [];
+    const seenDirs = new Set<string>();
+    for (const file of files) {
+      const parts = file.path.split('/');
+      let hidden = false;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const dir = parts.slice(0, i + 1).join('/');
+        if (!seenDirs.has(dir)) {
+          seenDirs.add(dir);
+          rows.push({ kind: 'dir', path: dir, depth: i, collapsed: this.collapsedFileDirs.has(dir) });
+        }
+        if (this.collapsedFileDirs.has(dir)) hidden = true;
+      }
+      if (!hidden) rows.push({ kind: 'file', path: file.path, depth: Math.max(0, parts.length - 1), file });
+    }
+    return rows;
+  }
+  private currentFileTreeRow(): FileTreeRow | undefined { return this.fileTreeRows()[this.selected]; }
+  private allFileTreeDirs(): string[] { return Array.from(new Set(this.filteredFiles().flatMap(file => file.path.split('/').slice(0, -1).map((_part, index, parts) => file.path.split('/').slice(0, index + 1).join('/'))))).filter(Boolean); }
+  private async toggleCurrentFileTreeNode() {
+    const row = this.currentFileTreeRow();
+    if (row?.kind !== 'dir') return false;
+    if (this.collapsedFileDirs.has(row.path)) this.collapsedFileDirs.delete(row.path); else this.collapsedFileDirs.add(row.path);
+    this.clampSelections();
+    this.renderAll();
+    await this.restorePanelFocusAfterModal('files');
+    return true;
+  }
+  private async collapseAllFileTree() { this.collapsedFileDirs = new Set(this.allFileTreeDirs()); this.clampSelections(); this.renderAll(); await this.restorePanelFocusAfterModal('files'); }
+  private async expandAllFileTree() { this.collapsedFileDirs.clear(); this.clampSelections(); this.renderAll(); await this.restorePanelFocusAfterModal('files'); }
   private filteredBranches(): Branch[] {
     const items = this.applyTextFilter(this.branchItems, b => b.label);
     if (this.branchSortMode === 'name') return [...items].sort((a, b) => a.label.localeCompare(b.label));
@@ -981,7 +1017,7 @@ class LazyGitVSController {
       return normalize(a.path).localeCompare(normalize(b.path));
     });
   }
-  private currentFile(): ChangedFile | undefined { return this.filteredFiles()[this.selected]; }
+  private currentFile(): ChangedFile | undefined { return this.currentFileTreeRow()?.file; }
   private currentBranch(): Branch | undefined { return this.filteredBranches()[this.branchSelected]; }
   private currentTag(): Tag | undefined { return this.filteredTags()[this.tagSelected]; }
   private currentRemote(): Remote | undefined { return this.filteredRemotes()[this.remoteSelected]; }
@@ -1062,8 +1098,7 @@ class LazyGitVSController {
     this.updateModeStatusBar();
     if (panel === 'hunks') { const h = this.hunks[this.hunkSelected]; if (!h) return; if (this.hunkSelectionMode === 'line') { const line = hunkSelectableLineIndexes(h)[this.hunkLineSelected]; if (line === undefined) return; await applyLine(h, line); } else await applyHunk(h); await this.loadHunks(false); await this.refresh(true); return; }
     if (panel === 'files') {
-      const visible = this.filteredFiles();
-      const ranged = Array.from(this.fileRangeSelected).map(i => visible[i]).filter(Boolean);
+      const ranged = Array.from(this.fileRangeSelected).map(i => this.fileTreeRows()[i]?.file).filter((file): file is ChangedFile => !!file);
       if (ranged.length > 1) { await toggleStageSelected(ranged); this.fileRangeAnchor = undefined; this.fileRangeSelected.clear(); await this.refresh(true); return; }
       const f = this.currentFile(); if (!f) return; await toggleStage(f); await this.refresh(true);
     }
@@ -1074,7 +1109,7 @@ class LazyGitVSController {
     this.activePanel = panel;
     this.updateModeStatusBar();
     if (panel === 'status') return this.recentReposMenu();
-    if (panel === 'files') return this.enterHunks();
+    if (panel === 'files') { if (await this.toggleCurrentFileTreeNode()) return; return this.enterHunks(); }
     if (panel === 'hunks') return this.openCurrent('files', false);
     if (panel === 'branches') return this.enterBranchCommits();
     if (panel === 'tags') return this.tagMenu();
@@ -1189,8 +1224,9 @@ class LazyGitVSController {
     const key = (value: string | string[] | undefined) => this.keyLabel(value);
     return [
       { key: key(f.openStatusFilter) || 'F', label: '$(filter) File status filter', run: async () => this.statusFilterMenu() },
-      { key: key((f as any).toggleTreeView) || '-', label: '$(list-tree) Toggle file tree', run: async () => this.toggleFileTree() },
-      { key: key((f as any).sortOrder) || '=', label: '$(sort-precedence) Sort files', description: this.fileSortMode, run: async () => this.fileSortMenu() },
+      { key: key((f as any).toggleTreeView) || '`', label: '$(list-tree) Toggle file tree', run: async () => this.toggleFileTree() },
+      { key: key((f as any).collapseAll) || '-', label: '$(fold) Collapse all files', run: async () => this.collapseAllFileTree() },
+      { key: key((f as any).expandAll) || '=', label: '$(unfold) Expand all files', run: async () => this.expandAllFileTree() },
       { key: key(u.pushFiles) || key(u.push) || 'P', label: '$(cloud-upload) Push', run: async () => this.push() },
       { key: key(u.pullFiles) || key(u.pull) || 'p', label: '$(cloud-download) Pull', run: async () => this.pull() },
       { key: key(f.toggleStagedAll) || 'a', label: '$(check-all) Toggle stage all files', run: async () => this.stageAll() },
@@ -1327,7 +1363,7 @@ class LazyGitVSController {
       { key: 'm', label: '$(check) Mark resolved', description: 'git add', args: ['add', '--', f.path] }
     ];
   }
-  private panelCommandCatalog(viewPanel: ViewPanel): GitMenuItem[] {
+  private commandRegistry(viewPanel: ViewPanel): GitMenuItem[] {
     const panel = this.panelForView(viewPanel);
     if (panel === 'status') return this.statusCommandCatalog();
     if (panel === 'files') return this.filesCommandCatalog(viewPanel);
@@ -1344,7 +1380,7 @@ class LazyGitVSController {
 
   private async helpMenu(viewPanel: ViewPanel) {
     const panel = this.panelForView(viewPanel);
-    const items = this.panelCommandCatalog(viewPanel);
+    const items = this.commandRegistry(viewPanel);
 
     if (!items.length) {
       vscode.window.showInformationMessage(`LazyGitVS: ${this.title(panel)} has no extra contextual commands.`);
@@ -1370,7 +1406,7 @@ class LazyGitVSController {
     }
   }
   private async runPanelCommand(viewPanel: ViewPanel, typed: string) {
-    const item = findMenuItemByKey(this.panelCommandCatalog(viewPanel), typed);
+    const item = findMenuItemByKey(this.commandRegistry(viewPanel), typed);
     if (!item) return;
     try {
       await executeGitMenuItem(item);
@@ -1763,6 +1799,18 @@ class LazyGitVSController {
     this.selected = 0;
     this.renderAll();
   }
+  private async diffingMenu() {
+    const u = this.lazygitKeymap.universal as any;
+    await pickGitAction('Diffing menu', [
+      { key: this.keyLabel(u.toggleWhitespaceInDiffView) || '<ctrl+w>', label: '$(whitespace) Toggle whitespace in diff view', description: this.lazygitGit.ignoreWhitespaceInDiffView ? 'currently ignoring whitespace' : 'currently showing whitespace', run: async () => { this.lazygitGit.ignoreWhitespaceInDiffView = !this.lazygitGit.ignoreWhitespaceInDiffView; this.statusLine = `Whitespace ${this.lazygitGit.ignoreWhitespaceInDiffView ? 'ignored' : 'shown'}`; } },
+      { key: this.keyLabel(u.increaseContextInDiffView) || '}', label: '$(add) Increase diff context size', description: String(this.lazygitGit.diffContextSize), run: async () => { this.lazygitGit.diffContextSize = Math.min(99, Number(this.lazygitGit.diffContextSize || 0) + 1); this.statusLine = `Diff context: ${this.lazygitGit.diffContextSize}`; } },
+      { key: this.keyLabel(u.decreaseContextInDiffView) || '{', label: '$(remove) Decrease diff context size', description: String(this.lazygitGit.diffContextSize), run: async () => { this.lazygitGit.diffContextSize = Math.max(0, Number(this.lazygitGit.diffContextSize || 0) - 1); this.statusLine = `Diff context: ${this.lazygitGit.diffContextSize}`; } },
+      { key: this.keyLabel(u.increaseRenameSimilarityThreshold) || ')', label: '$(diff-renamed) Increase rename similarity threshold', description: String(this.lazygitGit.renameSimilarityThreshold), run: async () => { this.lazygitGit.renameSimilarityThreshold = Math.min(100, Number(this.lazygitGit.renameSimilarityThreshold || 0) + 5); this.statusLine = `Rename similarity: ${this.lazygitGit.renameSimilarityThreshold}%`; } },
+      { key: this.keyLabel(u.decreaseRenameSimilarityThreshold) || '(', label: '$(diff-renamed) Decrease rename similarity threshold', description: String(this.lazygitGit.renameSimilarityThreshold), run: async () => { this.lazygitGit.renameSimilarityThreshold = Math.max(0, Number(this.lazygitGit.renameSimilarityThreshold || 0) - 5); this.statusLine = `Rename similarity: ${this.lazygitGit.renameSimilarityThreshold}%`; } },
+    ]);
+    await this.refresh(true);
+    await this.restorePanelFocusAfterModal(this.activeViewPanel());
+  }
   private async conflictMenu() {
     const f = this.currentConflict();
     if (!f) return;
@@ -1812,10 +1860,11 @@ class LazyGitVSController {
     try { view.webview.html = `<!doctype html><html><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>
       html,body{height:100%;margin:0;}body{font-family:var(--vscode-font-family);font-size:var(--vscode-font-size);line-height:1.4;color:var(--vscode-foreground);background:var(--vscode-sideBar-background);overflow:hidden;}
       .root{position:relative;height:100%;display:flex;flex-direction:column;}.title{display:${panel === viewPanel ? 'none' : 'block'};padding:4px 8px;color:var(--vscode-descriptionForeground);border-bottom:1px solid var(--vscode-sideBarSectionHeader-border);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.rows{overflow:auto;flex:1;padding:2px 0;}
+      .virtual-spacer{height:var(--virtual-height,0px);pointer-events:none;}
       .root.wrap-staging .row.hunk{height:auto;min-height:20px;white-space:normal;align-items:start;padding-top:2px;padding-bottom:2px}.root.wrap-staging .row.hunk .path{overflow:visible;text-overflow:clip;white-space:normal}.row{display:grid;grid-template-columns:7px 36px minmax(0,1fr) minmax(0,20%);align-items:center;column-gap:2px;height:20px;padding:0 2px;box-sizing:border-box;white-space:nowrap;min-width:0;color:var(--vscode-list-foreground,var(--vscode-foreground));cursor:default;border-left:2px solid transparent;}.row.file{grid-template-columns:7px 28px minmax(0,1fr);}.row.branch{grid-template-columns:7px 18px minmax(0,1fr) minmax(0,42px);}.row.commit{grid-template-columns:7px 44px minmax(0,1fr);}.row.commit .meta{display:none}.row.sel{background:var(--vscode-list-activeSelectionBackground);color:var(--vscode-list-activeSelectionForeground);outline:1px solid var(--vscode-list-focusOutline);outline-offset:-1px;}.row.range:not(.sel){background:var(--vscode-list-inactiveSelectionBackground);}.row:not(.sel):hover{background:var(--vscode-list-hoverBackground);}.cursor{width:7px;color:var(--vscode-focusBorder);}.status{color:var(--vscode-descriptionForeground);font-size:11px;overflow:hidden;text-overflow:clip;}.path,.summary{overflow:hidden;text-overflow:ellipsis;min-width:0;}.meta{opacity:.68;margin-left:2px;overflow:hidden;text-overflow:ellipsis;justify-self:end;min-width:0;font-size:10px;}.empty{color:var(--vscode-descriptionForeground);padding:4px 6px;}
       .status-pair{display:grid;grid-template-columns:12px 12px;column-gap:2px;align-items:center;font-family:var(--vscode-editor-font-family);font-size:10px}.slot{display:inline-grid;place-items:center;width:12px;height:14px;border-radius:2px;font-size:10px;font-weight:700;line-height:1;box-sizing:border-box;color:var(--vscode-button-foreground,#fff)}.slot.empty{visibility:hidden;background:transparent;border-color:transparent;box-shadow:none}.slot.index{background:var(--vscode-gitDecoration-addedResourceForeground,#6a9955)}.slot.worktree{background:var(--vscode-gitDecoration-modifiedResourceForeground,#e06c75)}.slot.deleted,.slot.conflict{background:var(--vscode-errorForeground,#f85149)}.slot.untracked{background:var(--vscode-gitDecoration-untrackedResourceForeground,#d7ba7d);color:var(--vscode-sideBar-background,#1e1e1e)}.row.file.staged{border-left-color:var(--vscode-gitDecoration-addedResourceForeground,#6a9955)}.row.file.unstaged{border-left-color:var(--vscode-gitDecoration-modifiedResourceForeground,#e06c75)}.row.file.mixed{border-left-color:var(--vscode-gitDecoration-conflictingResourceForeground,#569cd6)}.row.file.untracked{border-left-color:var(--vscode-gitDecoration-untrackedResourceForeground,#d7ba7d)}.status-dashboard{padding:7px 9px 10px;display:flex;flex-direction:column;gap:5px;min-width:0}.lg-logo{font-family:var(--vscode-editor-font-family);font-size:20px;font-weight:800;letter-spacing:.5px;color:var(--vscode-foreground);line-height:1.05}.lg-sub{color:var(--vscode-descriptionForeground);font-size:11px;margin-bottom:4px}.lg-link{display:flex;align-items:center;gap:5px;min-height:19px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.lg-link span{overflow:hidden;text-overflow:ellipsis}.lg-repo{margin-top:6px;padding-top:6px;border-top:1px solid var(--vscode-sideBarSectionHeader-border);color:var(--vscode-descriptionForeground);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.current .path,.current .status{font-weight:700}.danger .status{color:var(--vscode-errorForeground)}.hint{color:var(--vscode-descriptionForeground);font-size:11px;line-height:1.35;padding:4px 8px 5px;border-top:1px solid var(--vscode-sideBarSectionHeader-border);background:var(--vscode-sideBar-background);}kbd{font-family:var(--vscode-editor-font-family);font-size:10px;color:var(--vscode-keybindingLabel-foreground);background:var(--vscode-keybindingLabel-background);border:1px solid var(--vscode-keybindingLabel-border);border-bottom-color:var(--vscode-keybindingLabel-bottomBorder);border-radius:3px;padding:0 3px;margin-right:2px;}.statusline{color:var(--vscode-descriptionForeground);padding-top:3px;}
       .boom{position:absolute;inset:0;display:grid;place-items:center;background:color-mix(in srgb,var(--vscode-sideBar-background) 55%,transparent);z-index:5;pointer-events:none;}.bomb{font-size:46px;animation:bomb .45s ease-in forwards}.blast{position:absolute;font-size:76px;opacity:0;animation:blast .5s ease-out .35s forwards}@keyframes bomb{to{transform:scale(.35) rotate(20deg);opacity:0}}@keyframes blast{0%{transform:scale(.2);opacity:0}35%{opacity:1}100%{transform:scale(1.6);opacity:0}}
-    </style></head><body tabindex="0"><div class="root ${this.lazygitGui.wrapLinesInStagingView ? 'wrap-staging' : ''}">${boom}<div class="title">${title}</div><div class="rows">${rows}</div>${footer}</div><script nonce="${nonce}">
+    </style></head><body tabindex="0"><div class="root ${this.lazygitGui.wrapLinesInStagingView ? 'wrap-staging' : ''}">${boom}<div class="title">${title}</div><div class="rows" role="listbox" aria-label="${escapeHtml(title)}">${rows}</div>${footer}</div><script nonce="${nonce}">
       const vscode=acquireVsCodeApi(); const panel='${viewPanel}'; const shouldFocus=${isActiveView && !this.editorHunkMode && !this.editorEditMode && Date.now() > this.suppressWebviewAutoFocusUntil ? 'true' : 'false'}; function markPanelFocus(){vscode.postMessage({type:'focusArea',area:'panel'});} window.addEventListener('focus',markPanelFocus); document.body.addEventListener('focus',markPanelFocus); setTimeout(()=>{document.querySelector('.row.sel')?.scrollIntoView({block:'nearest'}); if(shouldFocus){ document.body.focus(); markPanelFocus(); }},0);
       const keymap=${scriptJson(this.lazygitKeymap)};
       const panels={1:'status',2:'files',3:'branches',4:'commits',5:'stash',6:'conflicts',7:'tags',8:'remotes'};
@@ -1825,8 +1874,8 @@ class LazyGitVSController {
       document.querySelector('.rows')?.addEventListener('click',e=>{ const row=e.target.closest('.row[data-index]'); if(!row)return; document.body.focus(); vscode.postMessage({type:'select',index:Number(row.dataset.index)}); });
       document.querySelector('.rows')?.addEventListener('dblclick',e=>{ const row=e.target.closest('.row[data-index]'); if(!row)return; document.body.focus(); vscode.postMessage({type:'select',index:Number(row.dataset.index)}); vscode.postMessage({type:'enter'}); });
       window.addEventListener('keydown',e=>{ const u=keymap.universal, f=keymap.files, m=keymap.main; const jump=Array.isArray(u.jumpToBlock)?u.jumpToBlock:[]; const jumpIndex=jump.indexOf(e.key); const jumpPanel = jumpIndex>=0 ? panels[String(jumpIndex+1)] : panels[e.key]; if(jumpPanel){e.preventDefault();vscode.postMessage({type:'switchPanel',panel:jumpPanel});return;}
-        if(e.key==='?'){e.preventDefault();vscode.postMessage({type:'helpMenu'});return;} if(hit(e,u.focusMainView)){e.preventDefault();vscode.postMessage({type:'focusMainView'});return;} if(e.shiftKey&&e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:1});return;} if(e.shiftKey&&e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:-1});return;} if(e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;} if(hit(e,u.prevPage)){e.preventDefault();vscode.postMessage({type:'move',delta:-10});return;} if(hit(e,u.nextPage)){e.preventDefault();vscode.postMessage({type:'move',delta:10});return;} if(hit(e,u.gotoTop,u.gotoTopAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'top'});return;} if(hit(e,u.gotoBottom,u.gotoBottomAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'bottom'});return;} if(hit(e,u.toggleRangeSelect)){e.preventDefault();vscode.postMessage({type:'rangeToggle'});return;} if(hit(e,u.startSearch)){e.preventDefault();vscode.postMessage({type:'search'});return;} if(panel==='files'&&hit(e,f.openStatusFilter)){e.preventDefault();vscode.postMessage({type:'statusFilter'});return;} if(panel==='files'&&hit(e,f.toggleTreeView)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='files'&&hit(e,f.sortOrder)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(hit(e,u.nextItem,u.nextItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(hit(e,u.prevItem,u.prevItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;}
-        if(hit(e,u.nextBlock,u.nextBlockAlt,u.nextBlockAlt2)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:1});return;} if(hit(e,u.prevBlock,u.prevBlockAlt,u.prevBlockAlt2)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:-1});return;}
+        if(e.key==='?'){e.preventDefault();vscode.postMessage({type:'helpMenu'});return;} if(hit(e,u.focusMainView)){e.preventDefault();vscode.postMessage({type:'focusMainView'});return;} if(e.shiftKey&&e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:1});return;} if(e.shiftKey&&e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:-1});return;} if(e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;} if(hit(e,u.prevPage)){e.preventDefault();vscode.postMessage({type:'move',delta:-10});return;} if(hit(e,u.nextPage)){e.preventDefault();vscode.postMessage({type:'move',delta:10});return;} if(hit(e,u.gotoTop,u.gotoTopAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'top'});return;} if(hit(e,u.gotoBottom,u.gotoBottomAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'bottom'});return;} if(hit(e,u.toggleRangeSelect)){e.preventDefault();vscode.postMessage({type:'rangeToggle'});return;} if(hit(e,u.startSearch)){e.preventDefault();vscode.postMessage({type:'search'});return;} if(panel==='files'&&hit(e,f.openStatusFilter)){e.preventDefault();vscode.postMessage({type:'statusFilter'});return;} if(panel==='files'&&hit(e,f.toggleTreeView)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='files'&&hit(e,f.collapseAll)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='files'&&hit(e,f.expandAll)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(hit(e,u.nextItem,u.nextItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(hit(e,u.prevItem,u.prevItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;}
+        if(hit(e,u.diffingMenu,u.diffingMenuAlt)){e.preventDefault();vscode.postMessage({type:'diffingMenu'});return;} if(hit(e,u.nextBlock,u.nextBlockAlt,u.nextBlockAlt2)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:1});return;} if(hit(e,u.prevBlock,u.prevBlockAlt,u.prevBlockAlt2)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:-1});return;}
         const c=keymap.commits; if(panel==='commits'&&hit(e,c.checkoutCommit,c.copyCommitAttributeToClipboard,c.newBranch,c.renameCommit,c.amendToCommit,c.createFixupCommit,c.markCommitAsFixup,c.cherryPickCopy,c.pasteCommits,c.revertCommit,c.createTag,c.tagCommit,c.viewResetOptions,c.openInBrowser,c.openLogMenu)){e.preventDefault();vscode.postMessage({type:'commitAction',key:norm(e)});return;}
         const b=keymap.branches, st=keymap.stash; if(panel==='status'&&['o','e','a','A','u','<enter>'].includes(norm(e))){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='hunks'&&hit(e,u.select,u.togglePanel,u.remove,m.toggleSelectHunk)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='branches'&&hit(e,u.select,u.new,u.remove,b.checkoutBranchByName,b.checkoutPreviousBranch,b.renameBranch,b.mergeIntoCurrentBranch,b.rebaseBranch,b.forceCheckoutBranch,b.setUpstream,b.fastForward,b.createTag,b.sortOrder)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='stash'&&hit(e,u.goInto,st.apply,st.popStash,st.newBranch,st.renameStash,u.remove)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='tags'&&hit(e,u.select,u.new,u.remove,b.createTag,b.pushTag)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='remotes'&&hit(e,u.new,u.edit,u.remove,b.fetchRemote,b.addForkRemote)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='conflicts'&&(hit(e,u.goInto,u.openFile)||['1','2','b','m'].includes(norm(e)))){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;}
         if(hit(e,u.select)){e.preventDefault();vscode.postMessage({type:'toggle'});return;} if(panel==='status'&&hit(e,u.goInto)){e.preventDefault();vscode.postMessage({type:'repoMenu'});return;} if(hit(e,u.goInto)){e.preventDefault();vscode.postMessage({type:'enter'});return;} if(hit(e,u.openFile)){e.preventDefault();vscode.postMessage({type:'openFile'});return;} if(hit(e,u.edit)){e.preventDefault();vscode.postMessage({type:'editFile'});return;} if(panel==='files'&&hit(e,f.copyFileInfoToClipboard)){e.preventDefault();vscode.postMessage({type:'copyInfo'});return;} if(panel==='files'&&hit(e,f.copyPath,u.copyToClipboard)){e.preventDefault();vscode.postMessage({type:'copyPath'});return;} if(panel!=='files'&&hit(e,u.copyToClipboard)){e.preventDefault();vscode.postMessage({type:'copyInfo'});return;} if(panel==='files'&&hit(e,f.ignoreFile)){e.preventDefault();vscode.postMessage({type:'ignoreMenu'});return;} if(panel==='files'&&hit(e,f.fetch)){e.preventDefault();vscode.postMessage({type:'fetch'});return;}
@@ -1851,10 +1900,25 @@ class LazyGitVSController {
     if (panel === 'stash') return common + `${kb(String(u.goInto))} apply/pop/drop/show · ${kb(String(f.stashAllChanges))} create stash`;
     return common + `${kb([String(u.goInto), String(u.openFile)])} open conflict · resolve with VS Code`;
   }
-  private fileDisplayPath(filePath: string): string { return this.lazygitGui.showFileTree ? filePath.replace(/\//g, ' › ') : filePath; }
+  private fileTreeLabel(row: FileTreeRow): string { const indent = '  '.repeat(row.depth); return row.kind === 'dir' ? `${indent}${row.collapsed ? '▸' : '▾'} ${path.basename(row.path)}` : `${indent}${path.basename(row.path)}`; }
+  private virtualRows<T>(items: T[], activeIndex: number, render: (item: T, index: number) => string): string {
+    const windowSize = 240;
+    if (items.length <= windowSize) return items.map(render).join('');
+    const start = Math.max(0, Math.min(items.length - windowSize, activeIndex - Math.floor(windowSize / 2)));
+    const end = Math.min(items.length, start + windowSize);
+    const top = start * 20;
+    const bottom = (items.length - end) * 20;
+    return `<div class="virtual-spacer" data-virtual-offset="${start}" style="--virtual-height:${top}px"></div>${items.slice(start, end).map((item, i) => render(item, start + i)).join('')}<div class="virtual-spacer" data-virtual-offset="${end}" style="--virtual-height:${bottom}px"></div>`;
+  }
   private rows(panel: Panel, active: boolean): string {
     if (panel === 'status') return this.renderStatus(active);
-    if (panel === 'files') { const files = this.filteredFiles(); return files.length ? files.map((f,i)=>fileRow(active && i===this.selected, `${statusClass(f)} ${this.fileRangeSelected.has(i) ? 'range' : ''}`, f, this.fileDisplayPath(f.path), i)).join('') : '<div class="empty">No files for current filter.</div>'; }
+    if (panel === 'files') {
+      const fileRows = this.fileTreeRows();
+      return fileRows.length ? this.virtualRows(fileRows, this.selected, (r, i) => r.kind === 'dir'
+        ? row(active && i===this.selected, 'file dir', r.collapsed ? '▸' : '▾', this.fileTreeLabel(r), '', i)
+        : fileRow(active && i===this.selected, `${statusClass(r.file)} ${this.fileRangeSelected.has(i) ? 'range' : ''}`, r.file, this.fileTreeLabel(r), i))
+        : '<div class="empty">No files for current filter.</div>';
+    }
     if (panel === 'hunks') return this.renderHunks(active);
     if (panel === 'branches') { const branches = this.filteredBranches(); return branches.length ? branches.map((b,i)=>row(active && i===this.branchSelected, `branch ${b.current ? 'current' : ''} ${b.kind}`, `${b.current ? '●' : ' '} ${b.kind === 'remote' ? 'R' : b.kind === 'tag' ? 'T' : b.kind === 'worktree' ? 'W' : 'L'}`, b.label, b.kind === 'remote' ? 'remote' : b.kind === 'tag' ? 'tag' : b.kind === 'worktree' ? 'worktree' : (b.upstream || 'local'), i)).join('') : '<div class="empty">No branches.</div>'; }
     if (panel === 'tags') { const tags = this.filteredTags(); return tags.length ? tags.map((t,i)=>row(active && i===this.tagSelected, 'tag', 'T', t.name, t.date || t.subject, i)).join('') : '<div class="empty">No tags. Press T to create one.</div>'; }
@@ -1885,8 +1949,8 @@ class LazyGitVSController {
   }
 }
 function clamp(index: number, length: number): number { return length ? Math.max(0, Math.min(length - 1, index)) : 0; }
-function row(sel: boolean, klass: string, status: string, main: string, meta = '', index?: number): string { const data = typeof index === 'number' ? ` data-index="${index}"` : ''; return `<div class="row ${sel ? 'sel' : ''} ${klass}"${data}><span class="cursor">${sel ? '›' : ' '}</span><span class="status">${escapeHtml(status)}</span><span class="path">${escapeHtml(main)}</span>${meta ? `<span class="meta">${escapeHtml(meta)}</span>` : ''}</div>`; }
-function fileRow(sel: boolean, klass: string, file: ChangedFile, main: string, index: number): string { return `<div class="row file ${sel ? 'sel' : ''} ${klass}" data-index="${index}" title="${escapeHtml(file.xy)} · ${escapeHtml(fileStateLabel(file))} · ${escapeHtml(file.path)}"><span class="cursor">${sel ? '›' : ' '}</span><span class="status">${fileStatusHtml(file)}</span><span class="path">${escapeHtml(main)}</span></div>`; }
+function row(sel: boolean, klass: string, status: string, main: string, meta = '', index?: number): string { const data = typeof index === 'number' ? ` data-index="${index}"` : ''; return `<div class="row ${sel ? 'sel' : ''} ${klass}" role="option" aria-selected="${sel ? 'true' : 'false'}"${data}><span class="cursor">${sel ? '›' : ' '}</span><span class="status">${escapeHtml(status)}</span><span class="path">${escapeHtml(main)}</span>${meta ? `<span class="meta">${escapeHtml(meta)}</span>` : ''}</div>`; }
+function fileRow(sel: boolean, klass: string, file: ChangedFile, main: string, index: number): string { return `<div class="row file ${sel ? 'sel' : ''} ${klass}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(file.xy)} · ${escapeHtml(fileStateLabel(file))} · ${escapeHtml(file.path)}"><span class="cursor">${sel ? '›' : ' '}</span><span class="status">${fileStatusHtml(file)}</span><span class="path">${escapeHtml(main)}</span></div>`; }
 function escapeHtml(s: string): string { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!)); }
 function scriptJson(value: unknown): string { return JSON.stringify(value).replace(/[<>&\u2028\u2029]/g, c => ({ '<': '\\u003c', '>': '\\u003e', '&': '\\u0026', '\u2028': '\\u2028', '\u2029': '\\u2029' }[c]!)); }
 function stripAnsi(s: string): string { return s.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, ''); }
