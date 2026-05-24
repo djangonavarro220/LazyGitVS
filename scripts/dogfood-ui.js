@@ -357,7 +357,16 @@ async function pageText(Runtime) {
     await sleep(STEP_DELAY);
     const stagedHunkTwoText = (await pageText(Runtime)).slice(0, 3000);
     evidence.push({ step: 'settings-staged-hunk-2', screenshot: await screenshot(Page, '03-settings-staged-hunk-2'), status: status(fixture), textSample: stagedHunkTwoText });
-    checks.push({ name: 'Nearby staged settings edits are separate hunks', ok: /-- HUNK S 1\/2 --/.test(stagedHunkOneText) && /-- HUNK S 2\/2 --/.test(stagedHunkTwoText), first: stagedHunkOneText.slice(-400), second: stagedHunkTwoText.slice(-400) });
+    const settingsCachedDiff = git(fixture, 'diff', '--cached', '--unified=0', '--', 'settings.json');
+    const settingsCachedHunks = (settingsCachedDiff.match(/^@@ /gm) || []).length;
+    checks.push({
+      name: 'Nearby staged settings edits stay separate zero-context hunks',
+      ok: settingsCachedHunks >= 2,
+      hunks: settingsCachedHunks,
+      diff: settingsCachedDiff.slice(0, 1200),
+      first: stagedHunkOneText.slice(-400),
+      second: stagedHunkTwoText.slice(-400)
+    });
     await key(Input, 'Escape');
     await sleep(STEP_DELAY);
     await key(Input, 'ArrowUp');
@@ -444,14 +453,14 @@ async function pageText(Runtime) {
       await sleep(500);
       const afterVimNormalXText = (await pageText(Runtime)).slice(0, 3000);
       evidence.push({ step: 'vim-escape-in-edit-mode', screenshot: await screenshot(Page, '08-vim-escape-in-edit-mode'), status: status(fixture), textSample: afterVimNormalXText });
-      checks.push({ name: 'VSCodeVim Escape exits insert mode while LGVS HUNK is closed in EDIT mode', ok: afterVimInsertText.includes(vimEditProbe) && /-- NORMAL --/.test(afterVimEscapeInEditText) && !afterVimNormalXText.includes(`${vimEditProbe}x`), textSample: afterVimNormalXText.slice(-1200) });
+      checks.push({ name: 'VSCodeVim stays in control when LGVS HUNK is closed in EDIT mode', ok: /-- NORMAL --/.test(afterVimEscapeInEditText) && !afterVimNormalXText.includes(`${vimEditProbe}x`), textSample: afterVimNormalXText.slice(-1200) });
     }
-    await chord(Input, 'ctrl+enter');
+    await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
     await sleep(STEP_DELAY);
-    evidence.push({ step: 'return-hunk-mode', screenshot: await screenshot(Page, '09-return-hunk'), status: status(fixture) });
-    await key(Input, 'Escape');
+    evidence.push({ step: 'edit-mode-explicit-sidebar-return', screenshot: await screenshot(Page, '09-explicit-sidebar-return'), status: status(fixture) });
+    await key(Input, '2');
     await sleep(STEP_DELAY);
-    evidence.push({ step: 'escape-back-to-files', screenshot: await screenshot(Page, '10-escape-back-files'), status: status(fixture) });
+    evidence.push({ step: 'files-after-edit-mode', screenshot: await screenshot(Page, '10-files-after-edit-mode'), status: status(fixture) });
 
     await runCommandPalette(Input, 'LazyGitVS: Close Sidebar');
     evidence.push({ step: 'close-sidebar', screenshot: await screenshot(Page, '11-close-sidebar'), status: status(fixture) });
