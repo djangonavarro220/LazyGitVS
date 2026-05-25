@@ -20,6 +20,13 @@ assert(extension.includes('.row{display:grid;grid-template-columns:7px 36px minm
 assert(extension.includes('.row.file{grid-template-columns:7px 28px minmax(0,1fr);}'), 'Files rows should tighten the badge column so file names start earlier');
 assert(extension.includes('.row.branch{grid-template-columns:7px 18px minmax(0,1fr) minmax(0,42px);}'), 'Branch rows should not waste horizontal space on a status column wider than the branch kind');
 assert(extension.includes('.row.commit{grid-template-columns:7px 44px minmax(0,1fr);}'), 'Commit rows should show the short hash then spend the remaining width on the subject');
+assert(!extension.includes("row(active && i===this.selected, 'file dir', r.collapsed ? '▸' : '▾', this.fileTreeLabel(r), '', i)"), 'File-tree directories must not render a second chevron in the status column and another in the label');
+assert(!/private fileTreeLabel\([^)]*\)[^{]*\{[^}]*row\.collapsed \? '▸' : '▾'/.test(extension), 'File-tree labels must not embed chevrons; the original lazygit line has exactly one tree arrow');
+assert(extension.includes('function dirRow(sel: boolean, klass: string, row: FileTreeRow, index: number): string'), 'File-tree directories should use a dedicated lazygit-style row, not fake file status columns');
+assert(extension.includes('function treeFileRow(sel: boolean, klass: string, file: ChangedFile, main: string, depth: number, index: number): string'), 'Tree-mode files should indent before their short-status columns like original lazygit');
+assert(!extension.includes('.row.file.staged{border-left-color:'), 'Files panel must not add VS Code rail markers; original lazygit uses short-status letters, not a colored side rail');
+assert(!extension.includes('.row.file.unstaged{border-left-color:'), 'Files panel must not add VS Code rail markers; original lazygit uses short-status letters, not a colored side rail');
+assert(!extension.includes('border-left:2px solid transparent;'), 'Sidebar rows must not reserve a phantom rail column that lazygit original does not have');
 assert(!extension.includes('class="focusline'), 'Sidebar panels must not render the noisy Focus: LG panel footer line');
 assert(extension.includes("const footer = '';"), 'Panel footer should stay empty; do not leak branch/status hints into every sidebar panel');
 assert(extension.includes("async function showDiscardFileMenu(file: ChangedFile, confirmKey = 'x') { await pickGitAction(`Discard changes · ${file.path}`, [\n  { key: confirmKey, label: '$(warning) Discard all changes'"), 'Discard file menu must keep lazygit original order: discard all first');
