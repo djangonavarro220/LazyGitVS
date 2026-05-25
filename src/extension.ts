@@ -1533,24 +1533,30 @@ class LazyGitVSController {
   }
   async enterEditorEditMode() {
     if (!this.editorHunkMode) return;
-    this.editorEditMode = true;
+    const filePath = this.editorModeFilePath ?? this.currentFile()?.path;
     this.editorHunkMode = false;
+    this.editorEditMode = false;
     await vscode.commands.executeCommand('setContext', 'lazygitvs.editorHunkMode', false);
-    await vscode.commands.executeCommand('setContext', 'lazygitvs.editorEditMode', true);
+    await vscode.commands.executeCommand('setContext', 'lazygitvs.editorEditMode', false);
     await vscode.commands.executeCommand('setContext', 'lazygitvs.keyboardMode', false);
     await this.setVimKeyCaptureSuppressed(false);
-    this.statusLine = 'EDIT mode: Vim/VS Code owns the keyboard. Re-enter HUNK/LINE from the LGVS panel.';
+    this.statusLine = '';
     this.ownsModeStatus = false;
-    this.setFocusArea('editor-edit');
+    this.setFocusArea('none');
+    this.suppressWebviewAutoFocusUntil = Date.now() + 2500;
     this.clearEditorHunkDecorations();
     this.updateModeStatusBar();
-    const filePath = this.editorModeFilePath ?? this.currentFile()?.path;
     if (filePath) await editPath(filePath);
     await this.forceEditorFocus();
     await this.placeCursorAtEditorHunkStart();
     setTimeout(() => void this.forceEditorFocus().then(() => this.placeCursorAtEditorHunkStart()), 80);
     setTimeout(() => void this.forceEditorFocus().then(() => this.placeCursorAtEditorHunkStart()), 220);
     setTimeout(() => void this.forceEditorFocus().then(() => this.placeCursorAtEditorHunkStart()), 450);
+    setTimeout(() => { if (!this.editorHunkMode && !this.editorEditMode) this.suppressWebviewAutoFocusUntil = 0; }, 2600);
+  }
+  async editorHunkNoop() {
+    // HUNK/LINE mode owns the editor keyboard. Printable keys that are not lazygit
+    // commands must be swallowed, otherwise VS Code inserts them into the file.
   }
   async editorEditEscape() {
     if (!this.editorEditMode) return;
@@ -1988,6 +1994,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkToggleSide', () => app.editorToggleHunkSide()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkHelp', () => app.editorHunkHelp()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkDiscard', () => app.editorDiscardHunk()));
+  context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkNoop', () => app.editorHunkNoop()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkExit', () => app.exitEditorHunkMode()));
   vscode.commands.getCommands(true).then(commands => {
     app.setVSCodeVimPresent(commands.includes('extension.vim_tab'));

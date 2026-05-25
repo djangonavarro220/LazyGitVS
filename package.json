@@ -40,6 +40,7 @@
     "onCommand:lazygitvs.editorHunkToggleSide",
     "onCommand:lazygitvs.editorHunkDiscard",
     "onCommand:lazygitvs.editorHunkHelp",
+    "onCommand:lazygitvs.editorHunkNoop",
     "onCommand:lazygitvs.editorHunkReturn",
     "onCommand:lazygitvs.editorHunkExit",
     "onCommand:lazygitvs.editorEditEscape",
@@ -289,6 +290,206 @@
       {
         "key": "e",
         "command": "lazygitvs.editorHunkEdit",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "b",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+b",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "c",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+c",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "f",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+f",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "g",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+g",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "h",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+h",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "i",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+i",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "l",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+l",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "m",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+m",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "n",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+n",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "o",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+o",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "p",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+p",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "r",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+r",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "s",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+s",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "t",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+t",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "u",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+u",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "v",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+v",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "w",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+w",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "x",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+x",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "y",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+y",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "z",
+        "command": "lazygitvs.editorHunkNoop",
+        "when": "lazygitvs.editorHunkMode && editorTextFocus"
+      },
+      {
+        "key": "shift+z",
+        "command": "lazygitvs.editorHunkNoop",
         "when": "lazygitvs.editorHunkMode && editorTextFocus"
       },
       {

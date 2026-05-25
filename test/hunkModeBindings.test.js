@@ -50,7 +50,15 @@ assert(!keybindings.some(binding => binding.command === 'lazygitvs.editorEditEsc
 assert(extension.includes("await this.setVimKeyCaptureSuppressed(active);"), 'editor HUNK mode must suppress VSCodeVim key capture so keys reach LGVS');
 assert(extension.includes("setContext', 'vim.active', suppressed ? false"), 'LGVS must clear vim.active while it owns editor HUNK mode');
 assert(extension.includes("this.editorHunkMode = false;"), 'entering edit/Vim mode must clear LGVS HUNK ownership');
-assert(extension.includes("this.statusLine = 'EDIT mode: Vim/VS Code owns the keyboard. Re-enter HUNK/LINE from the LGVS panel.';"), 'edit/Vim mode status must not advertise LGVS hunk shortcuts');
+assert(extension.includes("this.editorEditMode = false;\n    await vscode.commands.executeCommand('setContext', 'lazygitvs.editorHunkMode', false);"), 'EDIT handoff must fully release LGVS editor ownership instead of showing a duplicate EDIT mode');
+assert(extension.includes("this.statusLine = '';"), 'edit/Vim mode must not advertise an LGVS mode label beside Vim');
+
+const noopLetters = 'bcfghilmnoprstuvwxyz'.split('');
+for (const letter of noopLetters) {
+  assert(keybindings.some(binding => binding.key === letter && binding.command === 'lazygitvs.editorHunkNoop' && binding.when === hunkWhen), `HUNK mode must swallow unassigned printable key ${letter}`);
+  assert(keybindings.some(binding => binding.key === `shift+${letter}` && binding.command === 'lazygitvs.editorHunkNoop' && binding.when === hunkWhen), `HUNK mode must swallow unassigned printable key shift+${letter}`);
+}
+assert(extension.includes("registerCommand('lazygitvs.editorHunkNoop'"), 'editor hunk no-op command must be registered so unassigned keys do not type into files');
 
 assert(extension.includes("registerCommand('lazygitvs.editorHunkHelp'"), 'editor hunk help command must be registered');
 assert(extension.includes('async editorHunkHelp()'), 'controller must expose editorHunkHelp');
