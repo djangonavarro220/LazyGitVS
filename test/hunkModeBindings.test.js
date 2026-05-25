@@ -49,6 +49,7 @@ assert(!keybindings.some(binding => binding.command === 'lazygitvs.editorEditEsc
 
 assert(extension.includes("await this.setVimKeyCaptureSuppressed(active);"), 'editor HUNK mode must suppress VSCodeVim key capture so keys reach LGVS');
 assert(extension.includes("setContext', 'vim.active', suppressed ? false"), 'LGVS must clear vim.active while it owns editor HUNK mode');
+assert(/getExtension\('vscodevim\.vim'\)|commands\.includes\('extension\.vim_escape'\)/.test(extension), 'VSCodeVim presence detection must not depend only on extension.vim_tab; EDIT handoff needs vim.active restored so Esc can leave Insert');
 assert(extension.includes("this.editorHunkMode = false;"), 'entering edit/Vim mode must clear LGVS HUNK ownership');
 assert(extension.includes("this.editorEditMode = false;\n    await vscode.commands.executeCommand('setContext', 'lazygitvs.editorHunkMode', false);"), 'EDIT handoff must fully release LGVS editor ownership instead of showing a duplicate EDIT mode');
 assert(extension.includes("this.statusLine = '';"), 'edit/Vim mode must not advertise an LGVS mode label beside Vim');

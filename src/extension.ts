@@ -1997,7 +1997,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkNoop', () => app.editorHunkNoop()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkExit', () => app.exitEditorHunkMode()));
   vscode.commands.getCommands(true).then(commands => {
-    app.setVSCodeVimPresent(commands.includes('extension.vim_tab'));
+    app.setVSCodeVimPresent(Boolean(vscode.extensions.getExtension('vscodevim.vim')) || commands.includes('extension.vim_escape') || commands.includes('extension.vim_tab'));
   });
 }
 
