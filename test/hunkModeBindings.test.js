@@ -36,8 +36,8 @@ assert.deepStrictEqual(sideToggleKeys, ['ctrl+i', 'tab'], 'LazyGit uses tab to t
 
 for (const binding of keybindings.filter(binding => hunkCommands.has(binding.command))) {
   assert.strictEqual(binding.when, hunkWhen, `${binding.command} / ${binding.key} must only be active while LGVS owns HUNK/LINE mode`);
-  assert(!String(binding.when).includes('vim.mode'), `${binding.command} / ${binding.key} must not depend on Vim mode; LGVS suppresses Vim while it owns HUNK/LINE`);
-  assert(!String(binding.when).includes('vim.active'), `${binding.command} / ${binding.key} must not route through Vim; LGVS suppresses Vim while it owns HUNK/LINE`);
+  assert(!String(binding.when).includes('vim.mode'), `${binding.command} / ${binding.key} must not depend on Vim mode; LGVS HUNK/LINE ownership is scoped only by LGVS contexts`);
+  assert(!String(binding.when).includes('vim.active'), `${binding.command} / ${binding.key} must not route through Vim; LGVS must not integrate with Vim contexts`);
 }
 
 for (const command of ['lazygitvs.editorHunkToggleMode', 'lazygitvs.editorHunkToggleSide', 'lazygitvs.editorHunkDiscard']) {
@@ -47,12 +47,15 @@ for (const command of ['lazygitvs.editorHunkToggleMode', 'lazygitvs.editorHunkTo
 assert(!keybindings.some(binding => binding.command === 'lazygitvs.editorHunkReturn'), 'No keyboard shortcut may jump from Vim/editor mode back into HUNK/LINE; re-enter via LGVS panels only');
 assert(!keybindings.some(binding => binding.command === 'lazygitvs.editorEditEscape'), 'Escape belongs to Vim/VS Code once LGVS has handed off to editor mode');
 
-assert(extension.includes("await this.setVimKeyCaptureSuppressed(active);"), 'editor HUNK mode must suppress VSCodeVim key capture so keys reach LGVS');
-assert(extension.includes("setContext', 'vim.active', suppressed ? false"), 'LGVS must clear vim.active while it owns editor HUNK mode');
-assert(/getExtension\('vscodevim\.vim'\)|commands\.includes\('extension\.vim_escape'\)/.test(extension), 'VSCodeVim presence detection must not depend only on extension.vim_tab; EDIT handoff needs vim.active restored so Esc can leave Insert');
-assert(extension.includes("this.editorHunkMode = false;"), 'entering edit/Vim mode must clear LGVS HUNK ownership');
-assert(extension.includes("this.editorEditMode = false;\n    await vscode.commands.executeCommand('setContext', 'lazygitvs.editorHunkMode', false);"), 'EDIT handoff must fully release LGVS editor ownership instead of showing a duplicate EDIT mode');
-assert(extension.includes("this.statusLine = '';"), 'edit/Vim mode must not advertise an LGVS mode label beside Vim');
+assert(extension.includes("private async releaseEditorOwnership()"), 'normal open/edit must have one hard release path that makes LGVS disappear from the editor');
+assert(extension.includes("this.modeStatusBarItem.hide();"), 'normal open/edit must hide the LGVS mode status bar instead of showing EDIT/LG state');
+assert(extension.includes("await this.releaseEditorOwnership();\n    if (filePath) await editPath(filePath);"), 'e from HUNK must release all LGVS editor ownership before opening the real file editor');
+assert(extension.includes("await this.releaseEditorOwnership(); await editPath(file);"), 'o/e from Files must also release LGVS instead of leaving viewer/status ownership behind');
+const editHandoffBody = extension.match(/async enterEditorEditMode\(\) \{([\s\S]*?)\n  \}\n  async editorHunkNoop/)[1];
+assert(!editHandoffBody.includes('setVimKeyCaptureSuppressed'), 'e handoff must not detect or manipulate VSCodeVim; after release the editor belongs to VS Code/Vim');
+assert(!editHandoffBody.includes("setContext', 'vim.active'"), 'e handoff must not set vim.active; LGVS should be invisible after normal edit handoff');
+assert(!editHandoffBody.includes('extension.vim_escape'), 'e handoff must not call Vim commands; Esc belongs to VSCodeVim naturally');
+assert(!editHandoffBody.includes('editorEditMode = true'), 'there is no LGVS EDIT mode after handoff; it is just the normal editor');
 
 const noopLetters = 'bcfghilmnoprstuvwxyz'.split('');
 for (const letter of noopLetters) {

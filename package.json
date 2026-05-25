@@ -41,9 +41,7 @@
     "onCommand:lazygitvs.editorHunkDiscard",
     "onCommand:lazygitvs.editorHunkHelp",
     "onCommand:lazygitvs.editorHunkNoop",
-    "onCommand:lazygitvs.editorHunkReturn",
     "onCommand:lazygitvs.editorHunkExit",
-    "onCommand:lazygitvs.editorEditEscape",
     "onView:lazygitvs.statusView",
     "onView:lazygitvs.filesView",
     "onView:lazygitvs.branchesView",
@@ -95,16 +93,8 @@
         "title": "LazyGitVS: Editor Hunk Edit Mode"
       },
       {
-        "command": "lazygitvs.editorHunkReturn",
-        "title": "LazyGitVS: Return to Editor Hunk Mode"
-      },
-      {
         "command": "lazygitvs.editorHunkExit",
         "title": "LazyGitVS: Exit Editor Hunk Mode"
-      },
-      {
-        "command": "lazygitvs.editorEditEscape",
-        "title": "LazyGitVS: Editor Edit Escape"
       },
       {
         "command": "lazygitvs.editorHunkToggleMode",

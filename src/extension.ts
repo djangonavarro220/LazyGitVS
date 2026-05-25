@@ -545,7 +545,6 @@ class LazyGitVSController {
   private editorModeFilePath: string | undefined;
   private refreshTimer?: NodeJS.Timeout;
   private intervalTimer?: NodeJS.Timeout;
-  private vscodeVimPresent = false;
   private refreshInFlight = false;
   private refreshPending = false;
   private selectionEpoch = 0;
@@ -848,16 +847,25 @@ class LazyGitVSController {
     this.setFocusArea(active ? 'editor-hunk' : this.ownsModeStatus ? 'panel' : 'viewer');
     await vscode.commands.executeCommand('setContext', 'lazygitvs.editorHunkMode', active);
     await vscode.commands.executeCommand('setContext', 'lazygitvs.editorEditMode', false);
-    await this.setVimKeyCaptureSuppressed(active);
     if (!active) this.clearEditorHunkDecorations();
     else this.updateEditorHunkDecorations();
     this.updateModeStatusBar();
   }
 
-  setVSCodeVimPresent(present: boolean) { this.vscodeVimPresent = present; }
-
-  private async setVimKeyCaptureSuppressed(suppressed: boolean) {
-    await vscode.commands.executeCommand('setContext', 'vim.active', suppressed ? false : this.vscodeVimPresent);
+  private async releaseEditorOwnership() {
+    this.editorHunkMode = false;
+    this.editorEditMode = false;
+    this.readOnlyHunkMode = false;
+    this.editorModeFilePath = undefined;
+    this.statusLine = '';
+    this.ownsModeStatus = false;
+    this.setFocusArea('none');
+    await vscode.commands.executeCommand('setContext', 'lazygitvs.editorHunkMode', false);
+    await vscode.commands.executeCommand('setContext', 'lazygitvs.editorEditMode', false);
+    await vscode.commands.executeCommand('setContext', 'lazygitvs.keyboardMode', false);
+    this.clearEditorHunkDecorations();
+    this.modeStatusBarItem.hide();
+    this.suppressWebviewAutoFocusUntil = Date.now() + 2500;
   }
 
   private setFocusArea(area: FocusArea) {
@@ -1131,7 +1139,7 @@ class LazyGitVSController {
     this.renderAll();
     await this.openCurrent(viewPanel, false);
   }
-  private async editCurrent(viewPanel: ViewPanel) { const file = this.currentFilePath(viewPanel); if (file) { this.ownsModeStatus = false; this.setFocusArea('viewer'); this.renderAll(); await editPath(file); } }
+  private async editCurrent(viewPanel: ViewPanel) { const file = this.currentFilePath(viewPanel); if (file) { await this.releaseEditorOwnership(); await editPath(file); } }
   private currentFilePath(viewPanel: ViewPanel): string | undefined { if (viewPanel === 'conflicts') return this.conflictItems[this.conflictSelected]?.path; return this.currentFile()?.path; }
   private async copyCurrentPath(viewPanel: ViewPanel) { const file = this.currentFilePath(viewPanel); if (file) await copyText(file, 'path copied'); }
   private async copyCurrentInfo(viewPanel: ViewPanel) {
@@ -1534,18 +1542,7 @@ class LazyGitVSController {
   async enterEditorEditMode() {
     if (!this.editorHunkMode) return;
     const filePath = this.editorModeFilePath ?? this.currentFile()?.path;
-    this.editorHunkMode = false;
-    this.editorEditMode = false;
-    await vscode.commands.executeCommand('setContext', 'lazygitvs.editorHunkMode', false);
-    await vscode.commands.executeCommand('setContext', 'lazygitvs.editorEditMode', false);
-    await vscode.commands.executeCommand('setContext', 'lazygitvs.keyboardMode', false);
-    await this.setVimKeyCaptureSuppressed(false);
-    this.statusLine = '';
-    this.ownsModeStatus = false;
-    this.setFocusArea('none');
-    this.suppressWebviewAutoFocusUntil = Date.now() + 2500;
-    this.clearEditorHunkDecorations();
-    this.updateModeStatusBar();
+    await this.releaseEditorOwnership();
     if (filePath) await editPath(filePath);
     await this.forceEditorFocus();
     await this.placeCursorAtEditorHunkStart();
@@ -1557,35 +1554,6 @@ class LazyGitVSController {
   async editorHunkNoop() {
     // HUNK/LINE mode owns the editor keyboard. Printable keys that are not lazygit
     // commands must be swallowed, otherwise VS Code inserts them into the file.
-  }
-  async editorEditEscape() {
-    if (!this.editorEditMode) return;
-    await this.forceEditorFocus();
-    await vscode.commands.executeCommand('setContext', 'vim.active', this.vscodeVimPresent);
-    try { await vscode.commands.executeCommand('extension.vim_escape'); }
-    catch { /* VSCodeVim is not installed/enabled; normal VS Code Escape has nothing LGVS-specific to do here. */ }
-  }
-  async returnToEditorHunkMode() {
-    if (!this.editorEditMode) return;
-    const filePath = this.editorModeFilePath ?? this.currentFile()?.path;
-    if (!filePath) return;
-    const visibleIndex = this.filteredFiles().findIndex(f => f.path === filePath);
-    if (visibleIndex >= 0) this.selected = visibleIndex;
-    this.editorEditMode = false;
-    this.editorHunkMode = true;
-    this.editorModeFilePath = filePath;
-    await vscode.commands.executeCommand('setContext', 'lazygitvs.editorEditMode', false);
-    await vscode.commands.executeCommand('setContext', 'lazygitvs.editorHunkMode', true);
-    await vscode.commands.executeCommand('setContext', 'lazygitvs.keyboardMode', true);
-    await this.setVimKeyCaptureSuppressed(true);
-    this.setFocusArea('editor-hunk');
-    await this.loadHunks(false);
-    this.statusLine = 'Editor HUNK mode: j/k move · space stage · e edit · Ctrl+Enter edit/hunk';
-    this.updateModeStatusBar();
-    this.renderAll();
-    await editPath(filePath);
-    await this.forceEditorFocus();
-    await this.revealEditorHunk();
   }
   private async forceEditorFocus() {
     try { await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup'); } catch { /* ignore */ }
@@ -1988,17 +1956,12 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkPrev', () => app.editorNextHunk(-1)));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkToggle', () => app.editorToggleHunk()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkEdit', () => app.enterEditorEditMode()));
-  context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorEditEscape', () => app.editorEditEscape()));
-  context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkReturn', () => app.returnToEditorHunkMode()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkToggleMode', () => app.editorToggleHunkSelectionMode()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkToggleSide', () => app.editorToggleHunkSide()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkHelp', () => app.editorHunkHelp()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkDiscard', () => app.editorDiscardHunk()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkNoop', () => app.editorHunkNoop()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkExit', () => app.exitEditorHunkMode()));
-  vscode.commands.getCommands(true).then(commands => {
-    app.setVSCodeVimPresent(Boolean(vscode.extensions.getExtension('vscodevim.vim')) || commands.includes('extension.vim_escape') || commands.includes('extension.vim_tab'));
-  });
 }
 
 export function deactivate() {}
