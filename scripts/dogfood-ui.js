@@ -207,6 +207,10 @@ async function pageText(Runtime) {
   const r = await Runtime.evaluate({ expression: `document.body.innerText`, returnByValue: true });
   return r.result.value || '';
 }
+async function lazyGitPreviewTabLabels(Runtime) {
+  const r = await Runtime.evaluate({ expression: `Array.from(document.querySelectorAll('.tabs-container .tab, .tabs-and-actions-container .tab, .tab')).map(el => el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '').map(s => s.replace(/\s+/g, ' ').trim()).filter(s => /^LazyGitVS:/.test(s) || s.includes(' LazyGitVS:'))`, returnByValue: true });
+  return Array.from(new Set(r.result.value || []));
+}
 
 (async () => {
   if (runMatrixIfNeeded()) return;
@@ -328,6 +332,17 @@ async function pageText(Runtime) {
       if (panelKey === '2') checks.push({ name: 'Moving from 1 Status to 2 Files hides Status again', ok: !jumpText.includes('1 STATUS') && /-- FILES · LG --/.test(jumpText), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '7') checks.push({ name: 'Pressing 7 reveals Tags in the SCM sidebar', ok: jumpText.includes('7 TAGS'), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '8') checks.push({ name: 'Pressing 8 reveals Remotes in the SCM sidebar', ok: jumpText.includes('8 REMOTES'), textSample: jumpText.slice(0, 1200) });
+    }
+
+    const dynamicPreviewTabs = await lazyGitPreviewTabLabels(Runtime);
+    evidence.push({ step: 'single-dynamic-preview-tab-after-navigation', screenshot: await screenshot(Page, '02-single-dynamic-preview-tab-after-navigation'), status: status(fixture), previewTabs: dynamicPreviewTabs });
+    checks.push({ name: 'Default preview tab policy keeps only one dynamic LazyGitVS tab while navigating previews', ok: dynamicPreviewTabs.length <= 1, previewTabs: dynamicPreviewTabs });
+    if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS) {
+      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
+      const report = { ok: true, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, processOutput: procOut.slice(-4000), targeted: 'preview-tabs' };
+      write(REPORT_JSON, JSON.stringify(report, null, 2));
+      console.log(JSON.stringify(report, null, 2));
+      return;
     }
 
     for (const [panelKey, panelName] of [['3', 'BRANCHES'], ['4', 'COMMITS'], ['5', 'STASH']]) {

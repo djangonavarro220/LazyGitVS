@@ -208,6 +208,15 @@
           "type": "boolean",
           "default": false,
           "description": "Show LazyGitVS mode in the VS Code status bar. Off by default to avoid duplicate Vim/Neovim mode labels. The sidebar footer still follows lazygit gui.showBottomLine."
+        },
+        "lazygitvs.previewTabs": {
+          "type": "string",
+          "enum": [
+            "single",
+            "multiple"
+          ],
+          "default": "single",
+          "description": "Controls LazyGitVS preview tabs. 'single' keeps one dynamic LazyGitVS: <file> viewer; 'multiple' preserves the old behavior of leaving each preview tab open."
         }
       }
     },
@@ -676,6 +685,7 @@
     "test": "npm run compile && node test/lazygitConfig.test.js && node test/lazygitWorkflowParity.test.js && node test/lazygitMenu.test.js && node test/hunkPatch.test.js && node test/gitPrimitives.test.js && node test/stageMatrix.test.js && node test/gitFixtures.test.js && node test/escapeScope.test.js && node test/hunkModeBindings.test.js && node test/originalPreviewScope.test.js && node test/filesPanelUx.test.js && node test/parityNextMilestones.test.js && node test/branchCommitWorkflow.test.js && node test/statusRepoSelection.test.js && node test/panelTabNavigation.test.js && node test/virtualPreview.test.js && node test/nativePanelFocus.test.js && node test/modalFocus.test.js",
     "dogfood:ui": "node scripts/dogfood-ui.js",
     "dogfood:ui:no-vim": "LGVS_DOGFOOD_VARIANT=no-vim node scripts/dogfood-ui.js",
+    "dogfood:ui:preview-tabs": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_PREVIEW_TABS=1 node scripts/dogfood-ui.js",
     "dogfood:ui:vim": "LGVS_DOGFOOD_VARIANT=vim node scripts/dogfood-ui.js",
     "dogfood:ui:vim-escape": "LGVS_DOGFOOD_VARIANT=vim LGVS_DOGFOOD_FAST_VIM_ESCAPE=1 node scripts/dogfood-ui.js",
     "build": "npm run compile && npm run package",

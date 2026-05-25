@@ -211,7 +211,15 @@ function branchLogArgs(gitConfig: LazyGitGitRuntimeConfig, branchName: string): 
   return argv[0] === 'git' ? argv.slice(1) : argv;
 }
 
+async function closeLazyGitVSPreviewTabsIfSingle() {
+  const mode = vscode.workspace.getConfiguration('lazygitvs').get<'single' | 'multiple'>('previewTabs', 'single');
+  if (mode !== 'single') return;
+  const tabs = vscode.window.tabGroups.all.flatMap(group => group.tabs).filter(tab => tab.label.startsWith('LazyGitVS:'));
+  if (tabs.length) await vscode.window.tabGroups.close(tabs, true);
+}
+
 async function previewDiff(file: ChangedFile | ConflictFile, preserveFocus = true) {
+  await closeLazyGitVSPreviewTabsIfSingle();
   const root = workspaceRoot();
   const right = vscode.Uri.file(path.join(root, file.path));
   const untracked = 'untracked' in file && file.untracked;
@@ -245,6 +253,7 @@ async function toggleStageSelected(files: ChangedFile[]) {
   }
 }
 async function editPath(filePath: string): Promise<vscode.TextEditor> {
+  await closeLazyGitVSPreviewTabsIfSingle();
   const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(workspaceRoot(), filePath)));
   return vscode.window.showTextDocument(doc, { preview: false, viewColumn: vscode.ViewColumn.Active });
 }
@@ -1935,6 +1944,7 @@ function escapeHtml(s: string): string { return s.replace(/[&<>"]/g, c => ({ '&'
 function scriptJson(value: unknown): string { return JSON.stringify(value).replace(/[<>&\u2028\u2029]/g, c => ({ '<': '\\u003c', '>': '\\u003e', '&': '\\u0026', '\u2028': '\\u2028', '\u2029': '\\u2029' }[c]!)); }
 function stripAnsi(s: string): string { return s.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, ''); }
 async function showText(title: string, content: string, preserveFocus = false, preview = false) {
+  await closeLazyGitVSPreviewTabsIfSingle();
   const uri = virtualPreviewProvider.set(title, stripAnsi(content));
   const doc = await vscode.workspace.openTextDocument(uri);
   await vscode.languages.setTextDocumentLanguage(doc, 'diff');
