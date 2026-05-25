@@ -7,7 +7,7 @@ import { decorateMenuItems, findMenuItemByKey } from './lazygitMenu';
 import { assertPatchableHunk, hunkBodyLines, hunkChangedEditorLine, hunkSelectableLineIndexes, hunkStartLine, parseDiffHunks, singleLinePatch, type Hunk } from './hunkPatch';
 
 type ChangedFile = { xy: string; path: string; staged: boolean; untracked: boolean };
-type FileTreeRow = { kind: 'dir'; path: string; depth: number; collapsed: boolean; file?: never } | { kind: 'file'; path: string; depth: number; file: ChangedFile };
+type FileTreeRow = { kind: 'dir'; path: string; label: string; depth: number; collapsed: boolean; file?: never } | { kind: 'file'; path: string; label: string; depth: number; file: ChangedFile };
 type LazyGitGitRuntimeConfig = ReturnType<typeof cloneGitConfig>;
 type Branch = { name: string; label: string; current: boolean; kind: 'local' | 'remote' | 'tag' | 'worktree'; upstream: string };
 type Tag = { name: string; date: string; subject: string };
@@ -983,22 +983,48 @@ class LazyGitVSController {
   }
   private fileTreeRows(): FileTreeRow[] {
     const files = this.filteredFiles();
-    if (!this.lazygitGui.showFileTree) return files.map(file => ({ kind: 'file', path: file.path, depth: 0, file }));
-    const rows: FileTreeRow[] = [];
-    const seenDirs = new Set<string>();
+    if (!this.lazygitGui.showFileTree) return files.map(file => ({ kind: 'file', path: file.path, label: file.path, depth: 0, file }));
+    type Node = { path: string; part: string; file?: ChangedFile; children: Node[] };
+    const root: Node = { path: '', part: '', children: [] };
+    const child = (parent: Node, part: string, pathValue: string) => {
+      let node = parent.children.find(c => c.part === part);
+      if (!node) { node = { path: pathValue, part, children: [] }; parent.children.push(node); }
+      return node;
+    };
     for (const file of files) {
+      let node = root;
       const parts = file.path.split('/');
-      let hidden = false;
-      for (let i = 0; i < parts.length - 1; i++) {
-        const dir = parts.slice(0, i + 1).join('/');
-        if (!seenDirs.has(dir)) {
-          seenDirs.add(dir);
-          rows.push({ kind: 'dir', path: dir, depth: i, collapsed: this.collapsedFileDirs.has(dir) });
-        }
-        if (this.collapsedFileDirs.has(dir)) hidden = true;
-      }
-      if (!hidden) rows.push({ kind: 'file', path: file.path, depth: Math.max(0, parts.length - 1), file });
+      parts.forEach((part, index) => {
+        node = child(node, part, parts.slice(0, index + 1).join('/'));
+        if (index === parts.length - 1) node.file = file;
+      });
     }
+    const cmp = (a: Node, b: Node) => {
+      const normalize = (value: string) => this.lazygitGui.fileTreeSortCaseSensitive ? value : value.toLocaleLowerCase();
+      if (this.lazygitGui.fileTreeSortOrder === 'foldersFirst' && Boolean(a.file) !== Boolean(b.file)) return a.file ? 1 : -1;
+      if (this.lazygitGui.fileTreeSortOrder === 'filesFirst' && Boolean(a.file) !== Boolean(b.file)) return a.file ? -1 : 1;
+      return normalize(a.path).localeCompare(normalize(b.path));
+    };
+    const sort = (node: Node) => { node.children.sort(cmp); node.children.forEach(sort); };
+    sort(root);
+    const rows: FileTreeRow[] = [];
+    const labelFromDepth = (node: Node, treeDepth: number) => node.path.split('/').slice(treeDepth).join('/');
+    const render = (node: Node, treeDepth: number, visualDepth: number) => {
+      if (node.file) {
+        rows.push({ kind: 'file', path: node.path, label: labelFromDepth(node, treeDepth), depth: visualDepth, file: node.file });
+        return;
+      }
+      let visible = node;
+      let compressedDepth = treeDepth;
+      while (visible.children.length === 1 && !visible.children[0].file) {
+        visible = visible.children[0];
+        compressedDepth++;
+      }
+      const collapsed = this.collapsedFileDirs.has(visible.path);
+      rows.push({ kind: 'dir', path: visible.path, label: labelFromDepth(visible, treeDepth), depth: visualDepth, collapsed });
+      if (!collapsed) visible.children.forEach(childNode => render(childNode, compressedDepth + 1, visualDepth + 1));
+    };
+    root.children.forEach(node => render(node, 0, 0));
     return rows;
   }
   private currentFileTreeRow(): FileTreeRow | undefined { return this.fileTreeRows()[this.selected]; }
@@ -1889,7 +1915,7 @@ class LazyGitVSController {
     if (panel === 'stash') return common + `${kb(String(u.goInto))} apply/pop/drop/show · ${kb(String(f.stashAllChanges))} create stash`;
     return common + `${kb([String(u.goInto), String(u.openFile)])} open conflict · resolve with VS Code`;
   }
-  private fileTreeLabel(row: FileTreeRow): string { return row.kind === 'file' && row.depth === 0 ? row.path : path.basename(row.path); }
+  private fileTreeLabel(row: FileTreeRow): string { return row.label; }
   private virtualRows<T>(items: T[], activeIndex: number, render: (item: T, index: number) => string): string {
     const windowSize = 240;
     if (items.length <= windowSize) return items.map(render).join('');
@@ -1941,7 +1967,7 @@ class LazyGitVSController {
 }
 function clamp(index: number, length: number): number { return length ? Math.max(0, Math.min(length - 1, index)) : 0; }
 function row(sel: boolean, klass: string, status: string, main: string, meta = '', index?: number): string { const data = typeof index === 'number' ? ` data-index="${index}"` : ''; return `<div class="row ${sel ? 'sel' : ''} ${klass}" role="option" aria-selected="${sel ? 'true' : 'false'}"${data}><span class="cursor">${sel ? '›' : ' '}</span><span class="status">${escapeHtml(status)}</span><span class="path">${escapeHtml(main)}</span>${meta ? `<span class="meta">${escapeHtml(meta)}</span>` : ''}</div>`; }
-function dirRow(sel: boolean, klass: string, row: FileTreeRow, index: number): string { const arrow = row.kind === 'dir' && row.collapsed ? '▶' : '▼'; return `<div class="row ${sel ? 'sel' : ''} ${klass}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(row.path)}"><span class="cursor">${sel ? '›' : ' '}</span><span class="path tree-line"><span class="tree-indent" style="--tree-indent:${row.depth * 2}ch"></span><span class="tree-arrow">${arrow}</span><span class="tree-name">${escapeHtml(path.basename(row.path))}</span></span></div>`; }
+function dirRow(sel: boolean, klass: string, row: FileTreeRow, index: number): string { const arrow = row.kind === 'dir' && row.collapsed ? '▶' : '▼'; return `<div class="row ${sel ? 'sel' : ''} ${klass}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(row.path)}"><span class="cursor">${sel ? '›' : ' '}</span><span class="path tree-line"><span class="tree-indent" style="--tree-indent:${row.depth * 2}ch"></span><span class="tree-arrow">${arrow}</span><span class="tree-name">${escapeHtml(row.label)}</span></span></div>`; }
 function treeFileRow(sel: boolean, klass: string, file: ChangedFile, main: string, depth: number, index: number): string { return `<div class="row file tree ${sel ? 'sel' : ''} ${klass}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(file.xy)} · ${escapeHtml(fileStateLabel(file))} · ${escapeHtml(file.path)}"><span class="cursor">${sel ? '›' : ' '}</span><span class="path tree-line"><span class="tree-indent" style="--tree-indent:${depth * 2}ch"></span>${fileStatusHtml(file)}<span class="tree-name">${escapeHtml(main)}</span></span></div>`; }
 function fileRow(sel: boolean, klass: string, file: ChangedFile, main: string, index: number): string { return `<div class="row file ${sel ? 'sel' : ''} ${klass}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(file.xy)} · ${escapeHtml(fileStateLabel(file))} · ${escapeHtml(file.path)}"><span class="cursor">${sel ? '›' : ' '}</span><span class="status">${fileStatusHtml(file)}</span><span class="path">${escapeHtml(main)}</span></div>`; }
 function escapeHtml(s: string): string { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!)); }

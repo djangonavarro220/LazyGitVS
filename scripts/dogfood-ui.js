@@ -62,6 +62,12 @@ function makeFixture() {
   write(path.join(dir, 'settings.json'), JSON.stringify({ alpha: 'one', beta: 'two', gamma: 'three', delta: 'four' }, null, 2) + '\n');
   write(path.join(dir, 'README.md'), '# LGVS dogfood\n\nbase\n');
   write(path.join(dir, 'src/app.ts'), 'export const value = 1;\n\nexport function greet() {\n  return "hello";\n}\n');
+  if (process.env.LGVS_DOGFOOD_DEEP_TREE) {
+    write(path.join(dir, '.config/karabiner/assets/complex_modifications/misc_rules.json'), '{"rules":[]}\n');
+    write(path.join(dir, '.config/vscode/keybindings.json'), '[]\n');
+    write(path.join(dir, '.config/vscode/settings.json'), '{}\n');
+    write(path.join(dir, 'AGENTS.md'), 'dogfood agent notes\n');
+  }
   git(dir, 'add', '.');
   git(dir, 'commit', '-m', 'initial');
   git(dir, 'branch', 'feature/dogfood');
@@ -77,6 +83,13 @@ function makeFixture() {
   write(path.join(dir, 'settings.json'), JSON.stringify({ alpha: 'ONE', beta: 'two', gamma: 'THREE', delta: 'FOUR' }, null, 2) + '\n');
   append(path.join(dir, 'README.md'), 'unstaged readme line\n');
   write(path.join(dir, 'src/app.ts'), 'export const value = 2;\n\nexport function greet() {\n  return "hello dogfood";\n}\n');
+  if (process.env.LGVS_DOGFOOD_DEEP_TREE) {
+    append(path.join(dir, 'AGENTS.md'), 'staged agent change\n');
+    git(dir, 'add', 'AGENTS.md');
+    write(path.join(dir, '.config/karabiner/assets/complex_modifications/misc_rules.json'), '{"rules":[{"description":"changed"}]}\n');
+    write(path.join(dir, '.config/vscode/keybindings.json'), '[{"key":"x","command":"noop"}]\n');
+    write(path.join(dir, '.config/vscode/settings.json'), '{"editor.tabSize":2}\n');
+  }
   const secondaryRepo = `${dir}-other-repo`;
   ensureDir(secondaryRepo);
   git(secondaryRepo, 'init');
