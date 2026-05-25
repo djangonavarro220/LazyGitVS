@@ -180,6 +180,12 @@ async function chord(Input, keys) {
 async function typeText(Input, text) {
   await Input.insertText({ text });
 }
+async function typePhysical(Input, text) {
+  for (const ch of text) {
+    await key(Input, ch);
+    await sleep(60);
+  }
+}
 async function screenshot(Page, name) {
   await sleep(300);
   const res = await Page.captureScreenshot({ format: 'png', captureBeyondViewport: false });
@@ -276,6 +282,41 @@ async function pageText(Runtime) {
     checks.push({ name: 'SCM sidebar exposes default LazyGitVS panels while Status stays hidden until 1', ok: !sidebarText.includes('1 STATUS') && ['2 FILES', '3 BRANCHES', '4 COMMITS', '5 STASH', '6 CONFLICTS', '7 TAGS', '8 REMOTES'].every(label => sidebarText.includes(label)), textSample: sidebarText.slice(0, 1200) });
     checks.push({ name: 'No noisy focus footer in LGVS panels', ok: !/Focus:\s+LG panel/i.test(sidebarText), textSample: sidebarText.slice(-800) });
     checks.push({ name: 'Right chat / secondary side bar stays closed in screenshots', ok: !/CHAT\s+Build with Agent/i.test(sidebarText), textSample: sidebarText.slice(-800) });
+
+    if (useVim && process.env.LGVS_DOGFOOD_FAST_VIM_ESCAPE) {
+      await key(Input, '2');
+      await sleep(STEP_DELAY);
+      await key(Input, 'Enter');
+      await sleep(1800);
+      const targetedHunkText = await waitFor(async () => {
+        const text = await pageText(Runtime);
+        return /-- (HUNK|LINE)/.test(text) ? text : null;
+      }, 6000, 300, 'targeted Vim HUNK entry');
+      evidence.push({ step: 'targeted-vim-enter-hunk', screenshot: await screenshot(Page, 'targeted-vim-enter-hunk'), status: status(fixture), textSample: targetedHunkText.slice(0, 3000) });
+
+      await key(Input, 'e');
+      await sleep(1200);
+      const vimEditProbe = 'vimprobe';
+      await key(Input, 'i');
+      await sleep(500);
+      await typePhysical(Input, vimEditProbe);
+      await sleep(500);
+      const targetedInsertText = (await pageText(Runtime)).slice(0, 3000);
+      await key(Input, 'Escape');
+      await sleep(STEP_DELAY);
+      const targetedEscapeText = (await pageText(Runtime)).slice(0, 3000);
+      await key(Input, 'x');
+      await sleep(500);
+      const targetedNormalText = (await pageText(Runtime)).slice(0, 3000);
+      const readmeAfterTargetedVimProbe = fs.readFileSync(path.join(fixture, 'README.md'), 'utf8');
+      evidence.push({ step: 'targeted-vim-escape-real-editor', screenshot: await screenshot(Page, 'targeted-vim-escape-real-editor'), status: status(fixture), textSample: targetedNormalText, readme: readmeAfterTargetedVimProbe });
+      checks.push({ name: 'Targeted VSCodeVim physical Esc leaves Insert after LGVS e handoff', ok: /-- INSERT --/.test(targetedInsertText) && /-- NORMAL --/.test(targetedEscapeText) && /vimprob/.test(targetedNormalText) && !/vimprobex/.test(targetedNormalText) && !/-- (EDIT|HUNK).*LG --/.test(targetedNormalText), textSample: targetedNormalText.slice(-1200), readme: readmeAfterTargetedVimProbe });
+      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
+      const report = { ok: true, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, processOutput: procOut.slice(-4000), targeted: 'vim-escape' };
+      write(REPORT_JSON, JSON.stringify(report, null, 2));
+      console.log(JSON.stringify(report, null, 2));
+      return;
+    }
 
     // Smoke the lazygit panel jumps before entering the editor flow.
     for (const panelKey of ['1', '2', '3', '4', '5', '6', '7', '8']) {
@@ -437,23 +478,25 @@ async function pageText(Runtime) {
     await sleep(STEP_DELAY);
     evidence.push({ step: 'enter-edit-mode', screenshot: await screenshot(Page, '08-edit-mode'), status: status(fixture) });
     if (useVim) {
-      // In LGVS EDIT mode the hunk keymap is closed. VSCodeVim must behave normally:
-      // i enters insert, Escape leaves insert, and the following x must be a Vim command,
-      // not literal typed text.
-      const vimEditProbe = 'VIMEDITPROBE';
+      // Real regression: use physical key events, not CDP insertText. insertText bypasses
+      // VSCodeVim's mode state and gives a fake green test. After LGVS hands off with e,
+      // i must enter Vim Insert, Escape must return Normal, and x must be a Normal-mode
+      // delete command rather than a literal typed x.
+      const vimEditProbe = 'vimprobe';
       await key(Input, 'i');
       await sleep(500);
-      await typeText(Input, vimEditProbe);
+      await typePhysical(Input, vimEditProbe);
       await sleep(500);
-      const afterVimInsertText = (await pageText(Runtime)).slice(0, 3000);
+      const afterPhysicalVimInsertText = (await pageText(Runtime)).slice(0, 3000);
       await key(Input, 'Escape');
       await sleep(STEP_DELAY);
-      const afterVimEscapeInEditText = (await pageText(Runtime)).slice(0, 3000);
+      const afterPhysicalVimEscapeText = (await pageText(Runtime)).slice(0, 3000);
       await key(Input, 'x');
       await sleep(500);
-      const afterVimNormalXText = (await pageText(Runtime)).slice(0, 3000);
-      evidence.push({ step: 'vim-escape-in-edit-mode', screenshot: await screenshot(Page, '08-vim-escape-in-edit-mode'), status: status(fixture), textSample: afterVimNormalXText });
-      checks.push({ name: 'VSCodeVim stays in control when LGVS HUNK is closed in EDIT mode', ok: /-- NORMAL --/.test(afterVimEscapeInEditText) && !afterVimNormalXText.includes(`${vimEditProbe}x`), textSample: afterVimNormalXText.slice(-1200) });
+      const afterPhysicalVimNormalXText = (await pageText(Runtime)).slice(0, 3000);
+      const readmeAfterPhysicalVimProbe = fs.readFileSync(path.join(fixture, 'README.md'), 'utf8');
+      evidence.push({ step: 'vim-physical-escape-in-real-editor', screenshot: await screenshot(Page, '08-vim-physical-escape-in-real-editor'), status: status(fixture), textSample: afterPhysicalVimNormalXText, readme: readmeAfterPhysicalVimProbe });
+      checks.push({ name: 'VSCodeVim physical Esc leaves Insert after LGVS opens the real editor', ok: /-- INSERT --/.test(afterPhysicalVimInsertText) && /-- NORMAL --/.test(afterPhysicalVimEscapeText) && readmeAfterPhysicalVimProbe.includes(vimEditProbe) && !readmeAfterPhysicalVimProbe.includes(`${vimEditProbe}x`) && !/-- (EDIT|HUNK).*LG --/.test(afterPhysicalVimNormalXText), textSample: afterPhysicalVimNormalXText.slice(-1200), readme: readmeAfterPhysicalVimProbe });
     }
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
     await sleep(STEP_DELAY);

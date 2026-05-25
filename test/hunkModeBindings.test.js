@@ -47,6 +47,8 @@ for (const command of ['lazygitvs.editorHunkToggleMode', 'lazygitvs.editorHunkTo
 assert(!keybindings.some(binding => binding.command === 'lazygitvs.editorHunkReturn'), 'No keyboard shortcut may jump from Vim/editor mode back into HUNK/LINE; re-enter via LGVS panels only');
 assert(!keybindings.some(binding => binding.command === 'lazygitvs.editorEditEscape'), 'Escape belongs to Vim/VS Code once LGVS has handed off to editor mode');
 
+assert(extension.includes("setContext', 'vim.active', active ? false : true"), 'HUNK/LINE must temporarily disable VSCodeVim so LGVS hunk keys win, then restore Vim on exit without brittle detection');
+assert(extension.includes("setContext', 'vim.active', true"), 'releaseEditorOwnership must restore Vim context so Esc leaves Insert after LGVS disappears');
 assert(extension.includes("private async releaseEditorOwnership()"), 'normal open/edit must have one hard release path that makes LGVS disappear from the editor');
 assert(extension.includes("this.modeStatusBarItem.hide();"), 'normal open/edit must hide the LGVS mode status bar instead of showing EDIT/LG state');
 assert(extension.includes("await this.releaseEditorOwnership();\n    if (filePath) await editPath(filePath);"), 'e from HUNK must release all LGVS editor ownership before opening the real file editor');

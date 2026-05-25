@@ -677,6 +677,7 @@
     "dogfood:ui": "node scripts/dogfood-ui.js",
     "dogfood:ui:no-vim": "LGVS_DOGFOOD_VARIANT=no-vim node scripts/dogfood-ui.js",
     "dogfood:ui:vim": "LGVS_DOGFOOD_VARIANT=vim node scripts/dogfood-ui.js",
+    "dogfood:ui:vim-escape": "LGVS_DOGFOOD_VARIANT=vim LGVS_DOGFOOD_FAST_VIM_ESCAPE=1 node scripts/dogfood-ui.js",
     "build": "npm run compile && npm run package",
     "package": "LGVS_VSIX_OUT_DIR=../releases/LazyGitVS npm run package:vsix",
     "package:vsix": "node scripts/package-vsix.js",

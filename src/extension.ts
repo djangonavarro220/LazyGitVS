@@ -847,6 +847,11 @@ class LazyGitVSController {
     this.setFocusArea(active ? 'editor-hunk' : this.ownsModeStatus ? 'panel' : 'viewer');
     await vscode.commands.executeCommand('setContext', 'lazygitvs.editorHunkMode', active);
     await vscode.commands.executeCommand('setContext', 'lazygitvs.editorEditMode', false);
+    // VSCodeVim owns printable keys in real editors. LGVS HUNK/LINE is a temporary
+    // modal editor layer, so disable Vim only while that layer is active and restore
+    // it on every exit path. No extension detection: the context is harmless if Vim
+    // is absent, and brittle if we guess.
+    await vscode.commands.executeCommand('setContext', 'vim.active', active ? false : true);
     if (!active) this.clearEditorHunkDecorations();
     else this.updateEditorHunkDecorations();
     this.updateModeStatusBar();
@@ -863,6 +868,7 @@ class LazyGitVSController {
     await vscode.commands.executeCommand('setContext', 'lazygitvs.editorHunkMode', false);
     await vscode.commands.executeCommand('setContext', 'lazygitvs.editorEditMode', false);
     await vscode.commands.executeCommand('setContext', 'lazygitvs.keyboardMode', false);
+    await vscode.commands.executeCommand('setContext', 'vim.active', true);
     this.clearEditorHunkDecorations();
     this.modeStatusBarItem.hide();
     this.suppressWebviewAutoFocusUntil = Date.now() + 2500;
