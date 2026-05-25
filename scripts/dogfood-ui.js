@@ -175,8 +175,8 @@ async function cdpConnect() {
 }
 async function key(Input, key, opts = {}) {
   const mods = (opts.ctrl ? 2 : 0) | (opts.shift ? 8 : 0) | (opts.alt ? 1 : 0) | (opts.meta ? 4 : 0);
-  const codeMap = { Enter: 'Enter', Escape: 'Escape', Tab: 'Tab', Backspace: 'Backspace', ArrowDown: 'ArrowDown', ArrowUp: 'ArrowUp', Home: 'Home', End: 'End', Space: 'Space', '1': 'Digit1', '2': 'Digit2', '3': 'Digit3', '4': 'Digit4', '5': 'Digit5', '6': 'Digit6', '7': 'Digit7', '8': 'Digit8', '9': 'Digit9', '0': 'Digit0' };
-  const vkeyMap = { Enter: 13, Escape: 27, Tab: 9, Backspace: 8, ArrowDown: 40, ArrowUp: 38, Home: 36, End: 35, Space: 32 };
+  const codeMap = { Enter: 'Enter', Escape: 'Escape', Tab: 'Tab', Backspace: 'Backspace', ArrowDown: 'ArrowDown', ArrowUp: 'ArrowUp', Home: 'Home', End: 'End', F1: 'F1', Space: 'Space', '1': 'Digit1', '2': 'Digit2', '3': 'Digit3', '4': 'Digit4', '5': 'Digit5', '6': 'Digit6', '7': 'Digit7', '8': 'Digit8', '9': 'Digit9', '0': 'Digit0' };
+  const vkeyMap = { Enter: 13, Escape: 27, Tab: 9, Backspace: 8, ArrowDown: 40, ArrowUp: 38, Home: 36, End: 35, F1: 112, Space: 32 };
   const code = codeMap[key] || (/^[a-z]$/i.test(key) ? `Key${key.toUpperCase()}` : key);
   const text = !opts.ctrl && !opts.alt && !opts.meta && key.length === 1 ? (opts.shift ? key.toUpperCase() : key) : undefined;
   const virtualKey = vkeyMap[key] ?? (/^[a-z]$/i.test(key) ? key.toUpperCase().charCodeAt(0) : /^[0-9]$/.test(key) ? key.charCodeAt(0) : undefined);
@@ -185,7 +185,7 @@ async function key(Input, key, opts = {}) {
   await Input.dispatchKeyEvent({ type: 'keyUp', ...event });
 }
 async function chord(Input, keys) {
-  if (keys === 'ctrl+shift+p') return key(Input, 'P', { ctrl: true, shift: true });
+  if (keys === 'ctrl+shift+p') return key(Input, 'p', { ctrl: true, shift: true });
   if (keys === 'ctrl+enter') return key(Input, 'Enter', { ctrl: true });
   if (keys === 'ctrl+1') return key(Input, '1', { ctrl: true });
   throw new Error(`unknown chord ${keys}`);
@@ -223,6 +223,10 @@ async function pageText(Runtime) {
 async function lazyGitPreviewTabLabels(Runtime) {
   const r = await Runtime.evaluate({ expression: `Array.from(document.querySelectorAll('.tabs-container .tab, .tabs-and-actions-container .tab, .tab')).map(el => el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '').map(s => s.replace(/\s+/g, ' ').trim()).filter(s => /^LazyGitVS:/.test(s) || s.includes(' LazyGitVS:'))`, returnByValue: true });
   return Array.from(new Set(r.result.value || []));
+}
+async function quickInputState(Runtime) {
+  const r = await Runtime.evaluate({ expression: `(() => { const widget = document.querySelector('.quick-input-widget'); const input = widget?.querySelector('input'); const style = widget ? getComputedStyle(widget) : undefined; return { visible: !!widget && style?.display !== 'none' && style?.visibility !== 'hidden' && widget.getBoundingClientRect().height > 0, text: input?.value || '', placeholder: input?.getAttribute('aria-label') || input?.getAttribute('placeholder') || '' }; })()`, returnByValue: true });
+  return r.result.value || { visible: false, text: '', placeholder: '' };
 }
 
 (async () => {
@@ -299,6 +303,21 @@ async function lazyGitPreviewTabLabels(Runtime) {
     checks.push({ name: 'SCM sidebar exposes default LazyGitVS panels while Status stays hidden until 1', ok: !sidebarText.includes('1 STATUS') && ['2 FILES', '3 BRANCHES', '4 COMMITS', '5 STASH', '6 CONFLICTS', '7 TAGS', '8 REMOTES'].every(label => sidebarText.includes(label)), textSample: sidebarText.slice(0, 1200) });
     checks.push({ name: 'No noisy focus footer in LGVS panels', ok: !/Focus:\s+LG panel/i.test(sidebarText), textSample: sidebarText.slice(-800) });
     checks.push({ name: 'Right chat / secondary side bar stays closed in screenshots', ok: !/CHAT\s+Build with Agent/i.test(sidebarText), textSample: sidebarText.slice(-800) });
+
+    if (process.env.LGVS_DOGFOOD_FAST_COMMAND_PALETTE) {
+      await chord(Input, 'ctrl+shift+p');
+      await sleep(300);
+      const quickAfterOpen = await quickInputState(Runtime);
+      await typeText(Input, 'LazyGitVS');
+      await sleep(450);
+      const quickAfterType = await quickInputState(Runtime);
+      evidence.push({ step: 'command-palette-from-lgvs-sidebar', screenshot: await screenshot(Page, '02-command-palette-from-lgvs-sidebar'), quickAfterOpen, quickAfterType });
+      checks.push({ name: 'Command Palette stays open when invoked from LGVS sidebar focus', ok: quickAfterOpen.visible && quickAfterType.visible && /LazyGitVS/i.test(quickAfterType.text), quickAfterOpen, quickAfterType });
+      await key(Input, 'Escape');
+      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
+      fs.writeFileSync(path.join(OUT, `last-run-${VARIANT_NAME}.json`), JSON.stringify({ ok: true, started, finished: new Date().toISOString(), fixture, variant: VARIANT_NAME, useVim, checks, evidence }, null, 2));
+      return;
+    }
 
     if (useVim && process.env.LGVS_DOGFOOD_FAST_VIM_ESCAPE) {
       await key(Input, '2');

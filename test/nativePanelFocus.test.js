@@ -32,7 +32,8 @@ assert(!extension.includes("executeCommand('workbench.action.openView', viewId)"
 assert(extension.includes('if (!this.visible()) {\n        try { await vscode.commands.executeCommand(\'workbench.view.scm\'); }'), 'SCM container focus should only run when no LGVS view is already visible, otherwise panel jumps flash VS Code original SCM');
 assert(extension.includes('this.views.get(panel)?.show(false);'), 'panel reveal should use WebviewView.show(false) for the contributed view');
 assert(extension.includes('`${viewId}.focus`, { preserveFocus: false }'), 'panel reveal should focus the target contributed view');
-assert(extension.includes('Date.now() > this.suppressWebviewAutoFocusUntil'), 'webview bootstrap must remain guarded during editor/HUNK transitions');
+assert(extension.includes('Date.now() <= this.suppressWebviewAutoFocusUntil'), 'webview bootstrap must remain guarded during editor/HUNK transitions');
+assert(!extension.includes('setTimeout(() => { void reveal(); }'), 'panel reveal must not schedule delayed focus retries that close Command Palette/QuickPick after it opens');
 assert(extension.includes("await this.releaseEditorOwnership();\n    if (filePath) await editPath(filePath);"), 'EDIT handoff must make LGVS disappear before handing the real editor to VS Code/Vim');
 assert(extension.includes("await this.releaseEditorOwnership(); await editPath(file);"), 'o/e file open must use the same hard release path as HUNK edit handoff');
 const broadKeyboardModeEditorBindings = pkg.contributes.keybindings.filter(binding => String(binding.when) === 'lazygitvs.keyboardMode && editorTextFocus');

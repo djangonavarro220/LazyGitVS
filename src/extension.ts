@@ -573,6 +573,7 @@ class LazyGitVSController {
   private lazygitGit = cloneGitConfig();
   private lazygitConfigFiles: string[] = [];
   private suppressWebviewAutoFocusUntil = 0;
+  private pendingWebviewAutoFocus = false;
   private defaultPanelsRevealed = false;
 
   constructor(private readonly context: vscode.ExtensionContext) {
@@ -617,6 +618,7 @@ class LazyGitVSController {
     view.webview.onDidReceiveMessage(async msg => {
       try {
         if (msg.type === 'focusArea') this.setFocusArea(msg.area === 'panel' ? 'panel' : 'none');
+        if (msg.type === 'commandPalette') await this.openCommandPalette();
         if (msg.type === 'move') await this.move(panel, msg.delta);
         if (msg.type === 'moveTo') await this.moveTo(panel, msg.position);
         if (msg.type === 'rangeToggle') await this.toggleRange(panel);
@@ -668,7 +670,7 @@ class LazyGitVSController {
       this.context.subscriptions.push({ dispose: () => { if (this.intervalTimer) clearInterval(this.intervalTimer); } });
     }
     this.render(panel);
-    this.refresh(true).catch(err => vscode.window.showErrorMessage(err.message));
+    this.refresh(false).catch(err => vscode.window.showErrorMessage(err.message));
   }
 
   attachStatusTree(provider: StatusTreeProvider, tree: vscode.TreeView<vscode.TreeItem>) {
@@ -793,7 +795,7 @@ class LazyGitVSController {
     void vscode.commands.executeCommand('setContext', 'lazygitvs.keyboardMode', true);
     this.activePanel = panel;
     await this.updateActiveViewContext();
-    this.suppressWebviewAutoFocusUntil = 0;
+    this.requestWebviewAutoFocus();
     this.persistNavigationState();
     this.updateModeStatusBar();
     if (panel === 'status') await this.refresh(false).catch(() => undefined);
@@ -801,6 +803,7 @@ class LazyGitVSController {
     await this.revealPanelView(panel);
     if (panel === 'status') await this.revealCurrentStatusRepo().catch(() => undefined);
     await this.openCurrent(panel, true).catch(() => undefined);
+    this.requestWebviewAutoFocus();
     this.renderAll();
     await this.revealPanelView(panel);
     if (panel === 'status') await this.revealCurrentStatusRepo().catch(() => undefined);
@@ -813,7 +816,7 @@ class LazyGitVSController {
     await this.updateActiveViewContext();
     this.setFocusArea('panel');
     void vscode.commands.executeCommand('setContext', 'lazygitvs.keyboardMode', true);
-    this.suppressWebviewAutoFocusUntil = 0;
+    this.requestWebviewAutoFocus();
     this.persistNavigationState();
     this.updateModeStatusBar();
     this.renderAll();
@@ -830,8 +833,6 @@ class LazyGitVSController {
       try { await vscode.commands.executeCommand(`${viewId}.focus`, { preserveFocus: false }); } catch { /* ignore */ }
     };
     await reveal();
-    for (const delay of [80, 180]) setTimeout(() => { void reveal(); }, delay);
-    setTimeout(() => { this.suppressWebviewAutoFocusUntil = 0; }, 260);
   }
 
   private async revealCurrentStatusRepo() {
@@ -839,6 +840,27 @@ class LazyGitVSController {
     const items = this.statusTreeItems();
     const item = items.find(item => item.id === activeWorkspaceRoot) ?? items[0];
     if (item) await this.statusTree?.reveal(item, { select: true, focus: true }).then(undefined, () => undefined);
+  }
+
+  private requestWebviewAutoFocus() {
+    this.pendingWebviewAutoFocus = true;
+    this.suppressWebviewAutoFocusUntil = 0;
+  }
+
+  private consumeWebviewAutoFocus(viewPanel: ViewPanel): boolean {
+    if (!this.pendingWebviewAutoFocus) return false;
+    if (this.activeViewPanel() !== viewPanel) return false;
+    if (this.editorHunkMode || this.editorEditMode) return false;
+    if (Date.now() <= this.suppressWebviewAutoFocusUntil) return false;
+    this.pendingWebviewAutoFocus = false;
+    return true;
+  }
+
+  private async openCommandPalette() {
+    this.pendingWebviewAutoFocus = false;
+    this.suppressWebviewAutoFocusUntil = Date.now() + 2500;
+    this.setFocusArea('none');
+    await vscode.commands.executeCommand('workbench.action.showCommands');
   }
 
   private visible() { return Array.from(this.views.values()).some(view => view.visible) || !!this.statusTree?.visible; }
@@ -1866,6 +1888,7 @@ class LazyGitVSController {
     const panel = this.panelForView(viewPanel);
     const title = this.title(panel);
     const isActiveView = this.activeViewPanel() === viewPanel;
+    const shouldFocus = this.consumeWebviewAutoFocus(viewPanel);
     const showPanelSelection = isActiveView && this.focusArea === 'panel';
     const rows = this.rows(panel, showPanelSelection);
     const footer = '';
@@ -1880,7 +1903,7 @@ class LazyGitVSController {
       .status-pair{display:grid;grid-template-columns:12px 12px;column-gap:2px;align-items:center;font-family:var(--vscode-editor-font-family);font-size:10px}.slot{display:inline-grid;place-items:center;width:12px;height:14px;border-radius:2px;font-size:10px;font-weight:700;line-height:1;box-sizing:border-box;color:var(--vscode-button-foreground,#fff)}.slot.empty{visibility:hidden;background:transparent;border-color:transparent;box-shadow:none}.slot.index{background:var(--vscode-gitDecoration-addedResourceForeground,#6a9955)}.slot.worktree{background:var(--vscode-gitDecoration-modifiedResourceForeground,#e06c75)}.slot.deleted,.slot.conflict{background:var(--vscode-errorForeground,#f85149)}.slot.untracked{background:var(--vscode-gitDecoration-untrackedResourceForeground,#d7ba7d);color:var(--vscode-sideBar-background,#1e1e1e)}.row.dir,.row.file.tree{grid-template-columns:7px minmax(0,1fr);}.tree-line{display:inline-flex;align-items:center;gap:2px;min-width:0;overflow:hidden;text-overflow:ellipsis;}.tree-indent{display:inline-block;flex:0 0 auto;width:var(--tree-indent,0ch)}.tree-name{overflow:hidden;text-overflow:ellipsis;}.tree-arrow{color:var(--vscode-descriptionForeground);}.status-dashboard{padding:7px 9px 10px;display:flex;flex-direction:column;gap:5px;min-width:0}.lg-logo{font-family:var(--vscode-editor-font-family);font-size:20px;font-weight:800;letter-spacing:.5px;color:var(--vscode-foreground);line-height:1.05}.lg-sub{color:var(--vscode-descriptionForeground);font-size:11px;margin-bottom:4px}.lg-link{display:flex;align-items:center;gap:5px;min-height:19px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.lg-link span{overflow:hidden;text-overflow:ellipsis}.lg-repo{margin-top:6px;padding-top:6px;border-top:1px solid var(--vscode-sideBarSectionHeader-border);color:var(--vscode-descriptionForeground);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.current .path,.current .status{font-weight:700}.danger .status{color:var(--vscode-errorForeground)}.hint{color:var(--vscode-descriptionForeground);font-size:11px;line-height:1.35;padding:4px 8px 5px;border-top:1px solid var(--vscode-sideBarSectionHeader-border);background:var(--vscode-sideBar-background);}kbd{font-family:var(--vscode-editor-font-family);font-size:10px;color:var(--vscode-keybindingLabel-foreground);background:var(--vscode-keybindingLabel-background);border:1px solid var(--vscode-keybindingLabel-border);border-bottom-color:var(--vscode-keybindingLabel-bottomBorder);border-radius:3px;padding:0 3px;margin-right:2px;}.statusline{color:var(--vscode-descriptionForeground);padding-top:3px;}
       .boom{position:absolute;inset:0;display:grid;place-items:center;background:color-mix(in srgb,var(--vscode-sideBar-background) 55%,transparent);z-index:5;pointer-events:none;}.bomb{font-size:46px;animation:bomb .45s ease-in forwards}.blast{position:absolute;font-size:76px;opacity:0;animation:blast .5s ease-out .35s forwards}@keyframes bomb{to{transform:scale(.35) rotate(20deg);opacity:0}}@keyframes blast{0%{transform:scale(.2);opacity:0}35%{opacity:1}100%{transform:scale(1.6);opacity:0}}
     </style></head><body tabindex="0"><div class="root ${this.lazygitGui.wrapLinesInStagingView ? 'wrap-staging' : ''}">${boom}<div class="title">${title}</div><div class="rows" role="listbox" aria-label="${escapeHtml(title)}">${rows}</div>${footer}</div><script nonce="${nonce}">
-      const vscode=acquireVsCodeApi(); const panel='${viewPanel}'; const shouldFocus=${isActiveView && !this.editorHunkMode && !this.editorEditMode && Date.now() > this.suppressWebviewAutoFocusUntil ? 'true' : 'false'}; function markPanelFocus(){vscode.postMessage({type:'focusArea',area:'panel'});} window.addEventListener('focus',markPanelFocus); document.body.addEventListener('focus',markPanelFocus); setTimeout(()=>{document.querySelector('.row.sel')?.scrollIntoView({block:'nearest'}); if(shouldFocus){ document.body.focus(); markPanelFocus(); }},0);
+      const vscode=acquireVsCodeApi(); const panel='${viewPanel}'; const shouldFocus=${shouldFocus ? 'true' : 'false'}; function markPanelFocus(){vscode.postMessage({type:'focusArea',area:'panel'});} window.addEventListener('focus',markPanelFocus); document.body.addEventListener('focus',markPanelFocus); setTimeout(()=>{document.querySelector('.row.sel')?.scrollIntoView({block:'nearest'}); if(shouldFocus){ document.body.focus(); markPanelFocus(); }},0);
       const keymap=${scriptJson(this.lazygitKeymap)};
       const panels={1:'status',2:'files',3:'branches',4:'commits',5:'stash',6:'conflicts',7:'tags',8:'remotes'};
       function norm(e){ let key=e.key; if(key===' ')key='<space>'; else if(key==='Enter')key='<enter>'; else if(key==='Escape')key='<esc>'; else if(key==='Tab')key=e.shiftKey?'<backtab>':'<tab>'; else if(key==='Backspace')key='<backspace>'; else if(key==='ArrowDown')key='<down>'; else if(key==='ArrowUp')key='<up>'; else if(key==='ArrowLeft')key='<left>'; else if(key==='ArrowRight')key='<right>'; const mods=[]; if(e.ctrlKey)mods.push('ctrl'); if(e.altKey)mods.push('alt'); if(e.metaKey)mods.push('meta'); return mods.length?'<'+mods.join('+')+'+'+String(key).replace(/^<|>$/g,'')+'>':key; }
@@ -1888,7 +1911,7 @@ class LazyGitVSController {
       function hit(e,...bindings){ const k=norm(e); return bindings.flat().filter(Boolean).some(b => keysEqual(String(b),k)); }
       document.querySelector('.rows')?.addEventListener('click',e=>{ const row=e.target.closest('.row[data-index]'); if(!row)return; document.body.focus(); vscode.postMessage({type:'select',index:Number(row.dataset.index)}); });
       document.querySelector('.rows')?.addEventListener('dblclick',e=>{ const row=e.target.closest('.row[data-index]'); if(!row)return; document.body.focus(); vscode.postMessage({type:'select',index:Number(row.dataset.index)}); vscode.postMessage({type:'enter'}); });
-      window.addEventListener('keydown',e=>{ const u=keymap.universal, f=keymap.files, m=keymap.main; const jump=Array.isArray(u.jumpToBlock)?u.jumpToBlock:[]; const jumpIndex=jump.indexOf(e.key); const jumpPanel = jumpIndex>=0 ? panels[String(jumpIndex+1)] : panels[e.key]; if(jumpPanel){e.preventDefault();vscode.postMessage({type:'switchPanel',panel:jumpPanel});return;}
+      window.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.shiftKey&&String(e.key).toLowerCase()==='p'){e.preventDefault();vscode.postMessage({type:'commandPalette'});return;} if(e.key==='F1'){e.preventDefault();vscode.postMessage({type:'commandPalette'});return;} const u=keymap.universal, f=keymap.files, m=keymap.main; const jump=Array.isArray(u.jumpToBlock)?u.jumpToBlock:[]; const jumpIndex=jump.indexOf(e.key); const jumpPanel = jumpIndex>=0 ? panels[String(jumpIndex+1)] : panels[e.key]; if(jumpPanel){e.preventDefault();vscode.postMessage({type:'switchPanel',panel:jumpPanel});return;}
         if(e.key==='?'){e.preventDefault();vscode.postMessage({type:'helpMenu'});return;} if(hit(e,u.focusMainView)){e.preventDefault();vscode.postMessage({type:'focusMainView'});return;} if(e.shiftKey&&e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:1});return;} if(e.shiftKey&&e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:-1});return;} if(e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;} if(hit(e,u.prevPage)){e.preventDefault();vscode.postMessage({type:'move',delta:-10});return;} if(hit(e,u.nextPage)){e.preventDefault();vscode.postMessage({type:'move',delta:10});return;} if(hit(e,u.gotoTop,u.gotoTopAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'top'});return;} if(hit(e,u.gotoBottom,u.gotoBottomAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'bottom'});return;} if(hit(e,u.toggleRangeSelect)){e.preventDefault();vscode.postMessage({type:'rangeToggle'});return;} if(hit(e,u.startSearch)){e.preventDefault();vscode.postMessage({type:'search'});return;} if(panel==='files'&&hit(e,f.openStatusFilter)){e.preventDefault();vscode.postMessage({type:'statusFilter'});return;} if(panel==='files'&&hit(e,f.toggleTreeView)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='files'&&hit(e,f.collapseAll)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='files'&&hit(e,f.expandAll)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(hit(e,u.nextItem,u.nextItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(hit(e,u.prevItem,u.prevItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;}
         if(hit(e,u.diffingMenu,u.diffingMenuAlt)){e.preventDefault();vscode.postMessage({type:'diffingMenu'});return;} if(hit(e,u.nextBlock,u.nextBlockAlt,u.nextBlockAlt2)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:1});return;} if(hit(e,u.prevBlock,u.prevBlockAlt,u.prevBlockAlt2)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:-1});return;}
         const c=keymap.commits; if(panel==='commits'&&hit(e,c.checkoutCommit,c.copyCommitAttributeToClipboard,c.newBranch,c.renameCommit,c.amendToCommit,c.createFixupCommit,c.markCommitAsFixup,c.cherryPickCopy,c.pasteCommits,c.revertCommit,c.createTag,c.tagCommit,c.viewResetOptions,c.openInBrowser,c.openLogMenu)){e.preventDefault();vscode.postMessage({type:'commitAction',key:norm(e)});return;}
