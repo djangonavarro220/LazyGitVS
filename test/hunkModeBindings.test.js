@@ -53,6 +53,17 @@ assert(extension.includes("private async releaseEditorOwnership()"), 'normal ope
 assert(extension.includes("this.modeStatusBarItem.hide();"), 'normal open/edit must hide the LGVS mode status bar instead of showing EDIT/LG state');
 assert(extension.includes("await this.releaseEditorOwnership();\n    if (filePath) await editPath(filePath);"), 'e from HUNK must release all LGVS editor ownership before opening the real file editor');
 assert(extension.includes("await this.releaseEditorOwnership(); await editPath(file);"), 'o/e from Files must also release LGVS instead of leaving viewer/status ownership behind');
+const hunkExitBody = extension.match(/async exitEditorHunkMode\(\) \{([\s\S]*?)\n  \}\n  private selectNearestLineToEditorLine/)[1];
+assert(hunkExitBody.includes("this.activePanel = 'files';"), 'Esc from editor HUNK/LINE must return workflow context to 2 Files');
+assert(extension.includes('private selectFilePathInFilesPanel(filePath: string | undefined)'), 'Files selection restore must use the opened editor file path, not a stale row index');
+assert(hunkExitBody.includes('const filePath = this.editorModeFilePath ?? this.currentFile()?.path;'), 'Esc must capture the editor HUNK file before setEditorHunkMode clears editorModeFilePath');
+assert(hunkExitBody.includes('this.selectFilePathInFilesPanel(filePath);'), 'Esc must visually reselect the file that entered HUNK/LINE mode');
+assert(hunkExitBody.includes('this.ownsModeStatus = true;'), 'Esc from editor HUNK/LINE must make LGVS own panel selection again');
+assert(hunkExitBody.includes("this.setFocusArea('panel');"), 'Esc from editor HUNK/LINE must repaint the Files selected row as active');
+assert(hunkExitBody.indexOf('this.ownsModeStatus = true;') < hunkExitBody.indexOf('await this.setEditorHunkMode(false);'), 'Esc must restore panel ownership before clearing HUNK mode so setEditorHunkMode does not mark focus as viewer');
+assert(hunkExitBody.includes('await this.revealPanelView(\'files\');'), 'Esc from editor HUNK/LINE must reveal/refocus the Files panel after repainting selection');
+assert(fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8').includes('hunk-escape-files-selection-restore'), 'Dogfood must cover Esc from editor HUNK/LINE repainting 2 Files panel ownership');
+
 const editHandoffBody = extension.match(/async enterEditorEditMode\(\) \{([\s\S]*?)\n  \}\n  async editorHunkNoop/)[1];
 assert(!editHandoffBody.includes('setVimKeyCaptureSuppressed'), 'e handoff must not detect or manipulate VSCodeVim; after release the editor belongs to VS Code/Vim');
 assert(!editHandoffBody.includes("setContext', 'vim.active'"), 'e handoff must not set vim.active; LGVS should be invisible after normal edit handoff');

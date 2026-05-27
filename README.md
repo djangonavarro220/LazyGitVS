@@ -23,7 +23,7 @@ It is **not** a terminal wrapper. It uses VS Code-native surfaces where they are
   <img src="docs/assets/readme-hunk-mode.png" alt="LazyGitVS showing compact SCM sidebar panels and editor HUNK mode in a full VS Code window" />
 </p>
 
-Current preview: **0.1.97**
+Current preview: **0.1.98**
 
 ## Why this exists
 
@@ -54,7 +54,7 @@ Search: LazyGitVS
 From a downloaded VSIX:
 
 ```bash
-code --install-extension lazygitvs-0.1.97.vsix --force
+code --install-extension lazygitvs-0.1.98.vsix --force
 ```
 
 ## Requirements
@@ -229,7 +229,7 @@ Default local dogfood builds write to:
 Portable CI/release builds write to:
 
 ```text
-dist/lazygitvs-0.1.97.vsix
+dist/lazygitvs-0.1.98.vsix
 ```
 
 ## CI and releases
@@ -245,8 +245,8 @@ GitHub Actions runs on pushes and pull requests:
 Version tags publish release artifacts:
 
 ```bash
-git tag v0.1.97
-git push origin v0.1.97
+git tag v0.1.98
+git push origin v0.1.98
 ```
 
 The tag workflow creates a GitHub Release with the VSIX and publishes the same VSIX to the Visual Studio Marketplace. `VSCE_PAT` must be configured as a repository secret or the publish job fails loudly instead of pretending success.

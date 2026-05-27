@@ -491,6 +491,10 @@ async function quickInputState(Runtime) {
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
     await key(Input, '2');
     await sleep(STEP_DELAY);
+    await key(Input, 'Home');
+    await sleep(200);
+    await key(Input, 'ArrowDown');
+    await sleep(STEP_DELAY);
 
     // Return to Files and enter real editor HUNK mode.
     await key(Input, 'Enter');
@@ -499,6 +503,19 @@ async function quickInputState(Runtime) {
     evidence.push({ step: 'files-enter-editor-hunk', screenshot: await screenshot(Page, '03-files-enter-editor-hunk'), status: status(fixture), textSample: hunkText });
     checks.push({ name: 'Generated previews use named virtual documents, not Untitled buffers', ok: !/Untitled-\d+/.test(hunkText), textSample: hunkText.slice(0, 1000) });
     checks.push({ name: 'Right chat stays closed after entering editor/HUNK mode', ok: !/CHAT\s+Build with Agent/i.test(hunkText), textSample: hunkText.slice(-800) });
+
+    if (process.env.LGVS_DOGFOOD_FAST_HUNK_ESCAPE) {
+      await key(Input, 'a');
+      await sleep(STEP_DELAY);
+      await key(Input, 'Escape');
+      await sleep(STEP_DELAY);
+      const afterHunkEscapeText = (await pageText(Runtime)).slice(0, 3000);
+      evidence.push({ step: 'hunk-escape-files-selection-restore', screenshot: await screenshot(Page, '04-hunk-escape-files-selection-restore'), status: status(fixture), textSample: afterHunkEscapeText });
+      checks.push({ name: 'Esc from editor HUNK/LINE returns to 2 Files panel ownership', ok: /-- FILES · LG --/.test(afterHunkEscapeText) && !/-- (HUNK|LINE).* --/.test(afterHunkEscapeText), textSample: afterHunkEscapeText.slice(-1000) });
+      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
+      fs.writeFileSync(path.join(OUT, `last-run-${VARIANT_NAME}.json`), JSON.stringify({ ok: true, started, finished: new Date().toISOString(), fixture, variant: VARIANT_NAME, useVim, checks, evidence }, null, 2));
+      return;
+    }
 
     await key(Input, 'a');
     await sleep(STEP_DELAY);
@@ -541,9 +558,9 @@ async function quickInputState(Runtime) {
       await key(Input, 'x');
       await sleep(500);
       const afterPhysicalVimNormalXText = (await pageText(Runtime)).slice(0, 3000);
-      const readmeAfterPhysicalVimProbe = fs.readFileSync(path.join(fixture, 'README.md'), 'utf8');
-      evidence.push({ step: 'vim-physical-escape-in-real-editor', screenshot: await screenshot(Page, '08-vim-physical-escape-in-real-editor'), status: status(fixture), textSample: afterPhysicalVimNormalXText, readme: readmeAfterPhysicalVimProbe });
-      checks.push({ name: 'VSCodeVim physical Esc leaves Insert after LGVS opens the real editor', ok: /-- INSERT --/.test(afterPhysicalVimInsertText) && /-- NORMAL --/.test(afterPhysicalVimEscapeText) && readmeAfterPhysicalVimProbe.includes(vimEditProbe) && !readmeAfterPhysicalVimProbe.includes(`${vimEditProbe}x`) && !/-- (EDIT|HUNK).*LG --/.test(afterPhysicalVimNormalXText), textSample: afterPhysicalVimNormalXText.slice(-1200), readme: readmeAfterPhysicalVimProbe });
+      const normalModeDeletedLastProbeChar = afterPhysicalVimNormalXText.includes(vimEditProbe.slice(0, -1)) && !afterPhysicalVimNormalXText.includes(vimEditProbe) && !afterPhysicalVimNormalXText.includes(`${vimEditProbe}x`);
+      evidence.push({ step: 'vim-physical-escape-in-real-editor', screenshot: await screenshot(Page, '08-vim-physical-escape-in-real-editor'), status: status(fixture), textSample: afterPhysicalVimNormalXText });
+      checks.push({ name: 'VSCodeVim physical Esc leaves Insert after LGVS opens the real editor', ok: /-- INSERT --/.test(afterPhysicalVimInsertText) && /-- NORMAL --/.test(afterPhysicalVimEscapeText) && normalModeDeletedLastProbeChar && !/-- (EDIT|HUNK).*LG --/.test(afterPhysicalVimNormalXText), textSample: afterPhysicalVimNormalXText.slice(-1200) });
     }
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
     await sleep(STEP_DELAY);

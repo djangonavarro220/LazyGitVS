@@ -1050,6 +1050,19 @@ class LazyGitVSController {
     return rows;
   }
   private currentFileTreeRow(): FileTreeRow | undefined { return this.fileTreeRows()[this.selected]; }
+  private filesUnderFileTreeDir(dirPath: string): ChangedFile[] { return this.filteredFiles().filter(file => file.path === dirPath || file.path.startsWith(`${dirPath}/`)); }
+  private selectFilePathInFilesPanel(filePath: string | undefined) {
+    if (!filePath) return;
+    let rows = this.fileTreeRows();
+    let index = rows.findIndex(row => row.kind === 'file' && row.file.path === filePath);
+    if (index < 0) {
+      const parts = filePath.split('/');
+      for (let i = 1; i < parts.length; i++) this.collapsedFileDirs.delete(parts.slice(0, i).join('/'));
+      rows = this.fileTreeRows();
+      index = rows.findIndex(row => row.kind === 'file' && row.file.path === filePath);
+    }
+    if (index >= 0) this.selected = index;
+  }
   private allFileTreeDirs(): string[] { return Array.from(new Set(this.filteredFiles().flatMap(file => file.path.split('/').slice(0, -1).map((_part, index, parts) => file.path.split('/').slice(0, index + 1).join('/'))))).filter(Boolean); }
   private async toggleCurrentFileTreeNode() {
     const row = this.currentFileTreeRow();
@@ -1169,6 +1182,8 @@ class LazyGitVSController {
     this.updateModeStatusBar();
     if (panel === 'hunks') { const h = this.hunks[this.hunkSelected]; if (!h) return; if (this.hunkSelectionMode === 'line') { const line = hunkSelectableLineIndexes(h)[this.hunkLineSelected]; if (line === undefined) return; await applyLine(h, line); } else await applyHunk(h); await this.loadHunks(false); await this.refresh(true); return; }
     if (panel === 'files') {
+      const row = this.currentFileTreeRow();
+      if (row?.kind === 'dir') { const files = this.filesUnderFileTreeDir(row.path); if (!files.length) return; await toggleStageSelected(files); await this.refresh(true); return; }
       const ranged = Array.from(this.fileRangeSelected).map(i => this.fileTreeRows()[i]?.file).filter((file): file is ChangedFile => !!file);
       if (ranged.length > 1) { await toggleStageSelected(ranged); this.fileRangeAnchor = undefined; this.fileRangeSelected.clear(); await this.refresh(true); return; }
       const f = this.currentFile(); if (!f) return; await toggleStage(f); await this.refresh(true);
@@ -1624,11 +1639,28 @@ class LazyGitVSController {
     if (editor) await vscode.window.showTextDocument(editor.document, editor.viewColumn ?? vscode.ViewColumn.Active, false);
   }
   async exitEditorHunkMode() {
-    await this.setEditorHunkMode(false);
+    const filePath = this.editorModeFilePath ?? this.currentFile()?.path;
     this.activePanel = 'files';
+    this.ownsModeStatus = true;
+    this.setFocusArea('panel');
+    await this.setEditorHunkMode(false);
+    this.selectFilePathInFilesPanel(filePath);
+    await this.updateActiveViewContext();
+    this.requestWebviewAutoFocus();
     this.statusLine = '';
     this.renderAll();
-    try { await vscode.commands.executeCommand(`${VIEW_IDS.files}.focus`); } catch { /* ignore */ }
+    await this.revealPanelView('files');
+    this.ownsModeStatus = true;
+    this.setFocusArea('panel');
+    this.requestWebviewAutoFocus();
+    this.renderAll();
+    setTimeout(() => {
+      if (this.editorHunkMode || this.activePanel !== 'files') return;
+      this.ownsModeStatus = true;
+      this.setFocusArea('panel');
+      this.requestWebviewAutoFocus();
+      this.renderAll();
+    }, 120);
   }
   private selectNearestLineToEditorLine(targetLine: number) {
     const h = this.hunks[this.hunkSelected];

@@ -2,6 +2,12 @@
 
 All notable changes to LazyGitVS will be documented here.
 
+## 0.1.98 - Folder staging and HUNK escape polish
+
+- Files tree directory rows now support `Space` to stage/unstage all changed files under the selected folder.
+- Folder staging is scoped to the selected directory path; it does not fall back to repo-wide `git add -A`.
+- `Esc` from editor HUNK/LINE mode restores the visual selection in `2 Files` to the opened file instead of leaving a ghost focus state.
+
 ## 0.1.97 - README screenshot and default panel layout
 
 - `1 Status` now defaults collapsed while the main LGVS panels open visibly in the SCM sidebar.

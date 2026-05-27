@@ -61,9 +61,12 @@ test('LGVS source keeps explicit stage/unstage commands for common git states', 
   assert.match(extensionSource, /\['apply', '--cached', '--reverse', '--whitespace=nowarn', '--recount'\]/, 'staged hunk/line unstage must reverse-apply to the index');
 });
 
-test('range stage/unstage is scoped to selected files, never repo-wide', () => {
-  assert.match(extensionSource, /async function toggleStageSelected\(files: ChangedFile\[\]\)/, 'range selection must use a dedicated selected-files helper');
-  assert.match(extensionSource, /git\(\['add', '--', \.\.\.paths\]\)/, 'range stage must pass only selected paths to git add');
+test('range and folder stage/unstage are scoped to selected files, never repo-wide', () => {
+  assert.match(extensionSource, /async function toggleStageSelected\(files: ChangedFile\[\]\)/, 'range/folder selection must use a dedicated selected-files helper');
+  assert.match(extensionSource, /git\(\['add', '--', \.\.\.paths\]\)/, 'range/folder stage must pass only selected paths to git add');
+  assert.match(extensionSource, /private filesUnderFileTreeDir\(dirPath: string\): ChangedFile\[\]/, 'Files directory rows need a helper that expands a folder to changed files');
+  assert.match(extensionSource, /file\.path\.startsWith\(`\$\{dirPath\}\/`\)/, 'Folder staging must recurse only under the selected directory prefix');
+  assert.match(extensionSource, /if \(row\?\.kind === 'dir'\).*await toggleStageSelected\(files\)/, 'Space on a Files directory row must toggle all changed files under that folder');
   assert.match(extensionSource, /await toggleStageSelected\(ranged\)/, 'Files range toggle must route through selected-files helper');
   assert.doesNotMatch(extensionSource, /toggleStageAll\(ranged\)/, 'Files range toggle must not call repo-wide stage-all helper');
 });
@@ -88,6 +91,28 @@ test('file toggle: newly added file unstages back to untracked, not deleted', di
   git(dir, 'rm', '--cached', '--', 'new.txt');
   assertStatus(dir, /^\?\? new\.txt/m, 'unstage added file should become untracked');
   assert.equal(read(path.join(dir, 'new.txt')), 'new\n');
+});
+
+test('folder toggle stages and unstages only files under that directory', dir => {
+  fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
+  fs.mkdirSync(path.join(dir, 'docs'), { recursive: true });
+  commitBase(dir, 'src/app.ts', 'one\n');
+  commitBase(dir, 'src/util.ts', 'two\n');
+  commitBase(dir, 'docs/readme.md', 'docs\n');
+  write(path.join(dir, 'src/app.ts'), 'ONE\n');
+  write(path.join(dir, 'src/util.ts'), 'TWO\n');
+  write(path.join(dir, 'docs/readme.md'), 'DOCS\n');
+
+  git(dir, 'add', '--', 'src/app.ts', 'src/util.ts');
+  assertStatus(dir, /^M  src\/app\.ts/m, 'folder stage should stage src/app.ts');
+  assertStatus(dir, /^M  src\/util\.ts/m, 'folder stage should stage src/util.ts');
+  assertStatus(dir, /^ M docs\/readme\.md/m, 'folder stage must not stage files outside selected folder');
+
+  git(dir, 'restore', '--staged', '--', 'src/app.ts');
+  git(dir, 'restore', '--staged', '--', 'src/util.ts');
+  assertStatus(dir, /^ M src\/app\.ts/m, 'folder unstage should leave src/app.ts in worktree');
+  assertStatus(dir, /^ M src\/util\.ts/m, 'folder unstage should leave src/util.ts in worktree');
+  assertStatus(dir, /^ M docs\/readme\.md/m, 'folder unstage must not touch outside folder');
 });
 
 test('stage-all then unstage-all covers mixed modified, deleted and untracked files', dir => {
