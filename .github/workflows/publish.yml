@@ -112,7 +112,17 @@ jobs:
         run: |
           set -euo pipefail
           VSIX="$(ls dist/*.vsix | head -1)"
-          npx vsce publish --packagePath "$VSIX" -p "$VSCE_PAT"
+          for attempt in 1 2 3; do
+            echo "Marketplace publish attempt $attempt/3"
+            if timeout 180s npx vsce publish --packagePath "$VSIX" -p "$VSCE_PAT"; then
+              exit 0
+            fi
+            if [ "$attempt" = "3" ]; then
+              echo "::error::Marketplace publish failed after 3 attempts."
+              exit 1
+            fi
+            sleep $((attempt * 20))
+          done
 
       - name: Create GitHub release
         env:
