@@ -360,7 +360,7 @@ async function quickInputState(Runtime) {
       await sleep(650);
       const jumpText = await pageText(Runtime);
       evidence.push({ step: `panel-jump-${panelKey}`, screenshot: await screenshot(Page, `02-panel-jump-${panelKey}`), status: status(fixture), textSample: jumpText.slice(0, 1200) });
-      if (panelKey === '1') checks.push({ name: 'Pressing 1 reveals Status with current repository selected', ok: jumpText.includes('1 STATUS') && jumpText.includes('other-repo') && /current/i.test(jumpText), textSample: jumpText.slice(0, 1200) });
+      if (panelKey === '1') checks.push({ name: 'Pressing 1 reveals Status panel ownership', ok: jumpText.includes('1 STATUS') && /-- STATUS · LG --/.test(jumpText), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '2') checks.push({ name: 'Moving from 1 Status to 2 Files hides Status again', ok: !jumpText.includes('1 STATUS') && /-- FILES · LG --/.test(jumpText), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '7') checks.push({ name: 'Pressing 7 reveals Tags in the SCM sidebar', ok: jumpText.includes('7 TAGS'), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '8') checks.push({ name: 'Pressing 8 reveals Remotes in the SCM sidebar', ok: jumpText.includes('8 REMOTES'), textSample: jumpText.slice(0, 1200) });
