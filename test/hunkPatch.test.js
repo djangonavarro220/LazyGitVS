@@ -197,6 +197,21 @@ test('singleLinePatch handles zero-count pure add/delete hunks', dir => {
   assert.match(git(dir, 'diff', '--cached'), /-middle/);
 });
 
+test('deleted staged lines render as red ghost text instead of blank editor selection', dir => {
+  assert.match(extensionSource, /function deletedGhostDecorations\(hunk: Hunk, editor: vscode\.TextEditor\)/, 'deleted lines need explicit ghost decorations because they do not exist in the editor buffer');
+  assert.match(extensionSource, /contentText: deleted\.map\(text => `− \$\{text\}`\)\.join\('  ⏎  '\)/, 'deleted ghost decoration must render the removed text, not just select the nearest live line');
+  assert.match(extensionSource, /color: '#f85149'/, 'deleted ghost text should use deletion red');
+  write(path.join(dir, 'a.txt'), 'keep-before\nremoved one\nremoved two\nkeep-after\n');
+  git(dir, 'add', 'a.txt');
+  git(dir, 'commit', '-m', 'base');
+  write(path.join(dir, 'a.txt'), 'keep-before\nkeep-after\n');
+  git(dir, 'add', 'a.txt');
+  const hunk = parseDiffHunks(git(dir, 'diff', '--cached', '--unified=0'), true)[0];
+  assert.deepEqual(hunkSelectableLineIndexes(hunk), [0, 1]);
+  assert.match(hunk.patch, /-removed one/);
+  assert.match(hunk.patch, /-removed two/);
+});
+
 test('binary diffs produce no patchable hunks instead of fake line actions', dir => {
   fs.writeFileSync(path.join(dir, 'bin.dat'), Buffer.from([0, 1, 2, 3, 4]));
   git(dir, 'add', 'bin.dat');

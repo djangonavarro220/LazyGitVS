@@ -331,6 +331,23 @@ function hunkChangedEditorRanges(hunk: Hunk, editor: vscode.TextEditor): vscode.
   const lines = Array.from(new Set(changed.map(index => hunkChangedEditorLine(hunk, index)))).sort((a, b) => a - b);
   return lines.map(line => editorLineRange(editor, line));
 }
+function deletedGhostDecorations(hunk: Hunk, editor: vscode.TextEditor): vscode.DecorationOptions[] {
+  const body = hunkBodyLines(hunk);
+  const groups = new Map<number, string[]>();
+  let newLine = hunkStartLine(hunk);
+  for (const line of body) {
+    if (line.startsWith('-')) {
+      const anchor = Math.min(Math.max(0, newLine), Math.max(0, editor.document.lineCount - 1));
+      const deleted = line.slice(1) || '␠';
+      groups.set(anchor, [...(groups.get(anchor) ?? []), deleted]);
+    } else if (!line.startsWith('\\')) newLine++;
+  }
+  return [...groups.entries()].map(([line, deleted]) => ({
+    range: editorLineRange(editor, line),
+    hoverMessage: `Deleted staged text:\n\n${deleted.map(text => `- ${text}`).join('\n')}`,
+    renderOptions: { before: { contentText: deleted.map(text => `− ${text}`).join('  ⏎  '), color: '#f85149', backgroundColor: 'rgba(248,81,73,0.14)', fontStyle: 'italic', textDecoration: 'line-through; margin-right: 1ch;' } }
+  }));
+}
 function rangeLineSet(ranges: vscode.Range[]): Set<number> {
   return new Set(ranges.map(range => range.start.line));
 }
@@ -566,6 +583,7 @@ class LazyGitVSController {
   private readonly activeStagedHunkDecoration: vscode.TextEditorDecorationType;
   private readonly activeUnstagedLineDecoration: vscode.TextEditorDecorationType;
   private readonly activeStagedLineDecoration: vscode.TextEditorDecorationType;
+  private readonly deletedGhostDecoration: vscode.TextEditorDecorationType;
   private readonly unstagedGutterDecoration: vscode.TextEditorDecorationType;
   private readonly stagedGutterDecoration: vscode.TextEditorDecorationType;
   private readonly modeStatusBarItem: vscode.StatusBarItem;
@@ -584,9 +602,10 @@ class LazyGitVSController {
     this.activeStagedHunkDecoration = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: 'rgba(46, 160, 67, 0.22)', overviewRulerColor: '#2ea043', overviewRulerLane: vscode.OverviewRulerLane.Right, borderWidth: '1px 1px 1px 4px', borderStyle: 'solid', borderColor: '#2ea043' });
     this.activeUnstagedLineDecoration = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: 'rgba(210, 153, 34, 0.32)', border: '1px solid #d29922' });
     this.activeStagedLineDecoration = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: 'rgba(46, 160, 67, 0.30)', border: '1px solid #2ea043' });
+    this.deletedGhostDecoration = vscode.window.createTextEditorDecorationType({ isWholeLine: true });
     this.unstagedGutterDecoration = vscode.window.createTextEditorDecorationType({ gutterIconPath: gutterBadge('U', '#d29922'), gutterIconSize: 'contain' });
     this.stagedGutterDecoration = vscode.window.createTextEditorDecorationType({ gutterIconPath: gutterBadge('S', '#2ea043'), gutterIconSize: 'contain' });
-    context.subscriptions.push(this.unstagedHunkDecoration, this.stagedHunkDecoration, this.activeUnstagedHunkDecoration, this.activeStagedHunkDecoration, this.activeUnstagedLineDecoration, this.activeStagedLineDecoration, this.unstagedGutterDecoration, this.stagedGutterDecoration);
+    context.subscriptions.push(this.unstagedHunkDecoration, this.stagedHunkDecoration, this.activeUnstagedHunkDecoration, this.activeStagedHunkDecoration, this.activeUnstagedLineDecoration, this.activeStagedLineDecoration, this.deletedGhostDecoration, this.unstagedGutterDecoration, this.stagedGutterDecoration);
     this.modeStatusBarItem = vscode.window.createStatusBarItem('primary', vscode.StatusBarAlignment.Left, Number.MIN_SAFE_INTEGER);
     this.modeStatusBarItem.name = 'Vim Command Line';
     context.subscriptions.push(this.modeStatusBarItem);
@@ -1720,6 +1739,7 @@ class LazyGitVSController {
     editor.setDecorations(this.activeStagedHunkDecoration, []);
     editor.setDecorations(this.activeUnstagedLineDecoration, []);
     editor.setDecorations(this.activeStagedLineDecoration, []);
+    editor.setDecorations(this.deletedGhostDecoration, []);
     editor.setDecorations(this.unstagedGutterDecoration, []);
     editor.setDecorations(this.stagedGutterDecoration, []);
   }
@@ -1747,6 +1767,7 @@ class LazyGitVSController {
     editor.setDecorations(this.activeStagedHunkDecoration, active?.staged && this.hunkSelectionMode !== 'line' ? activeRange : []);
     editor.setDecorations(this.activeUnstagedLineDecoration, !active?.staged && this.hunkSelectionMode === 'line' ? activeLine : []);
     editor.setDecorations(this.activeStagedLineDecoration, active?.staged && this.hunkSelectionMode === 'line' ? activeLine : []);
+    editor.setDecorations(this.deletedGhostDecoration, this.hunks.flatMap(h => deletedGhostDecorations(h, editor)));
     if (!this.editorHunkMode) return;
     const markerLine = activeLine[0]?.start.line ?? activeRange[0]?.start.line;
     const marker = active && markerLine !== undefined ? [{ range: new vscode.Range(markerLine, 0, markerLine, 0), hoverMessage: `${active.staged ? 'S staged' : 'U unstaged'} · ${this.hunkSelectionMode.toUpperCase()}` }] : [];
