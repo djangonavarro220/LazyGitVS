@@ -620,7 +620,7 @@ class LazyGitVSController {
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
       if (event.affectsConfiguration('lazygitvs.showStatusBarMode')) this.updateModeStatusBar();
     }));
-    context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => this.updateEditorHunkDecorations()));
+    context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => this.handleActiveTextEditorChanged(editor)));
   }
 
   private async updateActiveViewContext() {
@@ -913,6 +913,28 @@ class LazyGitVSController {
 
   private setWebviewKeyboardEnabled(enabled: boolean) {
     for (const view of this.views.values()) void view.webview.postMessage({ type: 'keyboardEnabled', enabled });
+  }
+
+  private isLGVSOwnedEditor(editor: vscode.TextEditor | undefined): boolean {
+    if (!editor) return false;
+    const uri = editor.document.uri;
+    if (uri.scheme === 'lazygitvs-preview' || uri.scheme === 'lazygitvs-empty') return true;
+    const ownedPath = this.editorModeFilePath ?? (this.focusArea === 'viewer' ? this.currentFilePath(this.activeViewPanel()) : undefined);
+    return !!ownedPath && uri.scheme === 'file' && uri.fsPath === path.join(workspaceRoot(), ownedPath);
+  }
+
+  private handleActiveTextEditorChanged(editor: vscode.TextEditor | undefined) {
+    if (!editor) {
+      if (this.focusArea === 'viewer' || this.editorEditMode) void this.releaseEditorOwnership();
+      else this.updateModeStatusBar();
+      return;
+    }
+    if ((this.editorHunkMode || this.focusArea === 'viewer' || this.editorEditMode) && !this.isLGVSOwnedEditor(editor)) {
+      void this.releaseEditorOwnership();
+      return;
+    }
+    this.updateEditorHunkDecorations();
+    this.updateModeStatusBar();
   }
 
   private async releaseEditorOwnership() {
