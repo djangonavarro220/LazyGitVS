@@ -504,42 +504,42 @@
       {
         "key": "1",
         "command": "lazygitvs.focusPanel1",
-        "when": "focusedView == lazygitvs.statusView"
+        "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
       },
       {
         "key": "2",
         "command": "lazygitvs.focusPanel2",
-        "when": "focusedView == lazygitvs.statusView"
+        "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
       },
       {
         "key": "3",
         "command": "lazygitvs.focusPanel3",
-        "when": "focusedView == lazygitvs.statusView"
+        "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
       },
       {
         "key": "4",
         "command": "lazygitvs.focusPanel4",
-        "when": "focusedView == lazygitvs.statusView"
+        "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
       },
       {
         "key": "5",
         "command": "lazygitvs.focusPanel5",
-        "when": "focusedView == lazygitvs.statusView"
+        "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
       },
       {
         "key": "6",
         "command": "lazygitvs.focusPanel6",
-        "when": "focusedView == lazygitvs.statusView"
+        "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
       },
       {
         "key": "7",
         "command": "lazygitvs.focusPanel7",
-        "when": "focusedView == lazygitvs.statusView"
+        "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
       },
       {
         "key": "8",
         "command": "lazygitvs.focusPanel8",
-        "when": "focusedView == lazygitvs.statusView"
+        "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
       },
       {
         "key": "enter",
@@ -555,126 +555,6 @@
         "key": "shift+tab",
         "command": "lazygitvs.focusPanel8",
         "when": "focusedView == lazygitvs.statusView"
-      },
-      {
-        "key": "1",
-        "command": "lazygitvs.focusPanel1",
-        "when": "lazygitvs.viewerFocus && editorTextFocus"
-      },
-      {
-        "key": "1",
-        "command": "lazygitvs.focusPanel1",
-        "when": "lazygitvs.editorHunkMode && editorTextFocus"
-      },
-      {
-        "key": "1",
-        "command": "lazygitvs.focusPanel1",
-        "when": "lazygitvs.panelFocus && editorTextFocus"
-      },
-      {
-        "key": "2",
-        "command": "lazygitvs.focusPanel2",
-        "when": "lazygitvs.viewerFocus && editorTextFocus"
-      },
-      {
-        "key": "2",
-        "command": "lazygitvs.focusPanel2",
-        "when": "lazygitvs.editorHunkMode && editorTextFocus"
-      },
-      {
-        "key": "2",
-        "command": "lazygitvs.focusPanel2",
-        "when": "lazygitvs.panelFocus && editorTextFocus"
-      },
-      {
-        "key": "3",
-        "command": "lazygitvs.focusPanel3",
-        "when": "lazygitvs.viewerFocus && editorTextFocus"
-      },
-      {
-        "key": "3",
-        "command": "lazygitvs.focusPanel3",
-        "when": "lazygitvs.editorHunkMode && editorTextFocus"
-      },
-      {
-        "key": "3",
-        "command": "lazygitvs.focusPanel3",
-        "when": "lazygitvs.panelFocus && editorTextFocus"
-      },
-      {
-        "key": "4",
-        "command": "lazygitvs.focusPanel4",
-        "when": "lazygitvs.viewerFocus && editorTextFocus"
-      },
-      {
-        "key": "4",
-        "command": "lazygitvs.focusPanel4",
-        "when": "lazygitvs.editorHunkMode && editorTextFocus"
-      },
-      {
-        "key": "4",
-        "command": "lazygitvs.focusPanel4",
-        "when": "lazygitvs.panelFocus && editorTextFocus"
-      },
-      {
-        "key": "5",
-        "command": "lazygitvs.focusPanel5",
-        "when": "lazygitvs.viewerFocus && editorTextFocus"
-      },
-      {
-        "key": "5",
-        "command": "lazygitvs.focusPanel5",
-        "when": "lazygitvs.editorHunkMode && editorTextFocus"
-      },
-      {
-        "key": "5",
-        "command": "lazygitvs.focusPanel5",
-        "when": "lazygitvs.panelFocus && editorTextFocus"
-      },
-      {
-        "key": "6",
-        "command": "lazygitvs.focusPanel6",
-        "when": "lazygitvs.viewerFocus && editorTextFocus"
-      },
-      {
-        "key": "6",
-        "command": "lazygitvs.focusPanel6",
-        "when": "lazygitvs.editorHunkMode && editorTextFocus"
-      },
-      {
-        "key": "6",
-        "command": "lazygitvs.focusPanel6",
-        "when": "lazygitvs.panelFocus && editorTextFocus"
-      },
-      {
-        "key": "7",
-        "command": "lazygitvs.focusPanel7",
-        "when": "lazygitvs.viewerFocus && editorTextFocus"
-      },
-      {
-        "key": "7",
-        "command": "lazygitvs.focusPanel7",
-        "when": "lazygitvs.editorHunkMode && editorTextFocus"
-      },
-      {
-        "key": "7",
-        "command": "lazygitvs.focusPanel7",
-        "when": "lazygitvs.panelFocus && editorTextFocus"
-      },
-      {
-        "key": "8",
-        "command": "lazygitvs.focusPanel8",
-        "when": "lazygitvs.viewerFocus && editorTextFocus"
-      },
-      {
-        "key": "8",
-        "command": "lazygitvs.focusPanel8",
-        "when": "lazygitvs.editorHunkMode && editorTextFocus"
-      },
-      {
-        "key": "8",
-        "command": "lazygitvs.focusPanel8",
-        "when": "lazygitvs.panelFocus && editorTextFocus"
       }
     ]
   },

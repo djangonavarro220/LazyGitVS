@@ -397,11 +397,11 @@ async function quickInputState(Runtime) {
     await sleep(700);
     await key(Input, '2');
     await sleep(STEP_DELAY);
-    const commitPreviewNumberJumpText = (await pageText(Runtime)).slice(0, 3000);
-    evidence.push({ step: 'commits-preview-editor-number-jump-files', screenshot: await screenshot(Page, '02-commits-preview-editor-number-jump-files'), status: status(fixture), textSample: commitPreviewNumberJumpText });
-    checks.push({ name: 'Panel numbers still work after moving in 4 Commits with the preview editor focused', ok: /2 FILES/i.test(commitPreviewNumberJumpText) && /README\.md|settings\.json|src\/app\.ts/.test(commitPreviewNumberJumpText), textSample: commitPreviewNumberJumpText.slice(0, 1200) });
-
-
+    const commitPreviewNumberIgnoredText = (await pageText(Runtime)).slice(0, 3000);
+    evidence.push({ step: 'commits-preview-editor-number-ignored-by-lgvs', screenshot: await screenshot(Page, '02-commits-preview-editor-number-ignored-by-lgvs'), status: status(fixture), textSample: commitPreviewNumberIgnoredText });
+    await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
+    await key(Input, '2');
+    await sleep(STEP_DELAY);
     await key(Input, '1');
     await sleep(STEP_DELAY);
     await key(Input, 'Enter');
@@ -561,6 +561,16 @@ async function quickInputState(Runtime) {
       const normalModeDeletedLastProbeChar = afterPhysicalVimNormalXText.includes(vimEditProbe.slice(0, -1)) && !afterPhysicalVimNormalXText.includes(vimEditProbe) && !afterPhysicalVimNormalXText.includes(`${vimEditProbe}x`);
       evidence.push({ step: 'vim-physical-escape-in-real-editor', screenshot: await screenshot(Page, '08-vim-physical-escape-in-real-editor'), status: status(fixture), textSample: afterPhysicalVimNormalXText });
       checks.push({ name: 'VSCodeVim physical Esc leaves Insert after LGVS opens the real editor', ok: /-- INSERT --/.test(afterPhysicalVimInsertText) && /-- NORMAL --/.test(afterPhysicalVimEscapeText) && normalModeDeletedLastProbeChar && !/-- (EDIT|HUNK).*LG --/.test(afterPhysicalVimNormalXText), textSample: afterPhysicalVimNormalXText.slice(-1200) });
+
+      await key(Input, ':');
+      await sleep(200);
+      await key(Input, '6');
+      await sleep(200);
+      await key(Input, 'Enter');
+      await sleep(STEP_DELAY);
+      const afterVimLineCommandText = (await pageText(Runtime)).slice(0, 3000);
+      evidence.push({ step: 'vim-colon-line-number-stays-in-editor', screenshot: await screenshot(Page, '08-vim-colon-line-number-stays-in-editor'), status: status(fixture), textSample: afterVimLineCommandText });
+      checks.push({ name: 'VSCodeVim :6 keeps the digit in Vim command-line instead of jumping to LGVS panel 6', ok: /:6\|/.test(afterVimLineCommandText) && !/-- CONFLICTS · LG --/.test(afterVimLineCommandText), textSample: afterVimLineCommandText.slice(-1200) });
     }
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
     await sleep(STEP_DELAY);
