@@ -686,8 +686,7 @@ class LazyGitVSController {
       } catch (e: any) { vscode.window.showErrorMessage(e.message); }
     }, null, this.context.subscriptions);
     if (!this.intervalTimer) {
-      this.intervalTimer = setInterval(() => this.scheduleRefresh(0), REFRESH_INTERVAL_MS);
-      this.context.subscriptions.push({ dispose: () => { if (this.intervalTimer) clearInterval(this.intervalTimer); } });
+      this.ensureRuntimeInterval();
     }
     this.render(panel);
     this.refresh(false).catch(err => vscode.window.showErrorMessage(err.message));
@@ -809,6 +808,29 @@ class LazyGitVSController {
     await vscode.commands.executeCommand('workbench.action.closeSidebar');
   }
 
+  async resetState() {
+    this.clearRuntimeTimers();
+    await this.releaseEditorOwnership();
+    await vscode.commands.executeCommand('setContext', 'lazygitvs.panelFocus', false);
+    await vscode.commands.executeCommand('setContext', 'lazygitvs.viewerFocus', false);
+    await vscode.commands.executeCommand('setContext', 'lazygitvs.focusArea', 'none');
+    this.activePanel = 'files';
+    this.previousPanel = 'files';
+    this.hunkSide = 'unstaged';
+    this.hunkSelectionMode = 'hunk';
+    this.hunkSelected = 0;
+    this.hunkLineSelected = 0;
+    this.fileRangeSelected.clear();
+    this.pendingWebviewAutoFocus = false;
+    this.suppressWebviewAutoFocusUntil = Date.now() + 2500;
+    this.refreshInFlight = false;
+    this.refreshPending = false;
+    this.selectionEpoch++;
+    this.persistNavigationState();
+    this.renderAll();
+    vscode.window.showInformationMessage('LazyGitVS: state reset.');
+  }
+
   private async focusPanel(panel: ViewPanel) {
     this.ownsModeStatus = true;
     this.webviewKeyboardOwner = true;
@@ -823,6 +845,7 @@ class LazyGitVSController {
     this.renderAll();
     await this.revealPanelView(panel);
     if (panel === 'status') await this.revealCurrentStatusRepo().catch(() => undefined);
+    this.ensureRuntimeInterval();
     await this.openCurrent(panel, true).catch(() => undefined);
     this.requestWebviewAutoFocus();
     this.renderAll();
@@ -833,6 +856,7 @@ class LazyGitVSController {
   private async restorePanelFocusAfterModal(viewPanel: ViewPanel) {
     if (this.editorHunkMode || this.editorEditMode) return;
     this.ownsModeStatus = true;
+    this.webviewKeyboardOwner = true;
     this.activePanel = this.panelForView(viewPanel);
     await this.updateActiveViewContext();
     this.setFocusArea('panel');
@@ -840,8 +864,12 @@ class LazyGitVSController {
     this.requestWebviewAutoFocus();
     this.persistNavigationState();
     this.updateModeStatusBar();
+    this.setWebviewKeyboardEnabled(true);
     this.renderAll();
     await this.revealPanelView(this.activeViewPanel());
+    this.requestWebviewAutoFocus();
+    this.setWebviewKeyboardEnabled(true);
+    this.renderAll();
   }
 
   private async revealPanelView(panel: ViewPanel) {
@@ -885,6 +913,18 @@ class LazyGitVSController {
   }
 
   private visible() { return Array.from(this.views.values()).some(view => view.visible) || !!this.statusTree?.visible; }
+
+  private ensureRuntimeInterval() {
+    if (this.intervalTimer) return;
+    this.intervalTimer = setInterval(() => this.scheduleRefresh(0), REFRESH_INTERVAL_MS);
+    this.context.subscriptions.push({ dispose: () => { if (this.intervalTimer) clearInterval(this.intervalTimer); } });
+  }
+
+  private clearRuntimeTimers() {
+    if (this.refreshTimer) { clearTimeout(this.refreshTimer); this.refreshTimer = undefined; }
+    if (this.intervalTimer) { clearInterval(this.intervalTimer); this.intervalTimer = undefined; }
+  }
+
   private scheduleRefresh(delayMs = 250) {
     this.updateModeStatusBar();
     if (!this.visible()) return;
@@ -2105,6 +2145,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.statusEnter', (repoPath?: string) => app.statusEnter(repoPath)));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.openDashboard', () => app.focus()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.closeDashboard', () => app.close()));
+  context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.resetState', () => app.resetState()));
   PANEL_ORDER.forEach((panel, index) => {
     context.subscriptions.push(vscode.commands.registerCommand(`lazygitvs.focusPanel${index + 1}`, () => app.focusNumberPanel(index + 1)));
   });

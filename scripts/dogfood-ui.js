@@ -319,6 +319,26 @@ async function quickInputState(Runtime) {
       return;
     }
 
+    if (process.env.LGVS_DOGFOOD_FAST_RESET_STATE) {
+      await key(Input, '2');
+      await sleep(STEP_DELAY);
+      const beforeReset = (await pageText(Runtime)).slice(0, 3000);
+      const resetStart = await Runtime.evaluate({ expression: 'performance.now()', returnByValue: true });
+      await runCommandPalette(Input, 'LazyGitVS: Reset state');
+      const resetEnd = await Runtime.evaluate({ expression: 'performance.now()', returnByValue: true });
+      await sleep(500);
+      const afterReset = (await pageText(Runtime)).slice(0, 3000);
+      const resetLatencyMs = Math.round((resetEnd.result.value || 0) - (resetStart.result.value || 0));
+      evidence.push({ step: 'reset-clears-lgvs-mode-status-ownership', screenshot: await screenshot(Page, '02-reset-state'), status: status(fixture), beforeReset, afterReset, resetLatencyMs });
+      checks.push({ name: 'Reset clears LGVS mode/status ownership', ok: !/-- (FILES|STATUS|BRANCHES|COMMITS|STASH|CONFLICTS|TAGS|REMOTES|HUNK|LINE|EDIT).*LG --/.test(afterReset), textSample: afterReset.slice(-1200), resetLatencyMs });
+      checks.push({ name: 'Reset command returns quickly enough for stale-state recovery', ok: resetLatencyMs < 2500, resetLatencyMs });
+      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
+      const report = { ok: true, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, processOutput: procOut.slice(-4000), targeted: 'reset-state' };
+      write(REPORT_JSON, JSON.stringify(report, null, 2));
+      console.log(JSON.stringify(report, null, 2));
+      return;
+    }
+
     if (useVim && process.env.LGVS_DOGFOOD_FAST_VIM_ESCAPE) {
       await key(Input, '2');
       await sleep(STEP_DELAY);
@@ -485,7 +505,8 @@ async function quickInputState(Runtime) {
     checks.push({ name: 'Files d-discard modal restores keyboard focus to the Files panel', ok: /LazyGitVS: (settings\.json|README\.md)/.test(afterDiscardModalText) && !afterDiscardModalText.includes('Dogfood Modal Sentinel'), textSample: afterDiscardModalText.slice(-1000) });
     await typeText(Input, 'Dogfood Modal Sentinel');
     await sleep(300);
-    checks.push({ name: 'Post-modal text input does not leak into the active editor', ok: !fs.readFileSync(path.join(fixture, 'README.md'), 'utf8').includes('Dogfood Modal Sentinel'), readme: fs.readFileSync(path.join(fixture, 'README.md'), 'utf8') });
+    const modalSentinelDiff = git(fixture, 'diff', '--', 'README.md', 'settings.json', 'src/app.ts');
+    checks.push({ name: 'Post-modal text input does not leak into the active editor', ok: !modalSentinelDiff.includes('Dogfood Modal Sentinel'), diff: modalSentinelDiff.slice(0, 1200) });
 
     // Re-anchor keyboard focus in the LGVS Files tree before entering real editor HUNK mode.
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');

@@ -31,6 +31,7 @@
     "onStartupFinished",
     "onCommand:lazygitvs.openDashboard",
     "onCommand:lazygitvs.closeDashboard",
+    "onCommand:lazygitvs.resetState",
     "onCommand:lazygitvs.changedFiles",
     "onCommand:lazygitvs.editorHunkNext",
     "onCommand:lazygitvs.editorHunkPrev",
@@ -71,6 +72,10 @@
       {
         "command": "lazygitvs.closeDashboard",
         "title": "LazyGitVS: Close Sidebar"
+      },
+      {
+        "command": "lazygitvs.resetState",
+        "title": "LazyGitVS: Reset state"
       },
       {
         "command": "lazygitvs.changedFiles",
@@ -562,7 +567,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "check:release": "node scripts/check-release-consistency.js",
-    "test": "npm run compile && node test/lazygitConfig.test.js && node test/lazygitWorkflowParity.test.js && node test/lazygitMenu.test.js && node test/hunkPatch.test.js && node test/gitPrimitives.test.js && node test/stageMatrix.test.js && node test/gitFixtures.test.js && node test/escapeScope.test.js && node test/hunkModeBindings.test.js && node test/originalPreviewScope.test.js && node test/filesPanelUx.test.js && node test/parityNextMilestones.test.js && node test/branchCommitWorkflow.test.js && node test/statusRepoSelection.test.js && node test/panelTabNavigation.test.js && node test/virtualPreview.test.js && node test/nativePanelFocus.test.js && node test/modalFocus.test.js",
+    "test": "npm run compile && node test/lazygitConfig.test.js && node test/lazygitWorkflowParity.test.js && node test/lazygitMenu.test.js && node test/hunkPatch.test.js && node test/gitPrimitives.test.js && node test/stageMatrix.test.js && node test/gitFixtures.test.js && node test/escapeScope.test.js && node test/hunkModeBindings.test.js && node test/originalPreviewScope.test.js && node test/filesPanelUx.test.js && node test/parityNextMilestones.test.js && node test/branchCommitWorkflow.test.js && node test/statusRepoSelection.test.js && node test/panelTabNavigation.test.js && node test/virtualPreview.test.js && node test/nativePanelFocus.test.js && node test/modalFocus.test.js && node test/runtimeHealth.test.js",
     "dogfood:ui": "node scripts/dogfood-ui.js",
     "dogfood:ui:no-vim": "LGVS_DOGFOOD_VARIANT=no-vim node scripts/dogfood-ui.js",
     "dogfood:ui:preview-tabs": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_PREVIEW_TABS=1 node scripts/dogfood-ui.js",
