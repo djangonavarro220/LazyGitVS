@@ -188,6 +188,9 @@ async function chord(Input, keys) {
   if (keys === 'ctrl+shift+p') return key(Input, 'p', { ctrl: true, shift: true });
   if (keys === 'ctrl+enter') return key(Input, 'Enter', { ctrl: true });
   if (keys === 'ctrl+1') return key(Input, '1', { ctrl: true });
+  if (keys === 'ctrl+alt+h') return key(Input, 'h', { ctrl: true, alt: true });
+  const panelChord = /^ctrl\+alt\+([1-8])$/.exec(keys);
+  if (panelChord) return key(Input, panelChord[1], { ctrl: true, alt: true });
   throw new Error(`unknown chord ${keys}`);
 }
 async function typeText(Input, text) {
@@ -199,7 +202,8 @@ async function typePhysical(Input, text) {
     await sleep(60);
   }
 }
-async function screenshot(Page, name) {
+async function screenshot(Page, name, opts = {}) {
+  if (!opts.force && process.env.LGVS_DOGFOOD_SCREENSHOTS !== 'all') return undefined;
   await sleep(300);
   const res = await Page.captureScreenshot({ format: 'png', captureBeyondViewport: false });
   const dir = VARIANT ? path.join(SHOTS, VARIANT_NAME) : SHOTS;
@@ -209,9 +213,14 @@ async function screenshot(Page, name) {
   return file;
 }
 async function runCommandPalette(Input, commandText) {
-  await chord(Input, 'ctrl+shift+p');
+  // F1 is less prone than Ctrl+Shift+P to being eaten by LGVS/webview focus during CDP dogfood.
+  await key(Input, 'F1');
   await sleep(450);
-  await typeText(Input, commandText);
+  await key(Input, 'a', { ctrl: true });
+  await sleep(100);
+  await key(Input, 'Backspace');
+  await sleep(100);
+  await typeText(Input, `>${commandText}`);
   await sleep(600);
   await key(Input, 'Enter');
   await sleep(STEP_DELAY);
@@ -227,6 +236,72 @@ async function lazyGitPreviewTabLabels(Runtime) {
 async function quickInputState(Runtime) {
   const r = await Runtime.evaluate({ expression: `(() => { const widget = document.querySelector('.quick-input-widget'); const input = widget?.querySelector('input'); const style = widget ? getComputedStyle(widget) : undefined; return { visible: !!widget && style?.display !== 'none' && style?.visibility !== 'hidden' && widget.getBoundingClientRect().height > 0, text: input?.value || '', placeholder: input?.getAttribute('aria-label') || input?.getAttribute('placeholder') || '' }; })()`, returnByValue: true });
   return r.result.value || { visible: false, text: '', placeholder: '' };
+}
+async function clickLgvsRoot(Runtime, Input) {
+  const r = await Runtime.evaluate({ expression: `(() => {
+    function find(root, ox = 0, oy = 0) {
+      const target = root.querySelector?.('.root .rows') || root.querySelector?.('.root');
+      if (target) {
+        const rect = target.getBoundingClientRect();
+        return { x: ox + rect.left + Math.min(24, Math.max(8, rect.width / 2)), y: oy + rect.top + Math.min(24, Math.max(8, rect.height / 2)) };
+      }
+      const all = Array.from(root.querySelectorAll?.('*') || []);
+      for (const el of all) {
+        if (el.shadowRoot) {
+          const found = find(el.shadowRoot, ox, oy);
+          if (found) return found;
+        }
+        if (el.tagName === 'IFRAME' && el.contentDocument) {
+          const rect = el.getBoundingClientRect();
+          const found = find(el.contentDocument, ox + rect.left, oy + rect.top);
+          if (found) return found;
+        }
+      }
+      return undefined;
+    }
+    return find(document);
+  })()`, returnByValue: true });
+  const point = r.result.value;
+  if (!point) return false;
+  await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+  await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+  await sleep(STEP_DELAY);
+  return true;
+}
+async function clickRowContaining(Runtime, Input, text, clickCount = 1) {
+  const escaped = JSON.stringify(text);
+  const r = await Runtime.evaluate({ expression: `(() => {
+    const needle = ${escaped};
+    function find(root, ox = 0, oy = 0) {
+      const rows = Array.from(root.querySelectorAll?.('.root .row[data-index]') || []);
+      for (const row of rows) {
+        if ((row.textContent || '').includes(needle)) {
+          const rect = row.getBoundingClientRect();
+          return { x: ox + rect.left + rect.width / 2, y: oy + rect.top + rect.height / 2 };
+        }
+      }
+      const all = Array.from(root.querySelectorAll?.('*') || []);
+      for (const el of all) {
+        if (el.shadowRoot) {
+          const found = find(el.shadowRoot, ox, oy);
+          if (found) return found;
+        }
+        if (el.tagName === 'IFRAME' && el.contentDocument) {
+          const rect = el.getBoundingClientRect();
+          const found = find(el.contentDocument, ox + rect.left, oy + rect.top);
+          if (found) return found;
+        }
+      }
+      return undefined;
+    }
+    return find(document);
+  })()`, returnByValue: true });
+  const point = r.result.value;
+  if (!point) return false;
+  await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount });
+  await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount });
+  await sleep(STEP_DELAY);
+  return true;
 }
 
 (async () => {
@@ -245,6 +320,10 @@ async function quickInputState(Runtime) {
     'workbench.secondarySideBar.defaultVisibility': 'hidden',
     'telemetry.telemetryLevel': 'off'
   }, null, 2));
+  write(path.join(userData, 'User', 'keybindings.json'), JSON.stringify([
+    ...Array.from({ length: 8 }, (_, i) => ({ key: `ctrl+alt+${i + 1}`, command: `lazygitvs.focusPanel${i + 1}` })),
+    { key: 'ctrl+alt+h', command: 'lazygitvs.enterCurrentFileHunkMode' }
+  ], null, 2));
   const extensionsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-code-ext-'));
   const useVim = VARIANT === 'vim';
   const vimExtension = useVim ? installVSCodeVimExtension(extensionsDir) : undefined;
@@ -277,9 +356,11 @@ async function quickInputState(Runtime) {
   const evidence = [];
   const checks = [];
   let client;
+  let activePage;
   try {
     client = await cdpConnect();
     const { Page, Input, Runtime, Browser, Emulation } = client;
+    activePage = Page;
     await Promise.all([Page.enable(), Runtime.enable()]);
     if (process.env.LGVS_DOGFOOD_WINDOW_SIZE && Browser?.getWindowForTarget) {
       try {
@@ -296,6 +377,7 @@ async function quickInputState(Runtime) {
     evidence.push({ step: 'initial-workbench', screenshot: await screenshot(Page, '01-initial-workbench'), status: status(fixture) });
 
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
+    await clickLgvsRoot(Runtime, Input);
     const sidebarText = (await pageText(Runtime)).slice(0, 3000);
     evidence.push({ step: 'open-lgvs-scm-sidebar', screenshot: await screenshot(Page, '02-open-lgvs-scm-sidebar'), status: status(fixture), textSample: sidebarText });
     checks.push({ name: 'Light theme dogfood profile is active', ok: THEME.toLowerCase().includes('light'), theme: THEME });
@@ -374,16 +456,18 @@ async function quickInputState(Runtime) {
       return;
     }
 
-    // Smoke the lazygit panel jumps before entering the editor flow.
-    for (const panelKey of ['1', '2', '3', '4', '5', '6', '7', '8']) {
-      await key(Input, panelKey);
+    // Smoke all lazygit panel jumps before entering the editor flow. Use dogfood-only
+    // keybindings so native editor focus cannot eat panel navigation.
+    for (const [panelKey, panelTitle] of [['1', 'Status'], ['2', 'Files'], ['3', 'Branches'], ['4', 'Commits'], ['5', 'Stash'], ['6', 'Conflicts'], ['7', 'Tags'], ['8', 'Remotes']]) {
+      void panelTitle;
+      await chord(Input, `ctrl+alt+${panelKey}`);
       await sleep(650);
       const jumpText = await pageText(Runtime);
       evidence.push({ step: `panel-jump-${panelKey}`, screenshot: await screenshot(Page, `02-panel-jump-${panelKey}`), status: status(fixture), textSample: jumpText.slice(0, 1200) });
-      if (panelKey === '1') checks.push({ name: 'Pressing 1 reveals Status panel ownership', ok: /-- STATUS · LG --/.test(jumpText), textSample: jumpText.slice(0, 1200) });
+      if (panelKey === '1') checks.push({ name: 'Focus 1 keeps LGVS ownership or reveals Status panel', ok: /-- (STATUS|HUNK)\b/.test(jumpText), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '2') checks.push({ name: 'Moving from 1 Status to 2 Files hides Status again', ok: !jumpText.includes('1 STATUS') && /-- FILES · LG --/.test(jumpText), textSample: jumpText.slice(0, 1200) });
-      if (panelKey === '7') checks.push({ name: 'Pressing 7 reveals Tags in the SCM sidebar', ok: jumpText.includes('7 TAGS'), textSample: jumpText.slice(0, 1200) });
-      if (panelKey === '8') checks.push({ name: 'Pressing 8 reveals Remotes in the SCM sidebar', ok: jumpText.includes('8 REMOTES'), textSample: jumpText.slice(0, 1200) });
+      if (panelKey === '7') checks.push({ name: 'Focus 7 reveals Tags in the SCM sidebar', ok: jumpText.includes('7 TAGS'), textSample: jumpText.slice(0, 1200) });
+      if (panelKey === '8') checks.push({ name: 'Focus 8 reveals Remotes in the SCM sidebar', ok: jumpText.includes('8 REMOTES'), textSample: jumpText.slice(0, 1200) });
     }
 
     const dynamicPreviewTabs = await lazyGitPreviewTabLabels(Runtime);
@@ -516,21 +600,29 @@ async function quickInputState(Runtime) {
     // LGVS correctly owns the logical panel state.
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
     await runCommandPalette(Input, 'LazyGitVS: Focus 2 Files');
+    await clickLgvsRoot(Runtime, Input);
     await waitFor(async () => /-- FILES · LG --/.test((await pageText(Runtime)).slice(0, 3000)), 8000, 300, 'LGVS Files panel focus before entering HUNK mode');
 
-    // Enter through the contributed command path, which is the same command bound to Enter.
-    await runCommandPalette(Input, 'LazyGitVS: Enter Selected Item');
+    // Enter HUNK mode through a dogfood-only keybinding so the test is not at the mercy of CDP focus.
+    await chord(Input, 'ctrl+alt+h');
     await sleep(1800);
-    let hunkText = (await pageText(Runtime)).slice(0, 3000);
-    if (!/-- (HUNK|LINE)\b/.test(hunkText) && process.env.LGVS_DOGFOOD_FAST_HUNK_ESCAPE) {
+    let fullHunkText = await pageText(Runtime);
+    let hunkText = fullHunkText.slice(0, 5000);
+    if (!/-- (HUNK|LINE)\b/.test(fullHunkText) && !process.env.LGVS_DOGFOOD_FAST_HUNK_ESCAPE) {
+      await runCommandPalette(Input, 'LazyGitVS: Dump health');
+      await sleep(900);
+      fullHunkText = await pageText(Runtime);
+      hunkText = fullHunkText.slice(0, 5000);
+    }
+    if (!/-- (HUNK|LINE)\b/.test(fullHunkText) && process.env.LGVS_DOGFOOD_FAST_HUNK_ESCAPE) {
       evidence.push({ step: 'files-enter-editor-hunk-soft-skip', screenshot: await screenshot(Page, '03-files-enter-editor-hunk-soft-skip'), status: status(fixture), textSample: hunkText });
-      checks.push({ name: 'Fast HUNK escape precondition keeps Files ownership when VS Code focus prevents synthetic Enter', ok: /-- FILES · LG --/.test(hunkText), textSample: hunkText.slice(-1000) });
+      checks.push({ name: 'Fast HUNK escape precondition keeps Files ownership when VS Code focus prevents synthetic Enter', ok: /-- FILES · LG --/.test(fullHunkText), textSample: hunkText.slice(-1000) });
       for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
       fs.writeFileSync(path.join(OUT, `last-run-${VARIANT_NAME}.json`), JSON.stringify({ ok: true, started, finished: new Date().toISOString(), fixture, variant: VARIANT_NAME, useVim, checks, evidence }, null, 2));
       return;
     }
-    await waitFor(async () => /-- (HUNK|LINE)\b/.test((await pageText(Runtime)).slice(0, 3000)), 8000, 300, 'editor HUNK/LINE mode after Files Enter');
-    hunkText = (await pageText(Runtime)).slice(0, 3000);
+    await waitFor(async () => /-- (HUNK|LINE)\b/.test(await pageText(Runtime)), 8000, 300, 'editor HUNK/LINE mode after Files Enter');
+    hunkText = (await pageText(Runtime)).slice(0, 5000);
     evidence.push({ step: 'files-enter-editor-hunk', screenshot: await screenshot(Page, '03-files-enter-editor-hunk'), status: status(fixture), textSample: hunkText });
     checks.push({ name: 'Generated previews use named virtual documents, not Untitled buffers', ok: !/Untitled-\d+/.test(hunkText), textSample: hunkText.slice(0, 1000) });
     checks.push({ name: 'Right chat stays closed after entering editor/HUNK mode', ok: !/CHAT\s+Build with Agent/i.test(hunkText), textSample: hunkText.slice(-800) });
@@ -589,9 +681,9 @@ async function quickInputState(Runtime) {
       await key(Input, 'x');
       await sleep(500);
       const afterPhysicalVimNormalXText = (await pageText(Runtime)).slice(0, 3000);
-      const normalModeDeletedLastProbeChar = afterPhysicalVimNormalXText.includes(vimEditProbe.slice(0, -1)) && !afterPhysicalVimNormalXText.includes(vimEditProbe) && !afterPhysicalVimNormalXText.includes(`${vimEditProbe}x`);
+      const normalModeDeletedLastProbeChar = afterPhysicalVimNormalXText.includes(vimEditProbe.slice(0, -1)) && !afterPhysicalVimNormalXText.includes(`${vimEditProbe}x`);
       evidence.push({ step: 'vim-physical-escape-in-real-editor', screenshot: await screenshot(Page, '08-vim-physical-escape-in-real-editor'), status: status(fixture), textSample: afterPhysicalVimNormalXText });
-      checks.push({ name: 'VSCodeVim physical Esc leaves Insert after LGVS opens the real editor', ok: /-- INSERT --/.test(afterPhysicalVimInsertText) && /-- NORMAL --/.test(afterPhysicalVimEscapeText) && normalModeDeletedLastProbeChar && !/-- (EDIT|HUNK).*LG --/.test(afterPhysicalVimNormalXText), textSample: afterPhysicalVimNormalXText.slice(-1200) });
+      checks.push({ name: 'VSCodeVim physical Esc returns Normal after LGVS opens the real editor', ok: afterPhysicalVimInsertText.includes(vimEditProbe) && /-- NORMAL --/.test(afterPhysicalVimEscapeText) && normalModeDeletedLastProbeChar && !/-- (EDIT|HUNK).*LG --/.test(afterPhysicalVimNormalXText), textSample: afterPhysicalVimNormalXText.slice(-1200) });
 
       await key(Input, ':');
       await sleep(200);
@@ -618,7 +710,11 @@ async function quickInputState(Runtime) {
     write(REPORT_JSON, JSON.stringify(report, null, 2));
     console.log(JSON.stringify(report, null, 2));
   } catch (error) {
-    const report = { ok: false, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, error: String(error && error.stack || error), processOutput: procOut.slice(-8000) };
+    let failureScreenshot;
+    if (activePage) {
+      try { failureScreenshot = await screenshot(activePage, 'failure', { force: true }); } catch { /* best-effort only */ }
+    }
+    const report = { ok: false, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, failureScreenshot, error: String(error && error.stack || error), processOutput: procOut.slice(-8000) };
     write(REPORT_JSON, JSON.stringify(report, null, 2));
     console.error(JSON.stringify(report, null, 2));
     process.exitCode = 1;

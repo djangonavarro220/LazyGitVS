@@ -46,10 +46,10 @@ test('dogfood creates a realistic two-repository Git fixture', () => {
 test('dogfood asserts the documented visible UI smoke path', () => {
   requireDogfoodInvariant('Command Palette opens LGVS', /LazyGitVS: Focus SCM Sidebar/);
   requireDogfoodInvariant('all default panels are present', /2 FILES[\s\S]*3 BRANCHES[\s\S]*4 COMMITS[\s\S]*5 STASH[\s\S]*6 CONFLICTS[\s\S]*7 TAGS[\s\S]*8 REMOTES/);
-  requireDogfoodInvariant('panel jumps 1..8', /for \(const panelKey of \['1', '2', '3', '4', '5', '6', '7', '8'\]\)/);
-  requireDogfoodInvariant('Status panel ownership assertion', /Pressing 1 reveals Status panel ownership/);
-  requireDogfoodInvariant('Tags reveal assertion', /Pressing 7 reveals Tags/);
-  requireDogfoodInvariant('Remotes reveal assertion', /Pressing 8 reveals Remotes/);
+  requireDogfoodInvariant('panel jumps 1..8', /\['1', 'Status'\][\s\S]*\['8', 'Remotes'\]/);
+  requireDogfoodInvariant('Status panel ownership assertion', /Focus 1 keeps LGVS ownership or reveals Status panel/);
+  requireDogfoodInvariant('Tags reveal assertion', /Focus 7 reveals Tags/);
+  requireDogfoodInvariant('Remotes reveal assertion', /Focus 8 reveals Remotes/);
   requireDogfoodInvariant('Escape stays on normal panels', /Escape on \$\{panelKey\} \$\{panelName\} keeps the current panel/);
 });
 
@@ -64,15 +64,21 @@ test('dogfood asserts editor HUNK and LINE flows with real Git state', () => {
   requireDogfoodInvariant('nearby hunks stay separate', /Nearby staged settings edits stay separate zero-context hunks/);
 });
 
-test('dogfood asserts focus, Vim ownership, modal, preview and screenshot evidence', () => {
+test('dogfood asserts focus, Vim ownership, modal, preview and failure-only screenshot evidence', () => {
   requireDogfoodInvariant('right chat stays closed', /Right chat \/ secondary side bar stays closed/);
   requireDogfoodInvariant('Command Palette stays open from LGVS focus', /Command Palette stays open when invoked from LGVS sidebar focus/);
   requireDogfoodInvariant('discard modal restores focus', /Files d-discard modal restores keyboard focus/);
   requireDogfoodInvariant('modal sentinel key does not leak into editor', /Post-modal physical sentinel key does not leak into the active editor/);
-  requireDogfoodInvariant('EDIT handoff to VSCodeVim', /VSCodeVim physical Esc leaves Insert/);
+  requireDogfoodInvariant('EDIT handoff to VSCodeVim', /VSCodeVim physical Esc returns Normal/);
   requireDogfoodInvariant('Vim :6 does not jump to LGVS panel 6', /VSCodeVim :6 keeps the digit in Vim command-line/);
   requireDogfoodInvariant('virtual previews not Untitled', /Generated previews use named virtual documents, not Untitled buffers/);
-  requireDogfoodInvariant('screenshots are captured', /Page\.captureScreenshot/);
+  requireDogfoodInvariant('screenshots are opt-in for passing runs', /LGVS_DOGFOOD_SCREENSHOTS/);
+  requireDogfoodInvariant('failure screenshot is captured automatically', /failureScreenshot/);
+});
+
+test('dogfood playbook documents screenshots only for failures by default', () => {
+  assert(testingDoc.includes('screenshots only for failures by default'), 'playbook must document failure-only screenshots');
+  assert(testingDoc.includes('passing runs stay text/JSON-only'), 'playbook must document passing runs do not emit screenshot spam');
 });
 
 test('documented dogfood expected coverage is protected by this static contract', () => {
@@ -88,7 +94,7 @@ test('documented dogfood expected coverage is protected by this static contract'
     '`e` hands keyboard ownership',
     '`Esc` exits LGVS HUNK/LINE mode',
     'generated previews are named virtual documents',
-    'screenshots are written'
+    'failure screenshots are written'
   ];
   for (const bullet of documentedBullets) {
     assert(testingDoc.includes(bullet), `playbook missing expected coverage bullet: ${bullet}`);

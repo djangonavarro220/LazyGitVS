@@ -742,6 +742,16 @@ class LazyGitVSController {
     return this.enter(panel);
   }
 
+  async enterCurrentFileHunkMode() {
+    if (this.editorHunkMode || this.editorEditMode) return;
+    this.activePanel = 'files';
+    this.ownsModeStatus = false;
+    this.webviewKeyboardOwner = false;
+    this.setFocusArea('viewer');
+    void vscode.commands.executeCommand('setContext', 'lazygitvs.keyboardMode', false);
+    return this.enterHunks();
+  }
+
   private loadLazyGitConfig() {
     const config = readLazyGitConfig();
     this.lazygitKeymap = config.keymap;
@@ -2224,6 +2234,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.closeDashboard', () => app.close()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.resetState', () => app.resetState()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.dumpHealth', () => app.dumpHealth()));
+  context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.enterCurrentFileHunkMode', () => app.enterCurrentFileHunkMode()));
   PANEL_ORDER.forEach((panel, index) => {
     context.subscriptions.push(vscode.commands.registerCommand(`lazygitvs.focusPanel${index + 1}`, () => app.focusNumberPanel(index + 1)));
   });

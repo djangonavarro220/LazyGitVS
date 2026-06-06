@@ -44,7 +44,11 @@ function createRealisticRepo() {
     delta: 'four'
   }, null, 2) + '\n');
   write(path.join(dir, 'README.md'), '# LGVS fixture\n\nbase\n');
+  write(path.join(dir, 'root-file.txt'), 'root baseline\n');
   write(path.join(dir, 'src/app.ts'), 'export const value = 1;\n\nexport function greet() {\n  return "hello";\n}\n');
+  write(path.join(dir, 'src/features/nested/deep-file.ts'), 'export const nested = "base";\n');
+  write(path.join(dir, 'docs/old-name.md'), 'old name\n');
+  write(path.join(dir, 'obsolete.txt'), 'remove me\n');
   write(path.join(dir, 'conflict.txt'), 'base\n');
   git(dir, 'add', '.');
   git(dir, 'commit', '-m', 'initial');
@@ -70,7 +74,11 @@ function createRealisticRepo() {
     delta: 'FOUR'
   }, null, 2) + '\n');
   append(path.join(dir, 'README.md'), 'unstaged readme line\n');
+  write(path.join(dir, 'root-file.txt'), 'root changed\n');
   write(path.join(dir, 'src/app.ts'), 'export const value = 2;\n\nexport function greet() {\n  return "hello dogfood";\n}\n');
+  write(path.join(dir, 'src/features/nested/deep-file.ts'), 'export const nested = "changed";\n');
+  fs.unlinkSync(path.join(dir, 'obsolete.txt'));
+  git(dir, 'mv', 'docs/old-name.md', 'docs/renamed-name.md');
   write(path.join(dir, 'notes.md'), 'untracked note\n');
 
   function createConflict() {
@@ -92,10 +100,33 @@ function createRealisticRepo() {
   return { dir, createConflict };
 }
 
+function createWorkspaceRepos() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-workspace-'));
+  const primary = path.join(root, 'primary-repo');
+  const secondary = path.join(root, 'secondary-repo');
+  fs.mkdirSync(primary, { recursive: true });
+  fs.mkdirSync(secondary, { recursive: true });
+
+  for (const [dir, file, base, changed] of [
+    [primary, 'primary-only.txt', 'primary base\n', 'primary changed\n'],
+    [secondary, 'secondary-only.txt', 'secondary base\n', 'secondary changed\n']
+  ]) {
+    git(dir, 'init');
+    git(dir, 'config', 'user.email', 'lgvs@example.test');
+    git(dir, 'config', 'user.name', 'LazyGitVS Fixture');
+    write(path.join(dir, file), base);
+    git(dir, 'add', file);
+    git(dir, 'commit', '-m', `base ${file}`);
+    write(path.join(dir, file), changed);
+  }
+
+  return { root, primary, secondary };
+}
+
 function cleanupFixture(fixture) {
   if (!fixture) return;
   const dir = typeof fixture === 'string' ? fixture : fixture.dir;
   if (dir) fs.rmSync(dir, { recursive: true, force: true });
 }
 
-module.exports = { createRealisticRepo, cleanupFixture, git, initRepo };
+module.exports = { createRealisticRepo, createWorkspaceRepos, cleanupFixture, git, initRepo };

@@ -167,7 +167,7 @@ Hunk/line selection is shown in the editor with highlights and gutter markers. S
 - branch, commit, stash, conflict, tag, and remote panels
 - push, pull/fetch, stash, discard, reset, branch, commit, and conflict QuickPick menus
 - lazygit config/keybinding reading where implemented
-- `LazyGitVS: Reset state` and `LazyGitVS: Dump health` recovery/debug commands
+- `LazyGitVS: Reset state`, `LazyGitVS: Dump health`, and `LazyGitVS: Enter current file HUNK mode` recovery/debug commands
 - UI dogfood tests in GitHub Actions
 - VSIX packaging as CI artifacts and GitHub Releases
 

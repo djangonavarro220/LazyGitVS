@@ -17,6 +17,13 @@ assert(extension.includes("registerCommand('lazygitvs.dumpHealth', () => app.dum
 assert(extension.includes('async dumpHealth()'), 'Controller must expose a dumpHealth method');
 assert(extension.includes('private healthSnapshot()'), 'Health snapshot must be centralized and testable by source contract');
 assert(extension.includes("showText('LazyGitVS Health"), 'Dump health must use named virtual preview docs, not Untitled buffers');
+assert(pkg.activationEvents.includes('onCommand:lazygitvs.enterCurrentFileHunkMode'), 'Explicit HUNK entry command must activate LGVS for dogfood/recovery paths');
+assert(pkg.contributes.commands.some(command => command.command === 'lazygitvs.enterCurrentFileHunkMode' && /Enter current file HUNK mode/.test(command.title)), 'Explicit HUNK entry command must be visible from Command Palette');
+assert(extension.includes("registerCommand('lazygitvs.enterCurrentFileHunkMode', () => app.enterCurrentFileHunkMode())"), 'Explicit HUNK entry command must route to controller HUNK entry');
+assert(extension.includes('async enterCurrentFileHunkMode()'), 'Controller must expose an explicit Files-to-HUNK entry path');
+assert(dogfood.includes("command: 'lazygitvs.enterCurrentFileHunkMode'") && dogfood.includes("ctrl+alt+h"), 'Broad dogfood must use the explicit HUNK entry command after proving Files ownership');
+assert(extension.includes('this.activePanel = \'files\';'), 'Explicit HUNK entry must force the Files panel instead of trusting stale focus state');
+assert(extension.includes('return this.enterHunks();'), 'Explicit HUNK entry must reuse the same real editor HUNK path as Enter');
 assert(extension.includes('this.clearRuntimeTimers();'), 'resetState must cancel refresh/interval timers instead of leaving CPU loops alive');
 assert(extension.includes('private clearRuntimeTimers()'), 'Timer cleanup must be centralized and reusable');
 assert(extension.includes('if (this.refreshTimer) { clearTimeout(this.refreshTimer); this.refreshTimer = undefined; }'), 'Reset must clear pending refresh timeout');

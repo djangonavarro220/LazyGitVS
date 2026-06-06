@@ -93,7 +93,7 @@ The broad dogfood path must cover:
 - VSCodeVim lane proves `:6` keeps the digit in Vim and does not jump to panel 6
 - modal/focus leakage probes check visible editor text and Git diff sentinels, not only saved file diff
 
-Every dogfood run should emit meaningful screenshots under `dogfood-output/screenshots/...`. Final user updates for UI work should attach at least one fresh relevant screenshot.
+Every dogfood run should emit meaningful JSON evidence under `dogfood-output/`. Screenshots are only for failures by default, so normal passing runs do not spam large image artifacts. Use `LGVS_DOGFOOD_SCREENSHOTS=all` for deliberate visual review.
 
 ## 4. Visual/regression evidence
 

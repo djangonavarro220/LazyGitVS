@@ -33,6 +33,7 @@
     "onCommand:lazygitvs.closeDashboard",
     "onCommand:lazygitvs.resetState",
     "onCommand:lazygitvs.dumpHealth",
+    "onCommand:lazygitvs.enterCurrentFileHunkMode",
     "onCommand:lazygitvs.changedFiles",
     "onCommand:lazygitvs.enterSelected",
     "onCommand:lazygitvs.editorHunkNext",
@@ -82,6 +83,10 @@
       {
         "command": "lazygitvs.dumpHealth",
         "title": "LazyGitVS: Dump health"
+      },
+      {
+        "command": "lazygitvs.enterCurrentFileHunkMode",
+        "title": "LazyGitVS: Enter current file HUNK mode"
       },
       {
         "command": "lazygitvs.changedFiles",

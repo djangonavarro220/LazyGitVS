@@ -95,7 +95,7 @@ Command:
 npm run dogfood:ui
 ```
 
-This launches a real VS Code Extension Development Host through `@vscode/test-electron`, Xvfb, and CDP. It drives keyboard input and checks screenshots plus deterministic Git state.
+This launches a real VS Code Extension Development Host through `@vscode/test-electron`, Xvfb, and CDP. It drives keyboard input and checks deterministic Git/UI state. It writes screenshots only for failures by default; set `LGVS_DOGFOOD_SCREENSHOTS=all` when doing visual review.
 
 Use dogfood for any change touching:
 
@@ -172,7 +172,7 @@ The broad harness should keep covering at least:
 - `Esc` exits LGVS HUNK/LINE mode back to Files/sidebar
 - normal editor/Vim text focus is not hijacked by LGVS number bindings
 - generated previews are named virtual documents, not `Untitled-*`
-- screenshots are written under `dogfood-output/screenshots/`
+- failure screenshots are written under `dogfood-output/screenshots/` automatically; passing runs stay text/JSON-only unless `LGVS_DOGFOOD_SCREENSHOTS=all` is set
 
 If a bug came from VSCodeVim, run both no-vim and vim lanes. Fixing only the no-vim lane is usually fake progress.
 
