@@ -47,11 +47,14 @@ test('public developer docs point future agents to the testing playbook', () => 
 });
 
 test('dogfood lanes required by the playbook exist as npm scripts', () => {
-  for (const script of ['dogfood:ui', 'dogfood:ui:no-vim', 'dogfood:ui:vim', 'dogfood:ui:preview-tabs', 'dogfood:ui:vim-escape']) {
+  for (const script of ['dogfood:ui', 'dogfood:ui:no-vim', 'dogfood:ui:vim', 'dogfood:ui:preview-tabs', 'dogfood:ui:vim-escape', 'dogfood:ui:reset-state', 'dogfood:ui:command-palette', 'dogfood:ui:hunk-escape']) {
     assert(pkg.scripts[script], `${script} must exist`);
   }
   assert.match(pkg.scripts['dogfood:ui:no-vim'], /LGVS_DOGFOOD_VARIANT=no-vim/);
   assert.match(pkg.scripts['dogfood:ui:vim'], /LGVS_DOGFOOD_VARIANT=vim/);
+  assert.match(pkg.scripts['dogfood:ui:reset-state'], /LGVS_DOGFOOD_FAST_RESET_STATE=1/);
+  assert.match(pkg.scripts['dogfood:ui:command-palette'], /LGVS_DOGFOOD_FAST_COMMAND_PALETTE=1/);
+  assert.match(pkg.scripts['dogfood:ui:hunk-escape'], /LGVS_DOGFOOD_FAST_HUNK_ESCAPE=1/);
 });
 
 test('test playbook names focused, full, dogfood and package verification commands', () => {

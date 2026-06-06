@@ -32,6 +32,7 @@
     "onCommand:lazygitvs.openDashboard",
     "onCommand:lazygitvs.closeDashboard",
     "onCommand:lazygitvs.resetState",
+    "onCommand:lazygitvs.dumpHealth",
     "onCommand:lazygitvs.changedFiles",
     "onCommand:lazygitvs.enterSelected",
     "onCommand:lazygitvs.editorHunkNext",
@@ -77,6 +78,10 @@
       {
         "command": "lazygitvs.resetState",
         "title": "LazyGitVS: Reset state"
+      },
+      {
+        "command": "lazygitvs.dumpHealth",
+        "title": "LazyGitVS: Dump health"
       },
       {
         "command": "lazygitvs.changedFiles",
@@ -617,7 +622,10 @@
     "package": "LGVS_VSIX_OUT_DIR=../releases/LazyGitVS npm run package:vsix",
     "package:vsix": "node scripts/package-vsix.js",
     "package:dist": "LGVS_VSIX_OUT_DIR=dist npm run package:vsix",
-    "package:local": "node scripts/package-vsix.js"
+    "package:local": "node scripts/package-vsix.js",
+    "dogfood:ui:reset-state": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_RESET_STATE=1 node scripts/dogfood-ui.js",
+    "dogfood:ui:command-palette": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_COMMAND_PALETTE=1 node scripts/dogfood-ui.js",
+    "dogfood:ui:hunk-escape": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_HUNK_ESCAPE=1 node scripts/dogfood-ui.js"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

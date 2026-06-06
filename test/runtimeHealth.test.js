@@ -11,6 +11,12 @@ assert(pkg.activationEvents.includes('onCommand:lazygitvs.resetState'), 'Reset c
 assert(pkg.contributes.commands.some(command => command.command === 'lazygitvs.resetState' && /Reset state/.test(command.title)), 'Reset command must be visible from Command Palette');
 assert(extension.includes("registerCommand('lazygitvs.resetState', () => app.resetState())"), 'Reset command must route to the controller reset path');
 assert(extension.includes('async resetState()'), 'Controller must expose a resetState method');
+assert(pkg.activationEvents.includes('onCommand:lazygitvs.dumpHealth'), 'Dump health command must activate LGVS for stale-state inspection');
+assert(pkg.contributes.commands.some(command => command.command === 'lazygitvs.dumpHealth' && /Dump health/.test(command.title)), 'Dump health command must be visible from Command Palette');
+assert(extension.includes("registerCommand('lazygitvs.dumpHealth', () => app.dumpHealth())"), 'Dump health command must route to controller health snapshot');
+assert(extension.includes('async dumpHealth()'), 'Controller must expose a dumpHealth method');
+assert(extension.includes('private healthSnapshot()'), 'Health snapshot must be centralized and testable by source contract');
+assert(extension.includes("showText('LazyGitVS Health"), 'Dump health must use named virtual preview docs, not Untitled buffers');
 assert(extension.includes('this.clearRuntimeTimers();'), 'resetState must cancel refresh/interval timers instead of leaving CPU loops alive');
 assert(extension.includes('private clearRuntimeTimers()'), 'Timer cleanup must be centralized and reusable');
 assert(extension.includes('if (this.refreshTimer) { clearTimeout(this.refreshTimer); this.refreshTimer = undefined; }'), 'Reset must clear pending refresh timeout');

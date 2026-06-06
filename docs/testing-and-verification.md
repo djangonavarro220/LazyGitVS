@@ -2,6 +2,8 @@
 
 This document is the repo playbook for future agents. If you are fixing a bug or adding a feature, start here instead of rediscovering the test surface by vibes. Vibes are how keyboard UIs rot.
 
+For the current coverage rollout checklist, see `docs/testing-coverage-implementation-plan.md`. Keep that file as the preserved plan when a long testing task spans context resets.
+
 ## Core rule
 
 Every feature request and every bug fix should ship with tests, aiming for 100% coverage of the touched behavior where practical.
@@ -131,6 +133,9 @@ Targeted lanes:
 ```bash
 npm run dogfood:ui:preview-tabs
 npm run dogfood:ui:vim-escape
+npm run dogfood:ui:reset-state
+npm run dogfood:ui:command-palette
+npm run dogfood:ui:hunk-escape
 ```
 
 Cramped sidebar check:

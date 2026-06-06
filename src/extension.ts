@@ -842,6 +842,71 @@ class LazyGitVSController {
     vscode.window.showInformationMessage('LazyGitVS: state reset.');
   }
 
+  private healthSnapshot() {
+    return {
+      activePanel: this.activePanel,
+      activeViewPanel: this.activeViewPanel(),
+      previousPanel: this.previousPanel,
+      focusArea: this.focusArea,
+      ownsModeStatus: this.ownsModeStatus,
+      webviewKeyboardOwner: this.webviewKeyboardOwner,
+      editorHunkMode: this.editorHunkMode,
+      editorEditMode: this.editorEditMode,
+      readOnlyHunkMode: this.readOnlyHunkMode,
+      hunkSide: this.hunkSide,
+      hunkSelectionMode: this.hunkSelectionMode,
+      selections: {
+        files: this.selected,
+        hunks: this.hunkSelected,
+        hunkLine: this.hunkLineSelected,
+        branches: this.branchSelected,
+        commits: this.commitSelected,
+        stash: this.stashSelected,
+        conflicts: this.conflictSelected,
+        tags: this.tagSelected,
+        remotes: this.remoteSelected
+      },
+      counts: {
+        views: this.views.size,
+        workspaceRepos: this.workspaceRepos.length,
+        files: this.files.length,
+        hunks: this.hunks.length,
+        allHunks: this.allHunks.length,
+        branches: this.branchItems.length,
+        commits: this.commitItems.length,
+        stash: this.stashItems.length,
+        conflicts: this.conflictItems.length,
+        tags: this.tagItems.length,
+        remotes: this.remoteItems.length
+      },
+      timers: {
+        refreshTimerActive: Boolean(this.refreshTimer),
+        intervalTimerActive: Boolean(this.intervalTimer),
+        refreshInFlight: this.refreshInFlight,
+        refreshPending: this.refreshPending
+      },
+      webviewAutofocus: {
+        pending: this.pendingWebviewAutoFocus,
+        suppressUntil: this.suppressWebviewAutoFocusUntil,
+        suppressActive: Date.now() < this.suppressWebviewAutoFocusUntil
+      },
+      config: {
+        files: this.lazygitConfigFiles,
+        showStatusBarMode: vscode.workspace.getConfiguration('lazygitvs').get<boolean>('showStatusBarMode', false),
+        previewTabs: vscode.workspace.getConfiguration('lazygitvs').get<string>('previewTabs', 'single')
+      },
+      workspace: {
+        root: workspaceRoot(),
+        activeRoot: activeWorkspaceRoot
+      }
+    };
+  }
+
+  async dumpHealth() {
+    const snapshot = this.healthSnapshot();
+    await showText('LazyGitVS Health', JSON.stringify(snapshot, null, 2), false, true);
+  }
+
   private async focusPanel(panel: ViewPanel) {
     this.ownsModeStatus = true;
     this.webviewKeyboardOwner = true;
@@ -2158,6 +2223,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.openDashboard', () => app.focus()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.closeDashboard', () => app.close()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.resetState', () => app.resetState()));
+  context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.dumpHealth', () => app.dumpHealth()));
   PANEL_ORDER.forEach((panel, index) => {
     context.subscriptions.push(vscode.commands.registerCommand(`lazygitvs.focusPanel${index + 1}`, () => app.focusNumberPanel(index + 1)));
   });
