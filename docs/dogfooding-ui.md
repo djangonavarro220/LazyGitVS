@@ -80,6 +80,8 @@ dogfood-output/
 
 For LGVS changes, run the dogfood harness before calling a release good. Unit tests alone are not enough for UI/focus work.
 
+Full testing policy and future-agent checklist: `docs/testing-and-verification.md`. Every feature request and bug fix should add automated coverage for the touched behavior, aiming for 100% where practical.
+
 If a change touches sidebar navigation, previews, editor HUNK/LINE mode, keybindings, status bar, or visual state, run:
 
 ```bash

@@ -203,6 +203,8 @@ That discards staged, unstaged, and untracked changes. LazyGitVS cannot undo it.
 
 ## Development
 
+Full testing policy and future-agent checklist: [`docs/testing-and-verification.md`](docs/testing-and-verification.md).
+
 ```bash
 npm ci
 npm run compile

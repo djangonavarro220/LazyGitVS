@@ -30,15 +30,16 @@ This repo builds **LazyGitVS / LGVS**, a VS Code extension that adapts real lazy
 
 ## Hard rules
 
-1. **Do not overwrite release versions.** If a release/versioned VSIX is explicitly requested, bump `package.json`/`package-lock.json` and create a new VSIX version; otherwise normal source/test commits do not imply a release bump.
-2. **Do not commit generated artifacts.** Keep `node_modules/`, `out/`, `dist/`, `.vscode-test/`, `dogfood-output/`, screenshots, logs, and VSIX files out of Git.
-3. **Do not ship local/debug artifacts.** No debug logs, no local absolute debug paths, no test output in the VSIX.
-4. **Never store secrets.** Tokens/PATs/API keys/passwords/connection strings must be `[REDACTED]` if ever referenced.
-5. **Prefer Git arg arrays.** Use `execFile`/argument arrays, not shell-interpolated Git commands.
-6. **Confirm destructive Git actions.** Reset/clean/discard/rebase-abort style operations need explicit confirmation.
-7. **Commit discipline:** local commits are OK when requested as part of the work; amend/rewrite existing commits only when explicitly asked, and never push rewritten history without a fresh explicit ask.
-8. **Release discipline:** no release, tag, Marketplace publish, version bump, or public/private repo visibility change unless the human explicitly asks for that release/visibility action. Published extension != permission to make the repo public. GitHub release flow is: bump version + changelog, validate, create source commit, then tag/publish only on explicit request.
-9. **Keep host-specific workflow notes out of this repo.** Public docs must be portable; local delivery paths and operator notes belong in ignored local files, not in Git.
+1. **Test every feature and bug fix.** For any user-requested feature or reported bug, add automated coverage for the touched behavior with a 100% target where practical. Use `docs/testing-and-verification.md` as the playbook. If full automation is not practical, document the gap and add the nearest deterministic guard.
+2. **Do not overwrite release versions.** If a release/versioned VSIX is explicitly requested, bump `package.json`/`package-lock.json` and create a new VSIX version; otherwise normal source/test commits do not imply a release bump.
+3. **Do not commit generated artifacts.** Keep `node_modules/`, `out/`, `dist/`, `.vscode-test/`, `dogfood-output/`, screenshots, logs, and VSIX files out of Git.
+4. **Do not ship local/debug artifacts.** No debug logs, no local absolute debug paths, no test output in the VSIX.
+5. **Never store secrets.** Tokens/PATs/API keys/passwords/connection strings must be `[REDACTED]` if ever referenced.
+6. **Prefer Git arg arrays.** Use `execFile`/argument arrays, not shell-interpolated Git commands.
+7. **Confirm destructive Git actions.** Reset/clean/discard/rebase-abort style operations need explicit confirmation.
+8. **Commit discipline:** local commits are OK when requested as part of the work; amend/rewrite existing commits only when explicitly asked, and never push rewritten history without a fresh explicit ask.
+9. **Release discipline:** no release, tag, Marketplace publish, version bump, or public/private repo visibility change unless the human explicitly asks for that release/visibility action. Published extension != permission to make the repo public. GitHub release flow is: bump version + changelog, validate, create source commit, then tag/publish only on explicit request.
+10. **Keep host-specific workflow notes out of this repo.** Public docs must be portable; local delivery paths and operator notes belong in ignored local files, not in Git.
 
 ## Pre-commit dependency checks
 

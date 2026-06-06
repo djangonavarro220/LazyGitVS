@@ -19,6 +19,14 @@ npm ci
 npm test
 ```
 
+For the detailed testing policy, future-agent checklist, coverage target, dogfood lanes, and failure triage, read:
+
+```text
+docs/testing-and-verification.md
+```
+
+Short version: every feature request and bug fix should add automated coverage for the touched behavior, aiming for 100% where practical. UI/focus/keybinding/editor work also needs real VS Code dogfood.
+
 ## UI dogfood
 
 ```bash
