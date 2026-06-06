@@ -5,6 +5,7 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const dogfood = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
 const testingDoc = fs.readFileSync(path.join(root, 'docs', 'testing-and-verification.md'), 'utf8');
+const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
 function test(name, fn) {
   try {
@@ -28,6 +29,9 @@ test('dogfood script keeps the full matrix and targeted lanes documented in the 
   requireDogfoodInvariant('preview-tabs targeted lane', /LGVS_DOGFOOD_FAST_PREVIEW_TABS/);
   requireDogfoodInvariant('vim-escape targeted lane', /LGVS_DOGFOOD_FAST_VIM_ESCAPE/);
   requireDogfoodInvariant('reset-state targeted lane', /LGVS_DOGFOOD_FAST_RESET_STATE/);
+  requireDogfoodInvariant('deep-tree targeted lane', /LGVS_DOGFOOD_DEEP_TREE/);
+  assert(pkg.scripts['dogfood:ui:deep-tree'], 'package.json must expose a deep-tree dogfood lane');
+  assert(pkg.scripts['dogfood:ui:cramped'], 'package.json must expose a cramped-sidebar dogfood lane');
   requireDogfoodInvariant('cramped-sidebar window override', /LGVS_DOGFOOD_WINDOW_SIZE/);
   requireDogfoodInvariant('theme override', /LGVS_DOGFOOD_THEME/);
 });
@@ -51,6 +55,9 @@ test('dogfood asserts the documented visible UI smoke path', () => {
   requireDogfoodInvariant('Tags reveal assertion', /Focus 7 reveals Tags/);
   requireDogfoodInvariant('Remotes reveal assertion', /Focus 8 reveals Remotes/);
   requireDogfoodInvariant('Escape stays on normal panels', /Escape on \$\{panelKey\} \$\{panelName\} keeps the current panel/);
+  requireDogfoodInvariant('commit files detail is reachable', /Commit Enter shows changed files for the selected commit/);
+  requireDogfoodInvariant('commit files detail returns to commit list', /Esc from commit files returns to the commit list/);
+  requireDogfoodInvariant('contextual help opens and returns focus', /Contextual help opens and returns to LGVS focus/);
 });
 
 test('dogfood asserts editor HUNK and LINE flows with real Git state', () => {
@@ -62,6 +69,7 @@ test('dogfood asserts editor HUNK and LINE flows with real Git state', () => {
   requireDogfoodInvariant('Git cached diff assertion', /diffCachedNames\(fixture\)/);
   requireDogfoodInvariant('Git working diff assertion', /diffNames\(fixture\)/);
   requireDogfoodInvariant('nearby hunks stay separate', /Nearby staged settings edits stay separate zero-context hunks/);
+  requireDogfoodInvariant('HUNK navigation changes visible selection', /HUNK navigation moves between changed areas/);
 });
 
 test('dogfood asserts focus, Vim ownership, modal, preview and failure-only screenshot evidence', () => {
@@ -85,6 +93,9 @@ test('documented dogfood expected coverage is protected by this static contract'
   const documentedBullets = [
     'Command Palette can run',
     'panels `1..8` are reachable',
+    '`4 Commits` + `Enter` opens the selected commit details',
+    '`?` opens contextual help and returns focus',
+    'deep-tree and cramped-sidebar lanes exist',
     'Files `Enter` opens a real editor',
     'HUNK navigation works',
     '`a` toggles HUNK/LINE mode',

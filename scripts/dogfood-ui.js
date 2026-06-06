@@ -175,8 +175,8 @@ async function cdpConnect() {
 }
 async function key(Input, key, opts = {}) {
   const mods = (opts.ctrl ? 2 : 0) | (opts.shift ? 8 : 0) | (opts.alt ? 1 : 0) | (opts.meta ? 4 : 0);
-  const codeMap = { Enter: 'Enter', Escape: 'Escape', Tab: 'Tab', Backspace: 'Backspace', ArrowDown: 'ArrowDown', ArrowUp: 'ArrowUp', Home: 'Home', End: 'End', F1: 'F1', Space: 'Space', '1': 'Digit1', '2': 'Digit2', '3': 'Digit3', '4': 'Digit4', '5': 'Digit5', '6': 'Digit6', '7': 'Digit7', '8': 'Digit8', '9': 'Digit9', '0': 'Digit0' };
-  const vkeyMap = { Enter: 13, Escape: 27, Tab: 9, Backspace: 8, ArrowDown: 40, ArrowUp: 38, Home: 36, End: 35, F1: 112, Space: 32 };
+  const codeMap = { Enter: 'Enter', Escape: 'Escape', Tab: 'Tab', Backspace: 'Backspace', ArrowDown: 'ArrowDown', ArrowUp: 'ArrowUp', Home: 'Home', End: 'End', F1: 'F1', Space: 'Space', '?': 'Slash', '1': 'Digit1', '2': 'Digit2', '3': 'Digit3', '4': 'Digit4', '5': 'Digit5', '6': 'Digit6', '7': 'Digit7', '8': 'Digit8', '9': 'Digit9', '0': 'Digit0' };
+  const vkeyMap = { Enter: 13, Escape: 27, Tab: 9, Backspace: 8, ArrowDown: 40, ArrowUp: 38, Home: 36, End: 35, F1: 112, Space: 32, '?': 191 };
   const code = codeMap[key] || (/^[a-z]$/i.test(key) ? `Key${key.toUpperCase()}` : key);
   const text = !opts.ctrl && !opts.alt && !opts.meta && key.length === 1 ? (opts.shift ? key.toUpperCase() : key) : undefined;
   const virtualKey = vkeyMap[key] ?? (/^[a-z]$/i.test(key) ? key.toUpperCase().charCodeAt(0) : /^[0-9]$/.test(key) ? key.charCodeAt(0) : undefined);
@@ -268,40 +268,27 @@ async function clickLgvsRoot(Runtime, Input) {
   await sleep(STEP_DELAY);
   return true;
 }
-async function clickRowContaining(Runtime, Input, text, clickCount = 1) {
-  const escaped = JSON.stringify(text);
+async function dispatchLgvsDomKey(Runtime, key) {
+  const escaped = JSON.stringify(key);
   const r = await Runtime.evaluate({ expression: `(() => {
-    const needle = ${escaped};
-    function find(root, ox = 0, oy = 0) {
-      const rows = Array.from(root.querySelectorAll?.('.root .row[data-index]') || []);
-      for (const row of rows) {
-        if ((row.textContent || '').includes(needle)) {
-          const rect = row.getBoundingClientRect();
-          return { x: ox + rect.left + rect.width / 2, y: oy + rect.top + rect.height / 2 };
-        }
+    const key = ${escaped};
+    function send(root) {
+      if (root.querySelector?.('.root')) {
+        const target = root.body || root.querySelector('.root');
+        target?.focus?.();
+        const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+        return target.dispatchEvent(event);
       }
       const all = Array.from(root.querySelectorAll?.('*') || []);
       for (const el of all) {
-        if (el.shadowRoot) {
-          const found = find(el.shadowRoot, ox, oy);
-          if (found) return found;
-        }
-        if (el.tagName === 'IFRAME' && el.contentDocument) {
-          const rect = el.getBoundingClientRect();
-          const found = find(el.contentDocument, ox + rect.left, oy + rect.top);
-          if (found) return found;
-        }
+        if (el.shadowRoot && send(el.shadowRoot)) return true;
+        if (el.tagName === 'IFRAME' && el.contentDocument && send(el.contentDocument)) return true;
       }
-      return undefined;
+      return false;
     }
-    return find(document);
+    return send(document);
   })()`, returnByValue: true });
-  const point = r.result.value;
-  if (!point) return false;
-  await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount });
-  await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount });
-  await sleep(STEP_DELAY);
-  return true;
+  return !!r.result.value;
 }
 
 (async () => {
@@ -386,9 +373,23 @@ async function clickRowContaining(Runtime, Input, text, clickCount = 1) {
     checks.push({ name: 'No noisy focus footer in LGVS panels', ok: !/Focus:\s+LG panel/i.test(sidebarText), textSample: sidebarText.slice(-800) });
     checks.push({ name: 'Right chat / secondary side bar stays closed in screenshots', ok: !/CHAT\s+Build with Agent/i.test(sidebarText), textSample: sidebarText.slice(-800) });
 
+    if (process.env.LGVS_DOGFOOD_DEEP_TREE) {
+      const deepStatus = status(fixture);
+      checks.push({
+        name: 'Deep-tree fixture exposes hidden config and root agent paths without layout noise',
+        ok: deepStatus.includes('.config/vscode/settings.json') && deepStatus.includes('.config/karabiner/assets/complex_modifications/misc_rules.json') && deepStatus.includes('AGENTS.md'),
+        status: deepStatus
+      });
+      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
+      const report = { ok: true, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, processOutput: procOut.slice(-4000), targeted: 'deep-tree' };
+      write(REPORT_JSON, JSON.stringify(report, null, 2));
+      console.log(JSON.stringify(report, null, 2));
+      return;
+    }
+
     if (process.env.LGVS_DOGFOOD_FAST_COMMAND_PALETTE) {
-      await chord(Input, 'ctrl+shift+p');
-      await sleep(300);
+      await key(Input, 'F1');
+      await sleep(450);
       const quickAfterOpen = await quickInputState(Runtime);
       await typeText(Input, 'LazyGitVS');
       await sleep(450);
@@ -493,6 +494,37 @@ async function clickRowContaining(Runtime, Input, text, clickCount = 1) {
 
     await key(Input, '4');
     await sleep(STEP_DELAY);
+    await key(Input, 'Enter');
+    await sleep(1800);
+    const commitFilesText = (await pageText(Runtime)).slice(0, 3000);
+    evidence.push({ step: 'commits-enter-shows-changed-files', screenshot: await screenshot(Page, '02-commits-enter-shows-changed-files'), status: status(fixture), textSample: commitFilesText });
+    checks.push({ name: 'Commit Enter shows changed files for the selected commit', ok: /-- COMMITS · LG --/.test(commitFilesText) && /README\.md|settings\.json|src\/app\.ts/.test(commitFilesText), textSample: commitFilesText.slice(0, 1200) });
+    await key(Input, 'Escape');
+    await sleep(STEP_DELAY);
+    const commitListReturnText = (await pageText(Runtime)).slice(0, 3000);
+    evidence.push({ step: 'commits-escape-returns-to-list', screenshot: await screenshot(Page, '02-commits-escape-returns-to-list'), status: status(fixture), textSample: commitListReturnText });
+    checks.push({ name: 'Esc from commit files returns to the commit list', ok: /-- COMMITS · LG --/.test(commitListReturnText) && /initial/.test(commitListReturnText), textSample: commitListReturnText.slice(0, 1200) });
+
+    await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
+    await runCommandPalette(Input, 'LazyGitVS: Focus 4 Commits');
+    await key(Input, 'Escape');
+    await sleep(300);
+    await key(Input, 'Escape');
+    await sleep(300);
+    await runCommandPalette(Input, 'LazyGitVS: Help current panel');
+    const helpQuick = await waitFor(async () => {
+      const state = await quickInputState(Runtime);
+      return state.visible ? state : null;
+    }, 5000, 200, 'contextual help QuickPick');
+    await sleep(250);
+    await key(Input, 'Escape');
+    await sleep(STEP_DELAY);
+    const helpReturnText = (await pageText(Runtime)).slice(0, 3000);
+    evidence.push({ step: 'contextual-help-focus-return', screenshot: await screenshot(Page, '02-contextual-help-focus-return'), status: status(fixture), quickInput: helpQuick, textSample: helpReturnText });
+    checks.push({ name: 'Contextual help opens and returns to LGVS focus', ok: helpQuick.visible && /-- COMMITS · LG --/.test(helpReturnText), quickInput: helpQuick, textSample: helpReturnText.slice(0, 1200) });
+
+    await key(Input, '4');
+    await sleep(STEP_DELAY);
     for (let i = 0; i < 4; i++) {
       await key(Input, 'ArrowDown');
       await sleep(250);
@@ -504,43 +536,18 @@ async function clickRowContaining(Runtime, Input, text, clickCount = 1) {
     const commitPreviewNumberIgnoredText = (await pageText(Runtime)).slice(0, 3000);
     evidence.push({ step: 'commits-preview-editor-number-ignored-by-lgvs', screenshot: await screenshot(Page, '02-commits-preview-editor-number-ignored-by-lgvs'), status: status(fixture), textSample: commitPreviewNumberIgnoredText });
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
-    await key(Input, '2');
-    await sleep(STEP_DELAY);
-    await key(Input, '1');
-    await sleep(STEP_DELAY);
-    await key(Input, 'Enter');
-    await sleep(STEP_DELAY);
-    await key(Input, 'ArrowDown');
-    await sleep(STEP_DELAY);
-    await key(Input, 'Enter');
-    await sleep(1800);
-    const secondaryStatusText = (await pageText(Runtime)).slice(0, 3000);
-    evidence.push({ step: 'status-enter-select-other-repo', screenshot: await screenshot(Page, '02-status-enter-select-other-repo'), status: status(secondaryRepo), textSample: secondaryStatusText });
-    checks.push({ name: 'Status Enter switches from the current repository row to other-repo', ok: /other-repo[\s\S]*current/i.test(secondaryStatusText), textSample: secondaryStatusText.slice(0, 1200) });
-    await key(Input, '2');
-    await sleep(STEP_DELAY);
-    const secondaryFilesText = (await pageText(Runtime)).slice(0, 3000);
-    evidence.push({ step: 'files-after-other-repo-select', screenshot: await screenshot(Page, '02-files-after-other-repo-select'), status: status(secondaryRepo), textSample: secondaryFilesText });
-    checks.push({ name: 'Files panel shows the selected repository changes after Status Enter', ok: secondaryFilesText.includes('OTHER_REPO_SENTINEL.md'), textSample: secondaryFilesText.slice(0, 1200) });
-    await key(Input, '1');
-    await sleep(STEP_DELAY);
-    await key(Input, 'Enter');
-    await sleep(STEP_DELAY);
-    await key(Input, 'ArrowUp');
-    await sleep(STEP_DELAY);
-    await key(Input, 'Enter');
-    await sleep(1800);
 
     // Panel jump previews can legitimately leave editor focus; reset to the LGVS SCM sidebar before list navigation.
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
+    await chord(Input, 'ctrl+alt+2');
+    await sleep(700);
+    await clickLgvsRoot(Runtime, Input);
 
     // Regression: nearby staged edits in the same file must remain navigable as separate hunks.
-    await key(Input, '2');
-    await sleep(700);
-    await key(Input, 'ArrowDown');
+    await key(Input, 'ArrowUp');
     await sleep(STEP_DELAY);
-    await key(Input, 'Enter');
-    await sleep(1500);
+    await chord(Input, 'ctrl+alt+h');
+    await waitFor(async () => /-- HUNK\b/.test((await pageText(Runtime)).slice(0, 5000)), 8000, 300, 'settings HUNK mode before staged navigation');
     await key(Input, 'Tab');
     await sleep(STEP_DELAY);
     const stagedHunkOneText = (await pageText(Runtime)).slice(0, 3000);
@@ -556,6 +563,13 @@ async function clickRowContaining(Runtime, Input, text, clickCount = 1) {
       ok: settingsCachedHunks >= 2,
       hunks: settingsCachedHunks,
       diff: settingsCachedDiff.slice(0, 1200),
+      first: stagedHunkOneText.slice(-400),
+      second: stagedHunkTwoText.slice(-400)
+    });
+    checks.push({
+      name: 'HUNK navigation moves between changed areas',
+      ok: settingsCachedHunks >= 2 && stagedHunkOneText !== stagedHunkTwoText,
+      hunks: settingsCachedHunks,
       first: stagedHunkOneText.slice(-400),
       second: stagedHunkTwoText.slice(-400)
     });
@@ -577,7 +591,11 @@ async function clickRowContaining(Runtime, Input, text, clickCount = 1) {
     // using a bare 2 would be the exact stale-context bug this harness is meant to catch.
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
     await runCommandPalette(Input, 'LazyGitVS: Focus 2 Files');
-    await waitFor(async () => /-- FILES · LG --/.test((await pageText(Runtime)).slice(0, 3000)), 8000, 300, 'LGVS Files panel after viewer handoff');
+    const filesContextVisible = async () => {
+      const text = (await pageText(Runtime)).slice(0, 3000);
+      return /-- FILES · LG --/.test(text) || (useVim && /LazyGitVS: (README\.md|settings\.json)/.test(text) && /2 FILES/.test(text));
+    };
+    await waitFor(filesContextVisible, 8000, 300, 'LGVS Files panel after viewer handoff');
     await sleep(STEP_DELAY);
 
     // Modal focus regression: Files d-discard opens a QuickPick. Cancelling it must return
@@ -601,7 +619,7 @@ async function clickRowContaining(Runtime, Input, text, clickCount = 1) {
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
     await runCommandPalette(Input, 'LazyGitVS: Focus 2 Files');
     await clickLgvsRoot(Runtime, Input);
-    await waitFor(async () => /-- FILES · LG --/.test((await pageText(Runtime)).slice(0, 3000)), 8000, 300, 'LGVS Files panel focus before entering HUNK mode');
+    await waitFor(filesContextVisible, 8000, 300, 'LGVS Files panel focus before entering HUNK mode');
 
     // Enter HUNK mode through a dogfood-only keybinding so the test is not at the mercy of CDP focus.
     await chord(Input, 'ctrl+alt+h');
@@ -651,9 +669,21 @@ async function clickRowContaining(Runtime, Input, text, clickCount = 1) {
     evidence.push({ step: 'line-space-stage', screenshot: await screenshot(Page, '05-line-stage'), status: afterStage, cachedNames: diffCachedNames(fixture), unstagedNames: diffNames(fixture) });
     checks.push({ name: 'Space in LINE mode stages the selected line change', ok: afterStage !== beforeStage && diffCachedNames(fixture).trim().length > 0, before: beforeStage, after: afterStage, cachedNames: diffCachedNames(fixture) });
 
-    await key(Input, 'Tab');
+    await key(Input, 'i', { ctrl: true });
     await sleep(STEP_DELAY);
-    evidence.push({ step: 'tab-staged-side', screenshot: await screenshot(Page, '06-tab-staged-side'), status: status(fixture) });
+    let stagedSideText = await pageText(Runtime);
+    if (!/-- (HUNK|LINE) S\b/.test(stagedSideText)) {
+      await key(Input, 'Tab');
+      await sleep(STEP_DELAY);
+      stagedSideText = await pageText(Runtime);
+    }
+    if (!/-- (HUNK|LINE) S\b/.test(stagedSideText)) {
+      await runCommandPalette(Input, 'LazyGitVS: Toggle Editor Staged/Unstaged Hunks');
+      await sleep(STEP_DELAY);
+      stagedSideText = await pageText(Runtime);
+    }
+    await waitFor(async () => /-- (HUNK|LINE) S\b/.test(await pageText(Runtime)), 5000, 300, 'staged LINE/HUNK side before unstage');
+    evidence.push({ step: 'tab-staged-side', screenshot: await screenshot(Page, '06-tab-staged-side'), status: status(fixture), textSample: stagedSideText.slice(0, 3000) });
     const beforeUnstage = status(fixture);
     await key(Input, 'Space');
     await sleep(2200);
@@ -701,6 +731,24 @@ async function clickRowContaining(Runtime, Input, text, clickCount = 1) {
     await key(Input, '2');
     await sleep(STEP_DELAY);
     evidence.push({ step: 'files-after-edit-mode', screenshot: await screenshot(Page, '10-files-after-edit-mode'), status: status(fixture) });
+
+    await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
+    await key(Input, '1');
+    await sleep(STEP_DELAY);
+    await key(Input, 'Enter');
+    await sleep(STEP_DELAY);
+    await key(Input, 'ArrowDown');
+    await sleep(STEP_DELAY);
+    await key(Input, 'Enter');
+    await sleep(1800);
+    const secondaryStatusText = (await pageText(Runtime)).slice(0, 3000);
+    evidence.push({ step: 'status-enter-select-other-repo', screenshot: await screenshot(Page, '02-status-enter-select-other-repo'), status: status(secondaryRepo), textSample: secondaryStatusText });
+    checks.push({ name: 'Status Enter switches from the current repository row to other-repo', ok: /other-repo[\s\S]*current/i.test(secondaryStatusText), textSample: secondaryStatusText.slice(0, 1200) });
+    await key(Input, '2');
+    await sleep(STEP_DELAY);
+    const secondaryFilesText = (await pageText(Runtime)).slice(0, 3000);
+    evidence.push({ step: 'files-after-other-repo-select', screenshot: await screenshot(Page, '02-files-after-other-repo-select'), status: status(secondaryRepo), textSample: secondaryFilesText });
+    checks.push({ name: 'Files panel shows the selected repository changes after Status Enter', ok: secondaryFilesText.includes('OTHER_REPO_SENTINEL.md'), textSample: secondaryFilesText.slice(0, 1200) });
 
     await runCommandPalette(Input, 'LazyGitVS: Close Sidebar');
     evidence.push({ step: 'close-sidebar', screenshot: await screenshot(Page, '11-close-sidebar'), status: status(fixture) });

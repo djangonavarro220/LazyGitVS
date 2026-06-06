@@ -33,6 +33,7 @@
     "onCommand:lazygitvs.closeDashboard",
     "onCommand:lazygitvs.resetState",
     "onCommand:lazygitvs.dumpHealth",
+    "onCommand:lazygitvs.helpCurrentPanel",
     "onCommand:lazygitvs.enterCurrentFileHunkMode",
     "onCommand:lazygitvs.changedFiles",
     "onCommand:lazygitvs.enterSelected",
@@ -83,6 +84,10 @@
       {
         "command": "lazygitvs.dumpHealth",
         "title": "LazyGitVS: Dump health"
+      },
+      {
+        "command": "lazygitvs.helpCurrentPanel",
+        "title": "LazyGitVS: Help current panel"
       },
       {
         "command": "lazygitvs.enterCurrentFileHunkMode",
@@ -630,7 +635,9 @@
     "package:local": "node scripts/package-vsix.js",
     "dogfood:ui:reset-state": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_RESET_STATE=1 node scripts/dogfood-ui.js",
     "dogfood:ui:command-palette": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_COMMAND_PALETTE=1 node scripts/dogfood-ui.js",
-    "dogfood:ui:hunk-escape": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_HUNK_ESCAPE=1 node scripts/dogfood-ui.js"
+    "dogfood:ui:hunk-escape": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_HUNK_ESCAPE=1 node scripts/dogfood-ui.js",
+    "dogfood:ui:deep-tree": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_DEEP_TREE=1 node scripts/dogfood-ui.js",
+    "dogfood:ui:cramped": "LGVS_DOGFOOD_WINDOW_SIZE=900,260 npm run dogfood:ui"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

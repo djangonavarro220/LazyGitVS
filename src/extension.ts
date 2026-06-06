@@ -995,7 +995,7 @@ class LazyGitVSController {
     this.pendingWebviewAutoFocus = false;
     this.suppressWebviewAutoFocusUntil = Date.now() + 2500;
     this.setFocusArea('none');
-    await vscode.commands.executeCommand('workbench.action.showCommands');
+    await vscode.commands.executeCommand('workbench.action.quickOpen', '>');
   }
 
   private visible() { return Array.from(this.views.values()).some(view => view.visible) || !!this.statusTree?.visible; }
@@ -1643,6 +1643,7 @@ class LazyGitVSController {
   }
 
 
+  async helpCurrentPanel() { await this.helpMenu(this.activeViewPanel()); }
   private async helpMenu(viewPanel: ViewPanel) {
     const panel = this.panelForView(viewPanel);
     const items = this.commandRegistry(viewPanel);
@@ -2234,6 +2235,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.closeDashboard', () => app.close()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.resetState', () => app.resetState()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.dumpHealth', () => app.dumpHealth()));
+  context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.helpCurrentPanel', () => app.helpCurrentPanel()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.enterCurrentFileHunkMode', () => app.enterCurrentFileHunkMode()));
   PANEL_ORDER.forEach((panel, index) => {
     context.subscriptions.push(vscode.commands.registerCommand(`lazygitvs.focusPanel${index + 1}`, () => app.focusNumberPanel(index + 1)));
