@@ -33,6 +33,7 @@
     "onCommand:lazygitvs.closeDashboard",
     "onCommand:lazygitvs.resetState",
     "onCommand:lazygitvs.changedFiles",
+    "onCommand:lazygitvs.enterSelected",
     "onCommand:lazygitvs.editorHunkNext",
     "onCommand:lazygitvs.editorHunkPrev",
     "onCommand:lazygitvs.editorHunkToggle",
@@ -80,6 +81,10 @@
       {
         "command": "lazygitvs.changedFiles",
         "title": "LazyGitVS: Changed Files"
+      },
+      {
+        "command": "lazygitvs.enterSelected",
+        "title": "LazyGitVS: Enter Selected Item"
       },
       {
         "command": "lazygitvs.editorHunkNext",
@@ -548,6 +553,41 @@
       },
       {
         "key": "enter",
+        "command": "lazygitvs.enterSelected",
+        "when": "focusedView == lazygitvs.filesView && !editorTextFocus"
+      },
+      {
+        "key": "enter",
+        "command": "lazygitvs.enterSelected",
+        "when": "focusedView == lazygitvs.branchesView && !editorTextFocus"
+      },
+      {
+        "key": "enter",
+        "command": "lazygitvs.enterSelected",
+        "when": "focusedView == lazygitvs.commitsView && !editorTextFocus"
+      },
+      {
+        "key": "enter",
+        "command": "lazygitvs.enterSelected",
+        "when": "focusedView == lazygitvs.stashView && !editorTextFocus"
+      },
+      {
+        "key": "enter",
+        "command": "lazygitvs.enterSelected",
+        "when": "focusedView == lazygitvs.conflictsView && !editorTextFocus"
+      },
+      {
+        "key": "enter",
+        "command": "lazygitvs.enterSelected",
+        "when": "focusedView == lazygitvs.tagsView && !editorTextFocus"
+      },
+      {
+        "key": "enter",
+        "command": "lazygitvs.enterSelected",
+        "when": "focusedView == lazygitvs.remotesView && !editorTextFocus"
+      },
+      {
+        "key": "enter",
         "command": "lazygitvs.statusEnter",
         "when": "focusedView == lazygitvs.statusView"
       },
@@ -567,7 +607,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "check:release": "node scripts/check-release-consistency.js",
-    "test": "npm run compile && node test/lazygitConfig.test.js && node test/lazygitWorkflowParity.test.js && node test/lazygitMenu.test.js && node test/hunkPatch.test.js && node test/gitPrimitives.test.js && node test/stageMatrix.test.js && node test/gitFixtures.test.js && node test/escapeScope.test.js && node test/hunkModeBindings.test.js && node test/originalPreviewScope.test.js && node test/filesPanelUx.test.js && node test/parityNextMilestones.test.js && node test/branchCommitWorkflow.test.js && node test/statusRepoSelection.test.js && node test/panelTabNavigation.test.js && node test/virtualPreview.test.js && node test/nativePanelFocus.test.js && node test/modalFocus.test.js && node test/runtimeHealth.test.js",
+    "test": "npm run compile && node test/lazygitConfig.test.js && node test/lazygitWorkflowParity.test.js && node test/lazygitMenu.test.js && node test/hunkPatch.test.js && node test/gitPrimitives.test.js && node test/stageMatrix.test.js && node test/gitFixtures.test.js && node test/escapeScope.test.js && node test/hunkModeBindings.test.js && node test/originalPreviewScope.test.js && node test/filesPanelUx.test.js && node test/parityNextMilestones.test.js && node test/branchCommitWorkflow.test.js && node test/statusRepoSelection.test.js && node test/panelTabNavigation.test.js && node test/virtualPreview.test.js && node test/nativePanelFocus.test.js && node test/modalFocus.test.js && node test/dogfoodCoverage.test.js && node test/packageHygiene.test.js && node test/testingWorkflowPolicy.test.js && node test/runtimeHealth.test.js",
     "dogfood:ui": "node scripts/dogfood-ui.js",
     "dogfood:ui:no-vim": "LGVS_DOGFOOD_VARIANT=no-vim node scripts/dogfood-ui.js",
     "dogfood:ui:preview-tabs": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_PREVIEW_TABS=1 node scripts/dogfood-ui.js",

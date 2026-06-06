@@ -503,21 +503,27 @@ async function quickInputState(Runtime) {
     const afterDiscardModalText = (await pageText(Runtime)).slice(0, 3000);
     evidence.push({ step: 'files-discard-modal-focus-restore', screenshot: await screenshot(Page, '03-files-discard-modal-focus-restore'), status: status(fixture), textSample: afterDiscardModalText });
     checks.push({ name: 'Files d-discard modal restores keyboard focus to the Files panel', ok: /LazyGitVS: (settings\.json|README\.md)/.test(afterDiscardModalText) && !afterDiscardModalText.includes('Dogfood Modal Sentinel'), textSample: afterDiscardModalText.slice(-1000) });
-    await typeText(Input, 'Dogfood Modal Sentinel');
-    await sleep(300);
+    const modalSentinel = '§';
+    await key(Input, modalSentinel);
+    await sleep(STEP_DELAY);
+    const postModalSentinelText = (await pageText(Runtime)).slice(0, 3000);
     const modalSentinelDiff = git(fixture, 'diff', '--', 'README.md', 'settings.json', 'src/app.ts');
-    checks.push({ name: 'Post-modal text input does not leak into the active editor', ok: !modalSentinelDiff.includes('Dogfood Modal Sentinel'), diff: modalSentinelDiff.slice(0, 1200) });
+    checks.push({ name: 'Post-modal physical sentinel key does not leak into the active editor', ok: !modalSentinelDiff.includes(modalSentinel) && !postModalSentinelText.includes(modalSentinel), diff: modalSentinelDiff.slice(0, 1200), textSample: postModalSentinelText.slice(-1200) });
 
     // Re-anchor keyboard focus in the LGVS Files tree before entering real editor HUNK mode.
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
     await key(Input, '2');
     await sleep(STEP_DELAY);
+    if (!/-- FILES · LG --/.test((await pageText(Runtime)).slice(0, 3000))) {
+      await runCommandPalette(Input, 'LazyGitVS: Focus 2 Files');
+      await waitFor(async () => /-- FILES · LG --/.test((await pageText(Runtime)).slice(0, 3000)), 8000, 300, 'LGVS Files panel focus before entering HUNK mode');
+    }
     await key(Input, 'Home');
     await sleep(200);
     await key(Input, 'ArrowDown');
     await sleep(STEP_DELAY);
 
-    // Return to Files and enter real editor HUNK mode.
+    // Return to Files and enter real editor HUNK mode through the real key path.
     await key(Input, 'Enter');
     await sleep(1800);
     const hunkText = (await pageText(Runtime)).slice(0, 3000);

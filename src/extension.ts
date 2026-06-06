@@ -731,6 +731,17 @@ class LazyGitVSController {
     return this.recentReposMenu();
   }
 
+  async enterSelected() {
+    if (this.editorHunkMode || this.editorEditMode) return;
+    const panel = this.activeViewPanel();
+    if (panel === 'status') return this.statusEnter();
+    this.ownsModeStatus = true;
+    this.webviewKeyboardOwner = true;
+    this.setFocusArea('panel');
+    void vscode.commands.executeCommand('setContext', 'lazygitvs.keyboardMode', true);
+    return this.enter(panel);
+  }
+
   private loadLazyGitConfig() {
     const config = readLazyGitConfig();
     this.lazygitKeymap = config.keymap;
@@ -2141,6 +2152,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(statusTree, statusProvider);
   for (const panel of PANEL_ORDER.filter(panel => panel !== 'status')) context.subscriptions.push(vscode.window.registerWebviewViewProvider(VIEW_IDS[panel], new PanelViewProvider(app, panel), { webviewOptions: { retainContextWhenHidden: true } }));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.changedFiles', showChangedFilesQuickPick));
+  context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.enterSelected', () => app.enterSelected()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.statusRecentRepos', () => app.openRecentRepos()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.statusEnter', (repoPath?: string) => app.statusEnter(repoPath)));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.openDashboard', () => app.focus()));

@@ -47,6 +47,15 @@ for (const command of ['lazygitvs.editorHunkToggleMode', 'lazygitvs.editorHunkTo
 assert(!keybindings.some(binding => binding.command === 'lazygitvs.editorHunkReturn'), 'No keyboard shortcut may jump from Vim/editor mode back into HUNK/LINE; re-enter via LGVS panels only');
 assert(!keybindings.some(binding => binding.command === 'lazygitvs.editorEditEscape'), 'Escape belongs to Vim/VS Code once LGVS has handed off to editor mode');
 
+assert(pkg.activationEvents.includes('onCommand:lazygitvs.enterSelected'), 'Enter selected command must activate LGVS when native/webview focus misses the embedded keydown handler');
+assert(pkg.contributes.commands.some(command => command.command === 'lazygitvs.enterSelected'), 'Enter selected command must be contributed for direct command/keybinding routing');
+assert(extension.includes("registerCommand('lazygitvs.enterSelected', () => app.enterSelected())"), 'Enter selected command must route to the controller enter path');
+assert(extension.includes('async enterSelected()'), 'Controller must expose a narrow enterSelected command for focused LGVS panels');
+for (const viewId of ['lazygitvs.filesView', 'lazygitvs.branchesView', 'lazygitvs.commitsView', 'lazygitvs.stashView', 'lazygitvs.conflictsView', 'lazygitvs.tagsView', 'lazygitvs.remotesView']) {
+  assert(keybindings.some(binding => binding.key === 'enter' && binding.command === 'lazygitvs.enterSelected' && binding.when === `focusedView == ${viewId} && !editorTextFocus`), `Enter must route through LGVS only when ${viewId} is the focused view, never from real editors`);
+}
+assert(!keybindings.some(binding => binding.command === 'lazygitvs.enterSelected' && /editorTextFocus/.test(binding.when) && !/!editorTextFocus/.test(binding.when)), 'Enter selected must never bind inside real editor text focus');
+
 assert(extension.includes("setContext', 'vim.active', active ? false : true"), 'HUNK/LINE must temporarily disable VSCodeVim so LGVS hunk keys win, then restore Vim on exit without brittle detection');
 assert(extension.includes("setContext', 'vim.active', true"), 'releaseEditorOwnership must restore Vim context so Esc leaves Insert after LGVS disappears');
 assert(extension.includes("private async releaseEditorOwnership()"), 'normal open/edit must have one hard release path that makes LGVS disappear from the editor');

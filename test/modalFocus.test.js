@@ -19,6 +19,7 @@ assert(extension.includes("this.refresh(false).catch(err => vscode.window.showEr
 assert(dogfood.includes("LGVS_DOGFOOD_FAST_COMMAND_PALETTE"), 'UI dogfood must cover Command Palette staying open from LGVS sidebar focus');
 assert(dogfood.includes("Command Palette stays open when invoked from LGVS sidebar focus"), 'UI dogfood must assert command palette survives webview refresh/autofocus races');
 assert(dogfood.includes("step: 'files-discard-modal-focus-restore'"), 'UI dogfood must exercise d-discard modal focus restoration from the Files panel');
-assert(dogfood.includes("Dogfood Modal Sentinel"), 'UI dogfood modal focus check must prove post-modal keyboard input returns to the Files panel, not the editor');
+assert(dogfood.includes("modalSentinel = '§'"), 'UI dogfood modal focus check must prove post-modal physical keyboard input returns to LGVS, not the editor');
+assert(dogfood.includes("postModalSentinelText"), 'UI dogfood must inspect the visible workbench text after the modal sentinel, not only saved git diff');
 
 console.log('modalFocus tests passed');
