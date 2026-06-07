@@ -21,14 +21,11 @@ function test(name, fn) {
   }
 }
 
-test('every test file is wired into npm test', () => {
-  const testFiles = fs.readdirSync(path.join(root, 'test'))
-    .filter(file => file.endsWith('.test.js'))
-    .sort();
-  const npmTest = pkg.scripts.test;
-  for (const file of testFiles) {
-    assert(npmTest.includes(`node test/${file}`), `${file} is not included in package.json scripts.test`);
-  }
+test('every test file is run by the repo-local deterministic runner', () => {
+  const runner = fs.readFileSync(path.join(root, 'scripts', 'run-tests.js'), 'utf8');
+  assert.strictEqual(pkg.scripts.test, 'npm run compile && node scripts/run-tests.js');
+  assert.match(runner, /file\.endsWith\('\.test\.js'\)/);
+  assert.match(runner, /Failure summary/);
 });
 
 test('testing policy is a hard agent rule and not just a forgotten doc', () => {
@@ -47,7 +44,7 @@ test('public developer docs point future agents to the testing playbook', () => 
 });
 
 test('dogfood lanes required by the playbook exist as npm scripts', () => {
-  for (const script of ['dogfood:ui', 'dogfood:ui:no-vim', 'dogfood:ui:vim', 'dogfood:ui:preview-tabs', 'dogfood:ui:vim-escape', 'dogfood:ui:reset-state', 'dogfood:ui:command-palette', 'dogfood:ui:hunk-escape']) {
+  for (const script of ['dogfood:ui', 'dogfood:ui:no-vim', 'dogfood:ui:vim', 'dogfood:ui:preview-tabs', 'dogfood:ui:vim-escape', 'dogfood:ui:reset-state', 'dogfood:ui:command-palette', 'dogfood:ui:hunk-escape', 'dogfood:ui:edge-files']) {
     assert(pkg.scripts[script], `${script} must exist`);
   }
   assert.match(pkg.scripts['dogfood:ui:no-vim'], /LGVS_DOGFOOD_VARIANT=no-vim/);
@@ -55,6 +52,7 @@ test('dogfood lanes required by the playbook exist as npm scripts', () => {
   assert.match(pkg.scripts['dogfood:ui:reset-state'], /LGVS_DOGFOOD_FAST_RESET_STATE=1/);
   assert.match(pkg.scripts['dogfood:ui:command-palette'], /LGVS_DOGFOOD_FAST_COMMAND_PALETTE=1/);
   assert.match(pkg.scripts['dogfood:ui:hunk-escape'], /LGVS_DOGFOOD_FAST_HUNK_ESCAPE=1/);
+  assert.match(pkg.scripts['dogfood:ui:edge-files'], /LGVS_DOGFOOD_EDGE_FILES=1/);
 });
 
 test('test playbook names focused, full, dogfood and package verification commands', () => {

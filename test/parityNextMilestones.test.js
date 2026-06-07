@@ -4,7 +4,8 @@ const path = require('path');
 
 const root = path.join(__dirname, '..');
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
-const pkg = fs.readFileSync(path.join(root, 'package.json'), 'utf8');
+const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+const runner = fs.readFileSync(path.join(root, 'scripts', 'run-tests.js'), 'utf8');
 
 assert(extension.includes('private commandRegistry(viewPanel: ViewPanel): GitMenuItem[]'), 'Help, QuickPick and key dispatch must share one command registry, not hand-written per-surface options');
 assert(extension.includes('this.commandRegistry(viewPanel)'), 'Help menu must read the shared command registry');
@@ -30,6 +31,7 @@ assert(extension.includes('aria-selected="${sel ? \'true\' : \'false\'}"'), 'Row
 assert(extension.includes('private virtualRows'), 'Large lists must be virtualized before rendering webview HTML');
 assert(extension.includes('data-virtual-offset'), 'Virtualized rows need an offset marker for index mapping/debugging');
 
-assert(pkg.includes('node test/parityNextMilestones.test.js'), 'New parity milestone tests must run in npm test');
+assert.strictEqual(pkg.scripts.test, 'npm run compile && node scripts/run-tests.js', 'npm test must use the deterministic runner');
+assert(runner.includes("file.endsWith('.test.js')"), 'runner must discover parity milestone tests automatically');
 
 console.log('parityNextMilestones tests passed');
