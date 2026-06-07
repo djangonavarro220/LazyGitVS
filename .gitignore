@@ -2,6 +2,8 @@ node_modules/
 out/
 dist/
 dogfood-output/
+coverage/
+.nyc_output/
 .vscode-test/
 .local/
 .env
@@ -10,3 +12,5 @@ dogfood-output/
 *.vsix
 *.log
 .DS_Store
+
+docs/plans/*-temp.md

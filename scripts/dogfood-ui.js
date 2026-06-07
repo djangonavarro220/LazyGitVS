@@ -42,18 +42,31 @@ function getJson(url) {
     }).on('error', reject);
   });
 }
-async function waitFor(fn, timeoutMs = 30000, intervalMs = 250, label = 'condition') {
-  const end = Date.now() + timeoutMs;
+async function waitFor(fn, timeoutMs = 20000, intervalMs = 250) {
+  const started = Date.now();
   let lastErr;
-  while (Date.now() < end) {
+  while (Date.now() - started < timeoutMs) {
     try {
-      const v = await fn();
-      if (v) return v;
+      const value = await fn();
+      if (value) return value;
     } catch (e) { lastErr = e; }
     await sleep(intervalMs);
   }
-  throw new Error(`Timed out waiting for ${label}${lastErr ? `: ${lastErr.message}` : ''}`);
+  throw lastErr || new Error(`Timed out after ${timeoutMs}ms`);
 }
+
+async function waitForText(Runtime, pattern, timeoutMs = 20000) {
+  return waitFor(async () => {
+    const text = await pageText(Runtime);
+    return pattern.test(text) ? text : undefined;
+  }, timeoutMs, 250);
+}
+
+function addCheck(checks, check) {
+  checks.push(check);
+  return check;
+}
+
 function makeFixture() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-dogfood-'));
   git(dir, 'init');
@@ -385,10 +398,10 @@ async function dispatchLgvsDomKey(Runtime, key) {
 
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
     await clickLgvsRoot(Runtime, Input);
-    const sidebarText = (await pageText(Runtime)).slice(0, 3000);
+    const sidebarText = await waitForText(Runtime, /2 FILES|1 STATUS/);
     evidence.push({ step: 'open-lgvs-scm-sidebar', screenshot: await screenshot(Page, '02-open-lgvs-scm-sidebar'), status: status(fixture), textSample: sidebarText });
-    checks.push({ name: 'Light theme dogfood profile is active', ok: THEME.toLowerCase().includes('light'), theme: THEME });
-    checks.push({ name: `${useVim ? 'VSCodeVim' : 'No Vim'} dogfood variant is active`, ok: true, variant: VARIANT, vimExtension: useVim, vimVersion: vimExtension?.version });
+    addCheck(checks, { name: 'Light theme dogfood profile is active', ok: THEME.toLowerCase().includes('light'), theme: THEME });
+    addCheck(checks, { name: `${useVim ? 'VSCodeVim' : 'No Vim'} dogfood variant is active`, ok: true, variant: VARIANT, vimExtension: useVim, vimVersion: vimExtension?.version });
     checks.push({ name: 'SCM sidebar exposes default LazyGitVS panels while Status stays hidden until 1', ok: !sidebarText.includes('1 STATUS') && ['2 FILES', '3 BRANCHES', '4 COMMITS', '5 STASH', '6 CONFLICTS', '7 TAGS', '8 REMOTES'].every(label => sidebarText.includes(label)), textSample: sidebarText.slice(0, 1200) });
     checks.push({ name: 'No noisy focus footer in LGVS panels', ok: !/Focus:\s+LG panel/i.test(sidebarText), textSample: sidebarText.slice(-800) });
     checks.push({ name: 'Right chat / secondary side bar stays closed in screenshots', ok: !/CHAT\s+Build with Agent/i.test(sidebarText), textSample: sidebarText.slice(-800) });

@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 const { parseDiffHunks, hunkChangedLineIndexes, hunkSelectableLineIndexes, singleLinePatch } = require('../out/hunkPatch');
 const extensionSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
+const gitActionsSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'gitActions.ts'), 'utf8');
 
 function sh(command, cwd, input) {
   return cp.execFileSync(command[0], command.slice(1), { cwd, input, encoding: 'utf8', stdio: input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'] });
@@ -43,9 +44,9 @@ test('parseDiffHunks keeps separate file headers for multi-file diffs', dir => {
 });
 
 test('hunk navigation uses zero-context diffs so nearby editor blocks stay separate', dir => {
-  assert.match(extensionSource, /const diffArgs = \['diff', '--unified=0'/, 'unstaged hunk navigation must ignore preview context and use zero-context diffs');
-  assert.match(extensionSource, /const cachedDiffArgs = \['diff', '--cached', '--unified=0'/, 'staged hunk navigation must ignore preview context and use zero-context diffs');
-  assert.match(extensionSource, /zeroContextPatch\(patch\)/, 'whole hunk apply must use --unidiff-zero for zero-context navigation patches');
+  assert.match(gitActionsSource, /const diffArgs = \['diff', '--unified=0'/, 'unstaged hunk navigation must ignore preview context and use zero-context diffs');
+  assert.match(gitActionsSource, /const cachedDiffArgs = \['diff', '--cached', '--unified=0'/, 'staged hunk navigation must ignore preview context and use zero-context diffs');
+  assert.match(gitActionsSource, /zeroContextPatch\(patch\)/, 'whole hunk apply must use --unidiff-zero for zero-context navigation patches');
 
   write(path.join(dir, 'keybindings.json'), Array.from({ length: 20 }, (_, i) => `  "cmd${i}": true,`).join('\n') + '\n');
   git(dir, 'add', 'keybindings.json');

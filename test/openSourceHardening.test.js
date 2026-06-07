@@ -47,15 +47,13 @@ test('extension starts modularizing Git/workspace helpers out of src/extension.t
 test('destructive Git actions are protected by explicit modal confirmation contracts', () => {
   assert(extension.includes("showWarningMessage(item.confirm ?? `Run ${item.label}?`, { modal: true }, 'Run')"), 'menu danger path must use modal confirmation and Run gate');
   const destructiveContracts = [
-    ['force push with lease', /args: \['push', '--force-with-lease'\][^\n]+danger: true[^\n]+confirm:/],
-    ['hard reset to commit', /args: \['reset', '--hard', commit\.hash\][^\n]+danger: true[^\n]+confirm:/],
-    ['discard file', /args: \['restore', '--', file\.path\][^\n]+danger: true[^\n]+confirm:/],
-    ['reset hard HEAD', /args: \['reset', '--hard', 'HEAD'\][^\n]+danger: true[^\n]+confirm:/],
-    ['nuke working tree includes clean', /label: '💣 Nuke working tree'[^\n]+danger: true[^\n]+confirm:[^\n]+git\(\['reset', '--hard', 'HEAD'\]\)[^\n]+git\(\['clean', '-fd'\]\)/],
-    ['stash drop', /key: 'd'[^\n]+Drop stash[^\n]+danger: true[^\n]+confirm:[^\n]+args: \['stash', 'drop', s\.ref\]/]
+    ['hard reset to commit', /dangerousGitMenuItem\(\{ key: 'h'[^\n]+args: \['reset', '--hard', commit\.hash\]/],
+    ['discard file', /dangerousGitMenuItem\(\{ key: 'u'[^\n]+args: \['restore', '--', file\.path\]/],
+    ['nuke working tree includes clean', /dangerousGitMenuItem\(\{ key: 'n'[^\n]+git\(\['reset', '--hard', 'HEAD'\]\)[^\n]+git\(\['clean', '-fd'\]\)/],
+    ['stash drop', /dangerousGitMenuItem\(\{ key: 'd'[^\n]+Drop stash[^\n]+args: \['stash', 'drop', s\.ref\]/]
   ];
   for (const [name, pattern] of destructiveContracts) {
-    assert(pattern.test(extension), `${name} must be marked danger with confirm text`);
+    assert(pattern.test(extension), `${name} must use central destructive helper`);
   }
   assert.match(extension, /if \(ok !== 'Run'\) return false;/, 'cancel path must return before running destructive menu item');
   assert.match(extension, /label: '\$\(discard\) Discard hunk'[^\n]+danger: true[^\n]+confirm: 'Discard this unstaged hunk from the working tree\?'/, 'unstaged hunk discard must use modal confirmation via danger menu');

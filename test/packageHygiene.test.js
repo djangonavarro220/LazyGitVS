@@ -49,6 +49,8 @@ test('VSIX ignore rules exclude generated, test, dogfood and local artifacts', (
     'scripts/**',
     '.vscode-test/**',
     'dist/**',
+    'coverage/**',
+    '.nyc_output/**',
     '.local/**',
     '.env',
     '.env.*',

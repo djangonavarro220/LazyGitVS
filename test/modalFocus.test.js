@@ -13,7 +13,7 @@ assert(extension.includes("await this.runMenu(showStashCreateMenu, panel)"), 'st
 assert(extension.includes("this.suppressWebviewAutoFocusUntil = 0;"), 'panel focus restoration must allow webview bootstrap autofocus after modal closes');
 assert(extension.includes('private pendingWebviewAutoFocus = false;'), 'webview autofocus must be a one-shot explicit focus token, not every active-panel render');
 assert(extension.includes('const shouldFocus = this.consumeWebviewAutoFocus(viewPanel);'), 'rendering active panels must not steal Command Palette/QuickPick focus during later refreshes');
-assert(extension.includes("msg.type === 'commandPalette'"), 'LGVS webviews must explicitly hand Ctrl/Cmd+Shift+P and F1 to VS Code Command Palette');
+assert(extension.includes("type === 'commandPalette'"), 'LGVS webviews must explicitly hand Ctrl/Cmd+Shift+P and F1 to VS Code Command Palette');
 assert(extension.includes("workbench.action.showCommands") || extension.includes("workbench.action.quickOpen', '>'"), 'Command Palette handoff must use VS Code native command picker, not a custom LGVS picker');
 assert(extension.includes("this.refresh(false).catch(err => vscode.window.showErrorMessage(err.message));"), 'webview attach/visibility refresh must not auto-open previews that steal Command Palette focus');
 assert(dogfood.includes("LGVS_DOGFOOD_FAST_COMMAND_PALETTE"), 'UI dogfood must cover Command Palette staying open from LGVS sidebar focus');
