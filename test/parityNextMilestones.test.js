@@ -3,7 +3,11 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.join(__dirname, '..');
-const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
+const extension = [
+  'extension.ts',
+  'panels.ts',
+  'panelRows.ts'
+].map(file => fs.readFileSync(path.join(root, 'src', file), 'utf8')).join('\n');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const runner = fs.readFileSync(path.join(root, 'scripts', 'run-tests.js'), 'utf8');
 
@@ -12,7 +16,7 @@ assert(extension.includes('this.commandRegistry(viewPanel)'), 'Help menu must re
 assert(extension.includes('findMenuItemByKey(this.commandRegistry(viewPanel), typed)'), 'Typed panel actions must route through the shared command registry');
 assert(!extension.includes('private panelCommandCatalog(viewPanel: ViewPanel): GitMenuItem[]'), 'Old panelCommandCatalog wrapper should be gone; it encouraged split-brain menu/help routing');
 
-assert(extension.includes('type FileTreeRow ='), 'Files panel needs real tree rows, not path text with slashes replaced by arrows');
+assert(extension.includes('export type FileTreeRow ='), 'Files panel needs real tree rows, not path text with slashes replaced by arrows');
 assert(extension.includes('private collapsedFileDirs = new Set<string>();'), 'Files tree must track collapsed directories');
 assert(extension.includes('private fileTreeRows(): FileTreeRow[]'), 'Files panel must render directory and file rows from a tree row model');
 assert(extension.includes('toggleCurrentFileTreeNode()'), 'Enter on a directory must collapse/expand that node');

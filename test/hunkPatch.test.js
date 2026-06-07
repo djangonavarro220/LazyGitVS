@@ -4,7 +4,10 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { parseDiffHunks, hunkChangedLineIndexes, hunkSelectableLineIndexes, singleLinePatch } = require('../out/hunkPatch');
-const extensionSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
+const extensionSource = [
+  'extension.ts',
+  'hunkEditorDecorations.ts'
+].map(file => fs.readFileSync(path.join(__dirname, '..', 'src', file), 'utf8')).join('\n');
 const gitActionsSource = fs.readFileSync(path.join(__dirname, '..', 'src', 'gitActions.ts'), 'utf8');
 
 function sh(command, cwd, input) {
@@ -199,7 +202,7 @@ test('singleLinePatch handles zero-count pure add/delete hunks', dir => {
 });
 
 test('deleted staged lines render as red ghost text instead of blank editor selection', dir => {
-  assert.match(extensionSource, /function deletedGhostDecorations\(hunk: Hunk, editor: vscode\.TextEditor\)/, 'deleted lines need explicit ghost decorations because they do not exist in the editor buffer');
+  assert.match(extensionSource, /export function deletedGhostDecorations\(hunk: Hunk, editor: vscode\.TextEditor\)/, 'deleted lines need explicit ghost decorations because they do not exist in the editor buffer');
   assert.match(extensionSource, /contentText: deleted\.map\(text => `− \$\{text\}`\)\.join\('  ⏎  '\)/, 'deleted ghost decoration must render the removed text, not just select the nearest live line');
   assert.match(extensionSource, /color: '#f85149'/, 'deleted ghost text should use deletion red');
   write(path.join(dir, 'a.txt'), 'keep-before\nremoved one\nremoved two\nkeep-after\n');
