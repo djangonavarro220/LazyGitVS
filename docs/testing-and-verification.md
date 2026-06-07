@@ -138,6 +138,7 @@ npm run dogfood:ui:command-palette
 npm run dogfood:ui:hunk-escape
 npm run dogfood:ui:deep-tree
 npm run dogfood:ui:cramped
+npm run dogfood:ui:edge-files
 ```
 
 Cramped sidebar check:
@@ -165,6 +166,7 @@ The broad harness should keep covering at least:
 - `4 Commits` + `Enter` opens the selected commit details
 - `?` opens contextual help and returns focus
 - deep-tree and cramped-sidebar lanes exist
+- deleted/renamed/conflict dogfood lane exists
 - Files panel renders meaningful fixture data
 - Files `Enter` opens a real editor and enters editor HUNK mode
 - HUNK navigation works and wraps

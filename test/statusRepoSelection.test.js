@@ -4,13 +4,14 @@ const path = require('path');
 
 const root = path.join(__dirname, '..');
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
+const gitService = fs.readFileSync(path.join(root, 'src', 'gitService.ts'), 'utf8');
 const lazygitConfig = fs.readFileSync(path.join(root, 'src', 'lazygitConfig.ts'), 'utf8');
 const pkg = fs.readFileSync(path.join(root, 'package.json'), 'utf8');
 
 assert(lazygitConfig.includes("recentRepos: '<enter>'") || extension.includes("key: '<enter>', label: '$(repo) Switch to workspace repository'"), 'Status repo switching must preserve lazygit Status recentRepos=<enter> behavior');
-assert(extension.includes('async function discoverWorkspaceRepositories(): Promise<WorkspaceRepository[]>'), 'LGVS must discover available Git repositories inside the VS Code workspace');
-assert(extension.includes("repoRootFor(folder.uri.fsPath)"), 'Workspace folder Git roots must be included in the Status repository selector');
-assert(extension.includes("findFiles('**/.git/HEAD'"), 'Nested workspace repositories must be discovered without shelling out through find/grep');
+assert(gitService.includes('export async function discoverWorkspaceRepositories(): Promise<WorkspaceRepository[]>'), 'LGVS must discover available Git repositories inside the VS Code workspace');
+assert(gitService.includes("repoRootFor(folder.uri.fsPath)"), 'Workspace folder Git roots must be included in the Status repository selector');
+assert(gitService.includes("findFiles('**/.git/HEAD'"), 'Nested workspace repositories must be discovered without shelling out through find/grep');
 assert(extension.includes("if (panel === 'status') return this.recentReposMenu();"), 'Enter on 1 Status must open the repository selector, matching lazygit original recent repos behavior');
 assert(extension.includes('class StatusTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem>'), '1 Status should use a native compact TreeView instead of a tall webview');
 assert(extension.includes("vscode.window.createTreeView(VIEW_IDS.status, { treeDataProvider: statusProvider })"), '1 Status must be registered as a native TreeView');
@@ -28,8 +29,8 @@ assert(extension.includes("item.description = isCurrent ? `${repo.branch} · cur
 assert(extension.includes("if (isCurrent) item.iconPath = new vscode.ThemeIcon('check');"), '1 Status must visually mark the active repository row');
 assert(extension.includes('qp.activeItems = items.filter(item => item.repo.path === current).slice(0, 1);'), 'Repository QuickPick must open with the current repository selected so Enter confirms it');
 assert(extension.includes("qp.title = 'Recent repositories';"), 'Repository selector title should mirror lazygit original wording');
-assert(extension.includes("if (!activeWorkspaceRoot || !roots.has(activeWorkspaceRoot)) activeWorkspaceRoot = roots.keys().next().value"), 'Active repo must reset when the workspace repo set changes, not cling to a stale previous root');
-assert(extension.includes('activeWorkspaceRoot = repo.path'), 'Selecting a repository must switch the active Git root used by LGVS commands');
+assert(gitService.includes("if (!activeWorkspaceRoot || !roots.has(activeWorkspaceRoot)) activeWorkspaceRoot = roots.keys().next().value"), 'Active repo must reset when the workspace repo set changes, not cling to a stale previous root');
+assert(extension.includes('setActiveWorkspaceRoot(repo.path)'), 'Selecting a repository must switch the active Git root used by LGVS commands');
 assert(extension.indexOf('this.workspaceRepos = await discoverWorkspaceRepositories().catch(() => []);') < extension.indexOf('this.files = await changedFiles(this.lazygitGit);'), 'Refresh must discover workspace repos before Git status so nested/non-root repos can become the active root');
 const dogfoodUi = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
 assert(dogfoodUi.includes('const secondaryRepo = `${dir}-other-repo`;'), 'Dogfood must create a second repository so Status selection is testable for real');

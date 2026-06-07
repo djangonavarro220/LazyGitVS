@@ -32,7 +32,9 @@ test('dogfood script keeps the full matrix and targeted lanes documented in the 
   requireDogfoodInvariant('deep-tree targeted lane', /LGVS_DOGFOOD_DEEP_TREE/);
   assert(pkg.scripts['dogfood:ui:deep-tree'], 'package.json must expose a deep-tree dogfood lane');
   assert(pkg.scripts['dogfood:ui:cramped'], 'package.json must expose a cramped-sidebar dogfood lane');
+  assert(pkg.scripts['dogfood:ui:edge-files'], 'package.json must expose a deleted/renamed/conflict dogfood lane');
   requireDogfoodInvariant('cramped-sidebar window override', /LGVS_DOGFOOD_WINDOW_SIZE/);
+  requireDogfoodInvariant('edge-file targeted lane', /LGVS_DOGFOOD_EDGE_FILES/);
   requireDogfoodInvariant('theme override', /LGVS_DOGFOOD_THEME/);
 });
 
@@ -70,6 +72,8 @@ test('dogfood asserts editor HUNK and LINE flows with real Git state', () => {
   requireDogfoodInvariant('Git working diff assertion', /diffNames\(fixture\)/);
   requireDogfoodInvariant('nearby hunks stay separate', /Nearby staged settings edits stay separate zero-context hunks/);
   requireDogfoodInvariant('HUNK navigation changes visible selection', /HUNK navigation moves between changed areas/);
+  requireDogfoodInvariant('HUNK j/k wraps', /HUNK j\/k wraps between first and last changed areas/);
+  requireDogfoodInvariant('HUNK decorations changed-lines scoped', /HUNK decorations stay scoped to changed lines/);
 });
 
 test('dogfood asserts focus, Vim ownership, modal, preview and failure-only screenshot evidence', () => {
@@ -96,8 +100,10 @@ test('documented dogfood expected coverage is protected by this static contract'
     '`4 Commits` + `Enter` opens the selected commit details',
     '`?` opens contextual help and returns focus',
     'deep-tree and cramped-sidebar lanes exist',
+    'deleted/renamed/conflict dogfood lane exists',
     'Files `Enter` opens a real editor',
     'HUNK navigation works',
+    'HUNK navigation works and wraps',
     '`a` toggles HUNK/LINE mode',
     '`Space` stages',
     '`Tab` switches',

@@ -622,7 +622,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "check:release": "node scripts/check-release-consistency.js",
-    "test": "npm run compile && node test/lazygitConfig.test.js && node test/lazygitWorkflowParity.test.js && node test/lazygitMenu.test.js && node test/hunkPatch.test.js && node test/gitPrimitives.test.js && node test/stageMatrix.test.js && node test/gitFixtures.test.js && node test/escapeScope.test.js && node test/hunkModeBindings.test.js && node test/originalPreviewScope.test.js && node test/filesPanelUx.test.js && node test/parityNextMilestones.test.js && node test/branchCommitWorkflow.test.js && node test/statusRepoSelection.test.js && node test/panelTabNavigation.test.js && node test/virtualPreview.test.js && node test/nativePanelFocus.test.js && node test/modalFocus.test.js && node test/dogfoodCoverage.test.js && node test/packageHygiene.test.js && node test/testingWorkflowPolicy.test.js && node test/runtimeHealth.test.js",
+    "test": "npm run compile && node scripts/run-tests.js",
     "dogfood:ui": "node scripts/dogfood-ui.js",
     "dogfood:ui:no-vim": "LGVS_DOGFOOD_VARIANT=no-vim node scripts/dogfood-ui.js",
     "dogfood:ui:preview-tabs": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_PREVIEW_TABS=1 node scripts/dogfood-ui.js",
@@ -637,7 +637,8 @@
     "dogfood:ui:command-palette": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_COMMAND_PALETTE=1 node scripts/dogfood-ui.js",
     "dogfood:ui:hunk-escape": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_HUNK_ESCAPE=1 node scripts/dogfood-ui.js",
     "dogfood:ui:deep-tree": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_DEEP_TREE=1 node scripts/dogfood-ui.js",
-    "dogfood:ui:cramped": "LGVS_DOGFOOD_WINDOW_SIZE=900,260 npm run dogfood:ui"
+    "dogfood:ui:cramped": "LGVS_DOGFOOD_WINDOW_SIZE=900,260 npm run dogfood:ui",
+    "dogfood:ui:edge-files": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_EDGE_FILES=1 node scripts/dogfood-ui.js"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

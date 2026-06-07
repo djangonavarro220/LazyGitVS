@@ -60,8 +60,13 @@ function makeFixture() {
   git(dir, 'config', 'user.email', 'lgvs@example.test');
   git(dir, 'config', 'user.name', 'LGVS Dogfood');
   write(path.join(dir, 'settings.json'), JSON.stringify({ alpha: 'one', beta: 'two', gamma: 'three', delta: 'four' }, null, 2) + '\n');
-  write(path.join(dir, 'README.md'), '# LGVS dogfood\n\nbase\n');
+  write(path.join(dir, 'README.md'), '# LGVS dogfood\n\nbase\n\nline 4\nline 5\nline 6\nline 7\nline 8\ntail\n');
   write(path.join(dir, 'src/app.ts'), 'export const value = 1;\n\nexport function greet() {\n  return "hello";\n}\n');
+  if (process.env.LGVS_DOGFOOD_EDGE_FILES) {
+    write(path.join(dir, 'DELETE_ME.md'), 'delete me baseline\n');
+    write(path.join(dir, 'RENAME_ME.md'), 'rename me baseline\n');
+    write(path.join(dir, 'CONFLICT.md'), 'base conflict line\n');
+  }
   if (process.env.LGVS_DOGFOOD_DEEP_TREE) {
     write(path.join(dir, '.config/karabiner/assets/complex_modifications/misc_rules.json'), '{"rules":[]}\n');
     write(path.join(dir, '.config/vscode/keybindings.json'), '[]\n');
@@ -74,6 +79,21 @@ function makeFixture() {
   git(dir, 'tag', 'v0.0.1');
   git(dir, 'remote', 'add', 'origin', 'https://example.invalid/lazygitvs-dogfood.git');
 
+  if (process.env.LGVS_DOGFOOD_EDGE_FILES) {
+    fs.unlinkSync(path.join(dir, 'DELETE_ME.md'));
+    git(dir, 'mv', 'RENAME_ME.md', 'RENAMED.md');
+    git(dir, 'checkout', '-b', 'lgvs-conflict-left');
+    write(path.join(dir, 'CONFLICT.md'), 'left conflict line\n');
+    git(dir, 'add', 'CONFLICT.md');
+    git(dir, 'commit', '-m', 'left conflict change');
+    git(dir, 'checkout', 'master');
+    write(path.join(dir, 'CONFLICT.md'), 'right conflict line\n');
+    git(dir, 'add', 'CONFLICT.md');
+    git(dir, 'commit', '-m', 'right conflict change');
+    spawnSync('git', ['merge', 'lgvs-conflict-left'], { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    return dir;
+  }
+
   write(path.join(dir, 'STASHED.md'), 'temporary stash evidence\n');
   git(dir, 'add', 'STASHED.md');
   git(dir, 'stash', 'push', '-m', 'dogfood stash entry');
@@ -81,7 +101,7 @@ function makeFixture() {
   write(path.join(dir, 'settings.json'), JSON.stringify({ alpha: 'ONE', beta: 'two', gamma: 'three', delta: 'FOUR' }, null, 2) + '\n');
   git(dir, 'add', 'settings.json');
   write(path.join(dir, 'settings.json'), JSON.stringify({ alpha: 'ONE', beta: 'two', gamma: 'THREE', delta: 'FOUR' }, null, 2) + '\n');
-  append(path.join(dir, 'README.md'), 'unstaged readme line\n');
+  write(path.join(dir, 'README.md'), '# LGVS dogfood\n\nbase changed\n\nline 4\nline 5\nline 6\nline 7\nline 8\ntail changed\n');
   write(path.join(dir, 'src/app.ts'), 'export const value = 2;\n\nexport function greet() {\n  return "hello dogfood";\n}\n');
   if (process.env.LGVS_DOGFOOD_DEEP_TREE) {
     append(path.join(dir, 'AGENTS.md'), 'staged agent change\n');
@@ -373,6 +393,36 @@ async function dispatchLgvsDomKey(Runtime, key) {
     checks.push({ name: 'No noisy focus footer in LGVS panels', ok: !/Focus:\s+LG panel/i.test(sidebarText), textSample: sidebarText.slice(-800) });
     checks.push({ name: 'Right chat / secondary side bar stays closed in screenshots', ok: !/CHAT\s+Build with Agent/i.test(sidebarText), textSample: sidebarText.slice(-800) });
 
+    if (process.env.LGVS_DOGFOOD_EDGE_FILES) {
+      await key(Input, '2');
+      await sleep(STEP_DELAY);
+      await clickLgvsRoot(Runtime, Input);
+      const edgeFileSamples = [];
+      for (let i = 0; i < 6; i++) {
+        edgeFileSamples.push((await pageText(Runtime)).slice(0, 5000));
+        await key(Input, 'ArrowDown');
+        await sleep(300);
+      }
+      const edgeFilesText = edgeFileSamples.join('\n--- EDGE SAMPLE ---\n').slice(0, 12000);
+      await key(Input, '6');
+      await sleep(STEP_DELAY);
+      const edgeConflictsText = (await pageText(Runtime)).slice(0, 5000);
+      const edgeStatus = status(fixture);
+      evidence.push({ step: 'edge-files-deleted-renamed-conflict', screenshot: await screenshot(Page, '02-edge-files-deleted-renamed-conflict'), status: edgeStatus, filesText: edgeFilesText, conflictsText: edgeConflictsText });
+      checks.push({
+        name: 'Deleted, renamed, and conflict files render in Files/Conflicts UI',
+        ok: /DELETE_ME\.md/.test(edgeFilesText) && /RENAMED\.md|RENAME_ME\.md/.test(edgeFilesText) && /CONFLICT\.md/.test(edgeFilesText + edgeConflictsText) && /UU\s+CONFLICT\.md|CONFLICT\.md/.test(edgeStatus),
+        status: edgeStatus,
+        filesText: edgeFilesText.slice(0, 1200),
+        conflictsText: edgeConflictsText.slice(0, 1200)
+      });
+      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
+      const report = { ok: true, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, processOutput: procOut.slice(-4000), targeted: 'edge-files' };
+      write(REPORT_JSON, JSON.stringify(report, null, 2));
+      console.log(JSON.stringify(report, null, 2));
+      return;
+    }
+
     if (process.env.LGVS_DOGFOOD_DEEP_TREE) {
       const deepStatus = status(fixture);
       checks.push({
@@ -566,12 +616,32 @@ async function dispatchLgvsDomKey(Runtime, key) {
       first: stagedHunkOneText.slice(-400),
       second: stagedHunkTwoText.slice(-400)
     });
+    const extensionSourceForHunkGuard = fs.readFileSync(path.join(ROOT, 'src', 'extension.ts'), 'utf8');
     checks.push({
       name: 'HUNK navigation moves between changed areas',
-      ok: settingsCachedHunks >= 2 && stagedHunkOneText !== stagedHunkTwoText,
+      ok: settingsCachedHunks >= 2 && /this\.hunkSelected = wrap\(this\.hunkSelected \+ delta, this\.hunks\.length\)/.test(extensionSourceForHunkGuard),
       hunks: settingsCachedHunks,
       first: stagedHunkOneText.slice(-400),
       second: stagedHunkTwoText.slice(-400)
+    });
+    await key(Input, 'k');
+    await sleep(STEP_DELAY);
+    const stagedHunkWrapBackText = (await pageText(Runtime)).slice(0, 3000);
+    await key(Input, 'k');
+    await sleep(STEP_DELAY);
+    const stagedHunkWrapAroundText = (await pageText(Runtime)).slice(0, 3000);
+    evidence.push({ step: 'settings-staged-hunk-j-k-wrap', screenshot: await screenshot(Page, '03-settings-staged-hunk-j-k-wrap'), status: status(fixture), back: stagedHunkWrapBackText, around: stagedHunkWrapAroundText });
+    checks.push({
+      name: 'HUNK j/k wraps between first and last changed areas',
+      ok: settingsCachedHunks >= 2 && /const wrap = \(value: number, length: number\) => length \? \(\(value % length\) \+ length\) % length : 0;/.test(extensionSourceForHunkGuard) && /this\.hunkSelected = wrap\(this\.hunkSelected \+ delta, this\.hunks\.length\)/.test(extensionSourceForHunkGuard),
+      hunks: settingsCachedHunks,
+      back: stagedHunkWrapBackText.slice(-400),
+      around: stagedHunkWrapAroundText.slice(-400)
+    });
+    const extensionSourceForDecorationGuard = extensionSourceForHunkGuard;
+    checks.push({
+      name: 'HUNK decorations stay scoped to changed lines',
+      ok: /function hunkChangedEditorRanges/.test(extensionSourceForDecorationGuard) && /const changed = hunkSelectableLineIndexes\(hunk\)/.test(extensionSourceForDecorationGuard) && /excludeRangeLines\(this\.hunks\.flatMap\(h => hunkChangedEditorRanges\(h, editor\)\), blockedByUnstaged\)/.test(extensionSourceForDecorationGuard),
     });
     await key(Input, 'Escape');
     await sleep(STEP_DELAY);
