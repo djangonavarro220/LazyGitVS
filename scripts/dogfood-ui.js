@@ -9,6 +9,8 @@ const os = require('os');
 const path = require('path');
 const http = require('http');
 const { spawn, spawnSync, execFileSync } = require('child_process');
+const { makeFixture, secondaryFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write } = require('./dogfood/fixtures');
+const { targetLane, finishReport, writeJson } = require('./dogfood/reporting');
 const CDP = require('chrome-remote-interface');
 const { downloadAndUnzipVSCode } = require('@vscode/test-electron');
 
@@ -17,36 +19,14 @@ const OUT = path.join(ROOT, 'dogfood-output');
 const SHOTS = path.join(OUT, 'screenshots');
 const VARIANT = process.env.LGVS_DOGFOOD_VARIANT || '';
 const VARIANT_NAME = VARIANT || 'matrix';
-const TARGETED_LANE = [
-  process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS && 'preview-tabs',
-  process.env.LGVS_DOGFOOD_FAST_VIM_ESCAPE && 'vim-escape',
-  process.env.LGVS_DOGFOOD_FAST_RESET_STATE && 'reset-state',
-  process.env.LGVS_DOGFOOD_FAST_COMMAND_PALETTE && 'command-palette',
-  process.env.LGVS_DOGFOOD_FAST_HUNK_ESCAPE && 'hunk-escape',
-  process.env.LGVS_DOGFOOD_DEEP_TREE && 'deep-tree',
-  process.env.LGVS_DOGFOOD_EDGE_FILES && 'edge-files',
-  process.env.LGVS_DOGFOOD_BINARY_FILE && 'binary-file',
-  process.env.LGVS_DOGFOOD_LARGE_REPO && 'large-repo',
-  process.env.LGVS_DOGFOOD_GIT_FAILURE && 'git-failure',
-  process.env.LGVS_DOGFOOD_DESTRUCTIVE_CANCEL && 'destructive-cancel',
-  process.env.LGVS_DOGFOOD_FAST_THEME && `${process.env.LGVS_DOGFOOD_FAST_THEME}-theme`
-].filter(Boolean).join('-') || 'full';
+const TARGETED_LANE = targetLane(process.env);
 const REPORT_SLUG = `${VARIANT_NAME}-${TARGETED_LANE}`;
 const REPORT_JSON = path.join(OUT, `last-run-${REPORT_SLUG}.json`);
 const PORT = Number(process.env.LGVS_DOGFOOD_CDP_PORT || 9322);
 const STEP_DELAY = Number(process.env.LGVS_DOGFOOD_STEP_DELAY || 900);
 const THEME = process.env.LGVS_DOGFOOD_THEME || 'Default Light Modern';
 
-function sh(cmd, args, opts = {}) {
-  const r = spawnSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], ...opts });
-  if (r.status !== 0) throw new Error(`${cmd} ${args.join(' ')} failed\nSTDOUT:\n${r.stdout}\nSTDERR:\n${r.stderr}`);
-  return r.stdout.trim();
-}
-function git(cwd, ...args) { return sh('git', args, { cwd }); }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-function ensureDir(p) { fs.mkdirSync(p, { recursive: true }); }
-function write(p, s) { ensureDir(path.dirname(p)); fs.writeFileSync(p, s); }
-function append(p, s) { ensureDir(path.dirname(p)); fs.appendFileSync(p, s); }
 function getJson(url) {
   return new Promise((resolve, reject) => {
     http.get(url, res => {
@@ -82,92 +62,6 @@ function addCheck(checks, check) {
   return check;
 }
 
-function makeFixture() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-dogfood-'));
-  git(dir, 'init');
-  git(dir, 'config', 'user.email', 'lgvs@example.test');
-  git(dir, 'config', 'user.name', 'LGVS Dogfood');
-  write(path.join(dir, 'settings.json'), JSON.stringify({ alpha: 'one', beta: 'two', gamma: 'three', delta: 'four' }, null, 2) + '\n');
-  write(path.join(dir, 'README.md'), '# LGVS dogfood\n\nbase\n\nline 4\nline 5\nline 6\nline 7\nline 8\ntail\n');
-  write(path.join(dir, 'src/app.ts'), 'export const value = 1;\n\nexport function greet() {\n  return "hello";\n}\n');
-  if (process.env.LGVS_DOGFOOD_EDGE_FILES) {
-    write(path.join(dir, 'DELETE_ME.md'), 'delete me baseline\n');
-    write(path.join(dir, 'RENAME_ME.md'), 'rename me baseline\n');
-    write(path.join(dir, 'CONFLICT.md'), 'base conflict line\n');
-  }
-  if (process.env.LGVS_DOGFOOD_BINARY_FILE) {
-    fs.writeFileSync(path.join(dir, 'BINARY.bin'), Buffer.from([0, 159, 146, 150, 0, 1, 2, 3]));
-  }
-  if (process.env.LGVS_DOGFOOD_LARGE_REPO) {
-    for (let i = 0; i < 140; i++) write(path.join(dir, `bulk/file-${String(i).padStart(3, '0')}.txt`), `base ${i}\n`);
-  }
-  if (process.env.LGVS_DOGFOOD_DEEP_TREE) {
-    write(path.join(dir, '.config/karabiner/assets/complex_modifications/misc_rules.json'), '{"rules":[]}\n');
-    write(path.join(dir, '.config/vscode/keybindings.json'), '[]\n');
-    write(path.join(dir, '.config/vscode/settings.json'), '{}\n');
-    write(path.join(dir, 'AGENTS.md'), 'dogfood agent notes\n');
-  }
-  git(dir, 'add', '.');
-  git(dir, 'commit', '-m', 'initial');
-  git(dir, 'branch', 'feature/dogfood');
-  git(dir, 'tag', 'v0.0.1');
-  git(dir, 'remote', 'add', 'origin', 'https://example.invalid/lazygitvs-dogfood.git');
-
-  if (process.env.LGVS_DOGFOOD_EDGE_FILES) {
-    fs.unlinkSync(path.join(dir, 'DELETE_ME.md'));
-    git(dir, 'mv', 'RENAME_ME.md', 'RENAMED.md');
-    git(dir, 'checkout', '-b', 'lgvs-conflict-left');
-    write(path.join(dir, 'CONFLICT.md'), 'left conflict line\n');
-    git(dir, 'add', 'CONFLICT.md');
-    git(dir, 'commit', '-m', 'left conflict change');
-    git(dir, 'checkout', 'master');
-    write(path.join(dir, 'CONFLICT.md'), 'right conflict line\n');
-    git(dir, 'add', 'CONFLICT.md');
-    git(dir, 'commit', '-m', 'right conflict change');
-    spawnSync('git', ['merge', 'lgvs-conflict-left'], { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-    return dir;
-  }
-
-  write(path.join(dir, 'STASHED.md'), 'temporary stash evidence\n');
-  git(dir, 'add', 'STASHED.md');
-  git(dir, 'stash', 'push', '-m', 'dogfood stash entry');
-
-  write(path.join(dir, 'settings.json'), JSON.stringify({ alpha: 'ONE', beta: 'two', gamma: 'three', delta: 'FOUR' }, null, 2) + '\n');
-  git(dir, 'add', 'settings.json');
-  write(path.join(dir, 'settings.json'), JSON.stringify({ alpha: 'ONE', beta: 'two', gamma: 'THREE', delta: 'FOUR' }, null, 2) + '\n');
-  write(path.join(dir, 'README.md'), '# LGVS dogfood\n\nbase changed\n\nline 4\nline 5\nline 6\nline 7\nline 8\ntail changed\n');
-  write(path.join(dir, 'src/app.ts'), 'export const value = 2;\n\nexport function greet() {\n  return "hello dogfood";\n}\n');
-  if (process.env.LGVS_DOGFOOD_BINARY_FILE) {
-    fs.writeFileSync(path.join(dir, 'BINARY.bin'), Buffer.from([0, 159, 146, 150, 9, 8, 7, 6]));
-  }
-  if (process.env.LGVS_DOGFOOD_LARGE_REPO) {
-    for (let i = 0; i < 140; i++) append(path.join(dir, `bulk/file-${String(i).padStart(3, '0')}.txt`), `changed ${i}\n`);
-  }
-  if (process.env.LGVS_DOGFOOD_DEEP_TREE) {
-    append(path.join(dir, 'AGENTS.md'), 'staged agent change\n');
-    git(dir, 'add', 'AGENTS.md');
-    write(path.join(dir, '.config/karabiner/assets/complex_modifications/misc_rules.json'), '{"rules":[{"description":"changed"}]}\n');
-    write(path.join(dir, '.config/vscode/keybindings.json'), '[{"key":"x","command":"noop"}]\n');
-    write(path.join(dir, '.config/vscode/settings.json'), '{"editor.tabSize":2}\n');
-  }
-  const secondaryRepo = `${dir}-other-repo`;
-  ensureDir(secondaryRepo);
-  git(secondaryRepo, 'init');
-  git(secondaryRepo, 'config', 'user.email', 'lgvs@example.test');
-  git(secondaryRepo, 'config', 'user.name', 'LGVS Dogfood');
-  write(path.join(secondaryRepo, 'OTHER_REPO_SENTINEL.md'), 'secondary repository baseline\n');
-  git(secondaryRepo, 'add', '.');
-  git(secondaryRepo, 'commit', '-m', 'initial secondary');
-  append(path.join(secondaryRepo, 'OTHER_REPO_SENTINEL.md'), 'secondary repository changed\n');
-  // Keep the primary keyboard flow on tracked files. Untracked files are useful,
-  // but if they sort first they turn Enter into the no-hunk untracked edge case
-  // and mask the real HUNK/LINE staging path.
-  return dir;
-}
-function secondaryFixtureRepo(fixture) { return `${fixture}-other-repo`; }
-function status(cwd) { return git(cwd, 'status', '--short'); }
-function diffCachedNames(cwd) { return git(cwd, 'diff', '--cached', '--name-only'); }
-function diffNames(cwd) { return git(cwd, 'diff', '--name-only'); }
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
 
 function installVSCodeVimExtension(extensionsDir) {
@@ -216,7 +110,7 @@ function runMatrixIfNeeded() {
     try { report = JSON.parse(fs.readFileSync(reportPath, 'utf8')); } catch { report = { ok: false, variant: v.name, error: `missing report ${reportPath}` }; }
     results.push(report);
     if (r.status !== 0 || !report.ok) {
-      write(REPORT_JSON, JSON.stringify({ ok: false, variants: results }, null, 2));
+      writeJson(REPORT_JSON, { ok: false, variants: results });
       process.exit(r.status || 1);
     }
   }
@@ -402,6 +296,26 @@ async function dispatchLgvsDomKey(Runtime, key) {
 
   const evidence = [];
   const checks = [];
+  const finishDogfoodReport = (extra = {}) => finishReport({
+    reportPath: REPORT_JSON,
+    checks,
+    report: {
+      ok: true,
+      variant: VARIANT,
+      vimExtension: useVim,
+      vimExtensionInfo: vimExtension,
+      started,
+      finished: new Date().toISOString(),
+      theme: THEME,
+      targeted: TARGETED_LANE,
+      fixture,
+      codePath,
+      checks,
+      evidence,
+      processOutput: procOut.slice(-4000),
+      ...extra
+    }
+  });
   let client;
   let activePage;
   try {
@@ -434,12 +348,9 @@ async function dispatchLgvsDomKey(Runtime, key) {
     checks.push({ name: 'Right chat / secondary side bar stays closed in screenshots', ok: !/CHAT\s+Build with Agent/i.test(sidebarText), textSample: sidebarText.slice(-800) });
 
     if (process.env.LGVS_DOGFOOD_FAST_THEME) {
-      const themeLabel = process.env.LGVS_DOGFOOD_FAST_THEME === 'high-contrast' ? 'High contrast dogfood smoke stays readable' : 'Dark theme dogfood smoke stays readable';
+      const themeLabel = process.env.LGVS_DOGFOOD_FAST_THEME === 'high-contrast' ? 'High contrast smoke: LGVS stays readable' : 'Dark theme smoke: LGVS stays readable';
       checks.push({ name: themeLabel, ok: sidebarText.includes('2 FILES') && sidebarText.includes('8 REMOTES') && !/CHAT\s+Build with Agent/i.test(sidebarText), theme: THEME, textSample: sidebarText.slice(0, 1200) });
-      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
-      const report = { ok: true, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, targeted: TARGETED_LANE, fixture, codePath, checks, evidence, processOutput: procOut.slice(-4000) };
-      write(REPORT_JSON, JSON.stringify(report, null, 2));
-      console.log(JSON.stringify(report, null, 2));
+      finishDogfoodReport();
       return;
     }
 
@@ -448,10 +359,7 @@ async function dispatchLgvsDomKey(Runtime, key) {
       try { git(fixture, 'definitely-not-a-real-lgvs-command'); } catch (error) { message = String(error.message || error); }
       const afterFailureText = await pageText(Runtime);
       checks.push({ name: 'Git failure path is visible and non-fatal', ok: /not-a-real-lgvs-command|not a git command/i.test(message) && afterFailureText.includes('2 FILES'), error: message.slice(0, 500), textSample: afterFailureText.slice(0, 1200) });
-      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
-      const report = { ok: true, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, targeted: TARGETED_LANE, fixture, codePath, checks, evidence, processOutput: procOut.slice(-4000) };
-      write(REPORT_JSON, JSON.stringify(report, null, 2));
-      console.log(JSON.stringify(report, null, 2));
+      finishDogfoodReport();
       return;
     }
 
@@ -463,10 +371,7 @@ async function dispatchLgvsDomKey(Runtime, key) {
       const largeText = await pageText(Runtime);
       const largeStatus = status(fixture);
       checks.push({ name: 'Large repo refresh stays inside budget', ok: refreshLatencyMs < 10000 && /bulk\/file-/.test(largeStatus), refreshLatencyMs, statusSample: largeStatus.slice(0, 1600), textSample: largeText.slice(0, 1200) });
-      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
-      const report = { ok: true, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, targeted: TARGETED_LANE, fixture, codePath, checks, evidence, processOutput: procOut.slice(-4000) };
-      write(REPORT_JSON, JSON.stringify(report, null, 2));
-      console.log(JSON.stringify(report, null, 2));
+      finishDogfoodReport();
       return;
     }
 
@@ -481,10 +386,7 @@ async function dispatchLgvsDomKey(Runtime, key) {
         await sleep(300);
       }
       checks.push({ name: 'Binary file preview stays sane', ok: /BINARY\.bin/.test(binaryText) && !/TypeError|Cannot read properties|Extension host terminated/i.test(binaryText), textSample: binaryText.slice(0, 1600) });
-      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
-      const report = { ok: true, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, targeted: TARGETED_LANE, fixture, codePath, checks, evidence, processOutput: procOut.slice(-4000) };
-      write(REPORT_JSON, JSON.stringify(report, null, 2));
-      console.log(JSON.stringify(report, null, 2));
+      finishDogfoodReport();
       return;
     }
 
@@ -526,10 +428,7 @@ async function dispatchLgvsDomKey(Runtime, key) {
       git(fixture, 'add', '--', 'CONFLICT.md');
       const afterConflictResolve = status(fixture);
       checks.push({ name: 'Conflict choose ours resolves physical conflict path', ok: !/^UU CONFLICT\.md/m.test(afterConflictResolve) && !fs.readFileSync(path.join(fixture, 'CONFLICT.md'), 'utf8').includes('<<<<<<<'), status: afterConflictResolve });
-      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
-      const report = { ok: true, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, processOutput: procOut.slice(-4000), targeted: TARGETED_LANE };
-      write(REPORT_JSON, JSON.stringify(report, null, 2));
-      console.log(JSON.stringify(report, null, 2));
+      finishDogfoodReport();
       return;
     }
 
@@ -540,10 +439,7 @@ async function dispatchLgvsDomKey(Runtime, key) {
         ok: deepStatus.includes('.config/vscode/settings.json') && deepStatus.includes('.config/karabiner/assets/complex_modifications/misc_rules.json') && deepStatus.includes('AGENTS.md'),
         status: deepStatus
       });
-      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
-      const report = { ok: true, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, processOutput: procOut.slice(-4000), targeted: TARGETED_LANE };
-      write(REPORT_JSON, JSON.stringify(report, null, 2));
-      console.log(JSON.stringify(report, null, 2));
+      finishDogfoodReport();
       return;
     }
 
@@ -557,8 +453,7 @@ async function dispatchLgvsDomKey(Runtime, key) {
       evidence.push({ step: 'command-palette-from-lgvs-sidebar', screenshot: await screenshot(Page, '02-command-palette-from-lgvs-sidebar'), quickAfterOpen, quickAfterType });
       checks.push({ name: 'Command Palette stays open when invoked from LGVS sidebar focus', ok: quickAfterOpen.visible && quickAfterType.visible && /LazyGitVS/i.test(quickAfterType.text), quickAfterOpen, quickAfterType });
       await key(Input, 'Escape');
-      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
-      write(REPORT_JSON, JSON.stringify({ ok: true, started, finished: new Date().toISOString(), fixture, variant: VARIANT_NAME, targeted: TARGETED_LANE, useVim, checks, evidence }, null, 2));
+      finishDogfoodReport({ useVim });
       return;
     }
 
@@ -575,10 +470,7 @@ async function dispatchLgvsDomKey(Runtime, key) {
       evidence.push({ step: 'reset-clears-lgvs-mode-status-ownership', screenshot: await screenshot(Page, '02-reset-state'), status: status(fixture), beforeReset, afterReset, resetLatencyMs });
       checks.push({ name: 'Reset clears LGVS mode/status ownership', ok: !/-- (FILES|STATUS|BRANCHES|COMMITS|STASH|CONFLICTS|TAGS|REMOTES|HUNK|LINE|EDIT).*LG --/.test(afterReset), textSample: afterReset.slice(-1200), resetLatencyMs });
       checks.push({ name: 'Reset command returns quickly enough for stale-state recovery', ok: resetLatencyMs < 2500, resetLatencyMs });
-      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
-      const report = { ok: true, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, processOutput: procOut.slice(-4000), targeted: TARGETED_LANE };
-      write(REPORT_JSON, JSON.stringify(report, null, 2));
-      console.log(JSON.stringify(report, null, 2));
+      finishDogfoodReport();
       return;
     }
 
@@ -610,10 +502,7 @@ async function dispatchLgvsDomKey(Runtime, key) {
       const readmeAfterTargetedVimProbe = fs.readFileSync(path.join(fixture, 'README.md'), 'utf8');
       evidence.push({ step: 'targeted-vim-escape-real-editor', screenshot: await screenshot(Page, 'targeted-vim-escape-real-editor'), status: status(fixture), textSample: targetedNormalText, readme: readmeAfterTargetedVimProbe });
       checks.push({ name: 'Targeted VSCodeVim physical Esc leaves Insert after LGVS e handoff', ok: /-- INSERT --/.test(targetedInsertText) && /-- NORMAL --/.test(targetedEscapeText) && /vimprob/.test(targetedNormalText) && !/vimprobex/.test(targetedNormalText) && !/-- (EDIT|HUNK).*LG --/.test(targetedNormalText), textSample: targetedNormalText.slice(-1200), readme: readmeAfterTargetedVimProbe });
-      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
-      const report = { ok: true, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, processOutput: procOut.slice(-4000), targeted: TARGETED_LANE };
-      write(REPORT_JSON, JSON.stringify(report, null, 2));
-      console.log(JSON.stringify(report, null, 2));
+      finishDogfoodReport();
       return;
     }
 
@@ -635,10 +524,7 @@ async function dispatchLgvsDomKey(Runtime, key) {
     evidence.push({ step: 'single-dynamic-preview-tab-after-navigation', screenshot: await screenshot(Page, '02-single-dynamic-preview-tab-after-navigation'), status: status(fixture), previewTabs: dynamicPreviewTabs });
     checks.push({ name: 'Default preview tab policy keeps only one dynamic LazyGitVS tab while navigating previews', ok: dynamicPreviewTabs.length <= 1, previewTabs: dynamicPreviewTabs });
     if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS) {
-      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
-      const report = { ok: true, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, processOutput: procOut.slice(-4000), targeted: TARGETED_LANE };
-      write(REPORT_JSON, JSON.stringify(report, null, 2));
-      console.log(JSON.stringify(report, null, 2));
+      finishDogfoodReport();
       return;
     }
 
@@ -794,10 +680,7 @@ async function dispatchLgvsDomKey(Runtime, key) {
     checks.push({ name: 'Files d-discard modal restores keyboard focus to the Files panel', ok: /LazyGitVS: (settings\.json|README\.md)/.test(afterDiscardModalText) && !afterDiscardModalText.includes('Dogfood Modal Sentinel'), textSample: afterDiscardModalText.slice(-1000) });
     checks.push({ name: 'Destructive discard cancel keeps worktree intact', ok: beforeDiscardCancel === afterDiscardCancel, before: beforeDiscardCancel, after: afterDiscardCancel });
     if (process.env.LGVS_DOGFOOD_DESTRUCTIVE_CANCEL) {
-      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
-      const report = { ok: true, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, targeted: TARGETED_LANE, fixture, codePath, checks, evidence, processOutput: procOut.slice(-4000) };
-      write(REPORT_JSON, JSON.stringify(report, null, 2));
-      console.log(JSON.stringify(report, null, 2));
+      finishDogfoodReport();
       return;
     }
     const postModalSentinelText = (await pageText(Runtime)).slice(0, 3000);
@@ -825,8 +708,7 @@ async function dispatchLgvsDomKey(Runtime, key) {
     if (!/-- (HUNK|LINE)\b/.test(fullHunkText) && process.env.LGVS_DOGFOOD_FAST_HUNK_ESCAPE) {
       evidence.push({ step: 'files-enter-editor-hunk-soft-skip', screenshot: await screenshot(Page, '03-files-enter-editor-hunk-soft-skip'), status: status(fixture), textSample: hunkText });
       checks.push({ name: 'Fast HUNK escape precondition keeps Files ownership when VS Code focus prevents synthetic Enter', ok: /-- FILES · LG --/.test(fullHunkText), textSample: hunkText.slice(-1000) });
-      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
-      write(REPORT_JSON, JSON.stringify({ ok: true, started, finished: new Date().toISOString(), fixture, variant: VARIANT_NAME, targeted: TARGETED_LANE, useVim, checks, evidence }, null, 2));
+      finishDogfoodReport({ useVim });
       return;
     }
     await waitFor(async () => /-- (HUNK|LINE)\b/.test(await pageText(Runtime)), 8000, 300, 'editor HUNK/LINE mode after Files Enter');
@@ -843,8 +725,7 @@ async function dispatchLgvsDomKey(Runtime, key) {
       const afterHunkEscapeText = (await pageText(Runtime)).slice(0, 3000);
       evidence.push({ step: 'hunk-escape-files-selection-restore', screenshot: await screenshot(Page, '04-hunk-escape-files-selection-restore'), status: status(fixture), textSample: afterHunkEscapeText });
       checks.push({ name: 'Esc from editor HUNK/LINE returns to 2 Files panel ownership', ok: /-- FILES · LG --/.test(afterHunkEscapeText) && !/-- (HUNK|LINE).* --/.test(afterHunkEscapeText), textSample: afterHunkEscapeText.slice(-1000) });
-      for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
-      write(REPORT_JSON, JSON.stringify({ ok: true, started, finished: new Date().toISOString(), fixture, variant: VARIANT_NAME, targeted: TARGETED_LANE, useVim, checks, evidence }, null, 2));
+      finishDogfoodReport({ useVim });
       return;
     }
 

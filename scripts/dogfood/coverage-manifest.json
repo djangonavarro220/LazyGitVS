@@ -245,13 +245,13 @@
       "id": "dark-theme-smoke",
       "risk": "theme",
       "lane": "dark-theme",
-      "check": "Dark theme dogfood smoke stays readable"
+      "check": "Dark theme smoke: LGVS stays readable"
     },
     {
       "id": "high-contrast-theme-smoke",
       "risk": "theme",
       "lane": "high-contrast-theme",
-      "check": "High contrast dogfood smoke stays readable"
+      "check": "High contrast smoke: LGVS stays readable"
     },
     {
       "id": "git-failure-path-visible",

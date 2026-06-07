@@ -4,6 +4,8 @@ const path = require('path');
 
 const root = path.join(__dirname, '..');
 const dogfood = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
+const dogfoodFixtures = fs.readFileSync(path.join(root, 'scripts', 'dogfood', 'fixtures.js'), 'utf8');
+const dogfoodSource = `${dogfood}\n${dogfoodFixtures}`;
 const testingDoc = fs.readFileSync(path.join(root, 'docs', 'testing-and-verification.md'), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
@@ -19,7 +21,7 @@ function test(name, fn) {
 }
 
 function requireDogfoodInvariant(name, pattern) {
-  assert(pattern.test(dogfood), `dogfood-ui.js must cover: ${name}`);
+  assert(pattern.test(dogfoodSource), `dogfood sources must cover: ${name}`);
 }
 
 test('dogfood script keeps the full matrix and targeted lanes documented in the playbook', () => {

@@ -8,6 +8,7 @@ import { dangerousGitMenuItem, discardAllConfirmation, discardConfirmation, nuke
 import { normalizeWebviewMessage, scriptJson, webviewContentSecurityPolicy } from './webviewSecurity';
 import { decorateMenuItems, findMenuItemByKey } from './lazygitMenu';
 import { hunkBodyLines, hunkChangedEditorLine, hunkSelectableLineIndexes, hunkStartLine, parseDiffHunks, type Hunk } from './hunkPatch';
+import { EMPTY_PREVIEW_SCHEME, EmptyProvider, VIRTUAL_PREVIEW_SCHEME, VirtualPreviewProvider } from './previewDocuments';
 
 type FileTreeRow = { kind: 'dir'; path: string; label: string; depth: number; collapsed: boolean; file?: never } | { kind: 'file'; path: string; label: string; depth: number; file: ChangedFile };
 type Panel = 'status' | 'files' | 'hunks' | 'branches' | 'commits' | 'stash' | 'conflicts' | 'tags' | 'remotes';
@@ -71,7 +72,7 @@ async function previewDiff(file: ChangedFile | ConflictFile, preserveFocus = tru
   const root = workspaceRoot();
   const right = vscode.Uri.file(path.join(root, file.path));
   const untracked = 'untracked' in file && file.untracked;
-  const left = untracked ? vscode.Uri.parse(`lazygitvs-empty:${encodeURIComponent(file.path)}`) : right.with({ scheme: 'git', query: JSON.stringify({ path: right.fsPath, ref: 'HEAD' }) });
+  const left = untracked ? vscode.Uri.parse(`${EMPTY_PREVIEW_SCHEME}:${encodeURIComponent(file.path)}`) : right.with({ scheme: 'git', query: JSON.stringify({ path: right.fsPath, ref: 'HEAD' }) });
   await vscode.commands.executeCommand('vscode.diff', left, right, `LazyGitVS: ${file.path}`, { preview: preserveFocus, preserveFocus, viewColumn: vscode.ViewColumn.Active });
 }
 function revealVisibleEditorLine(filePath: string, line: number) {
@@ -281,22 +282,6 @@ async function showChangedFilesQuickPick() {
   qp.onDidChangeActive(items => { if (items[0]) previewDiff(items[0].file, true).catch(err => vscode.window.showErrorMessage(err.message)); });
   qp.onDidAccept(() => { const item = qp.activeItems[0]; if (item) previewDiff(item.file, false); qp.hide(); });
   qp.onDidHide(() => qp.dispose()); qp.show();
-}
-class EmptyProvider implements vscode.TextDocumentContentProvider { provideTextDocumentContent(): string { return ''; } }
-class VirtualPreviewProvider implements vscode.TextDocumentContentProvider {
-  private readonly contents = new Map<string, string>();
-  private readonly emitter = new vscode.EventEmitter<vscode.Uri>();
-  readonly onDidChange = this.emitter.event;
-  set(title: string, content: string): vscode.Uri {
-    const cleanTitle = title.replace(/[\\/:*?"<>|#%&{}$!'@+`=]/g, ' ').replace(/\s+/g, ' ').trim() || 'LazyGitVS Preview';
-    const fileName = `${cleanTitle.slice(0, 120)}.diff`;
-    const key = Buffer.from(title).toString('base64url');
-    this.contents.set(key, content);
-    const uri = vscode.Uri.from({ scheme: 'lazygitvs-preview', path: `/${fileName}`, query: key });
-    this.emitter.fire(uri);
-    return uri;
-  }
-  provideTextDocumentContent(uri: vscode.Uri): string { return this.contents.get(uri.query) ?? ''; }
 }
 const virtualPreviewProvider = new VirtualPreviewProvider();
 
@@ -843,7 +828,7 @@ class LazyGitVSController {
   private isLGVSOwnedEditor(editor: vscode.TextEditor | undefined): boolean {
     if (!editor) return false;
     const uri = editor.document.uri;
-    if (uri.scheme === 'lazygitvs-preview' || uri.scheme === 'lazygitvs-empty') return true;
+    if (uri.scheme === VIRTUAL_PREVIEW_SCHEME || uri.scheme === EMPTY_PREVIEW_SCHEME) return true;
     const ownedPath = this.editorModeFilePath ?? (this.focusArea === 'viewer' ? this.currentFilePath(this.activeViewPanel()) : undefined);
     return !!ownedPath && uri.scheme === 'file' && uri.fsPath === path.join(workspaceRoot(), ownedPath);
   }
@@ -2017,8 +2002,8 @@ async function showText(title: string, content: string, preserveFocus = false, p
 }
 
 export function activate(context: vscode.ExtensionContext) {
-  context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('lazygitvs-empty', new EmptyProvider()));
-  context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('lazygitvs-preview', virtualPreviewProvider));
+  context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(EMPTY_PREVIEW_SCHEME, new EmptyProvider()));
+  context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(VIRTUAL_PREVIEW_SCHEME, virtualPreviewProvider));
   const app = new LazyGitVSController(context);
   const statusProvider = new StatusTreeProvider(app);
   const statusTree = vscode.window.createTreeView(VIEW_IDS.status, { treeDataProvider: statusProvider });
