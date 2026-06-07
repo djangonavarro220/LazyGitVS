@@ -612,7 +612,10 @@ async function dispatchLgvsDomKey(Runtime, key) {
       first: stagedHunkOneText.slice(-400),
       second: stagedHunkTwoText.slice(-400)
     });
-    const extensionSourceForHunkGuard = fs.readFileSync(path.join(ROOT, 'src', 'extension.ts'), 'utf8');
+    const extensionSourceForHunkGuard = [
+      'extension.ts',
+      'hunkEditorDecorations.ts'
+    ].map(file => fs.readFileSync(path.join(ROOT, 'src', file), 'utf8')).join('\n');
     checks.push({
       name: 'HUNK navigation moves between changed areas',
       ok: settingsCachedHunks >= 2 && /this\.hunkSelected = wrap\(this\.hunkSelected \+ delta, this\.hunks\.length\)/.test(extensionSourceForHunkGuard),

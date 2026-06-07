@@ -3,7 +3,8 @@ const path = require('path');
 
 const extensionSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
 const previewSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'previewDocuments.ts'), 'utf8');
-const src = `${extensionSrc}\n${previewSrc}`;
+const workspaceActionsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'workspaceActions.ts'), 'utf8');
+const src = `${extensionSrc}\n${previewSrc}\n${workspaceActionsSrc}`;
 const pkg = fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8');
 
 function assert(cond, msg) {

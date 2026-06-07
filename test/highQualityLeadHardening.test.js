@@ -4,7 +4,10 @@ const path = require('path');
 
 const root = path.join(__dirname, '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
+const extension = [
+  'extension.ts',
+  'gitMenus.ts'
+].map(file => fs.readFileSync(path.join(root, 'src', file), 'utf8')).join('\n');
 const dogfood = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
 
 function read(rel) {

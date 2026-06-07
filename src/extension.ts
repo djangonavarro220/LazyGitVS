@@ -2,277 +2,25 @@ import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import * as path from 'path';
 import { cloneGitConfig, cloneGuiConfig, cloneKeymap, readLazyGitConfig } from './lazygitConfig';
-import { branches, changedFiles, commitFiles, commits, compactRefs, conflictFiles, discoverWorkspaceRepositories, getActiveWorkspaceRoot, git, remotes, setActiveWorkspaceRoot, stashes, stashFiles, tags, workspaceRoot, type Branch, type ChangedFile, type Commit, type CommitFile, type ConflictFile, type LazyGitGitRuntimeConfig, type Remote, type Stash, type StashFile, type Tag, type WorkspaceRepository } from './gitService';
-import { applyHunk, applyLine, discardUnstagedHunk, discardUnstagedLine, gitDiffConfigArgs, hunksForFile, toggleStage, toggleStageAll, toggleStageSelected } from './gitActions';
-import { dangerousGitMenuItem, discardAllConfirmation, discardConfirmation, nukeWorkingTreeConfirmation, resetConfirmation } from './destructiveActions';
+import { branches, changedFiles, commitFiles, commits, compactRefs, conflictFiles, discoverWorkspaceRepositories, getActiveWorkspaceRoot, git, remotes, setActiveWorkspaceRoot, stashes, stashFiles, tags, workspaceRoot, type Branch, type ChangedFile, type Commit, type CommitFile, type ConflictFile, type Remote, type Stash, type StashFile, type Tag, type WorkspaceRepository } from './gitService';
+import { applyHunk, applyLine, discardUnstagedLine, gitDiffConfigArgs, hunksForFile, toggleStage, toggleStageAll, toggleStageSelected } from './gitActions';
 import { normalizeWebviewMessage, scriptJson, webviewContentSecurityPolicy } from './webviewSecurity';
-import { decorateMenuItems, findMenuItemByKey } from './lazygitMenu';
 import { hunkBodyLines, hunkChangedEditorLine, hunkSelectableLineIndexes, hunkStartLine, parseDiffHunks, type Hunk } from './hunkPatch';
 import { EMPTY_PREVIEW_SCHEME, EmptyProvider, VIRTUAL_PREVIEW_SCHEME, VirtualPreviewProvider } from './previewDocuments';
-
-type FileTreeRow = { kind: 'dir'; path: string; label: string; depth: number; collapsed: boolean; file?: never } | { kind: 'file'; path: string; label: string; depth: number; file: ChangedFile };
-type Panel = 'status' | 'files' | 'hunks' | 'branches' | 'commits' | 'stash' | 'conflicts' | 'tags' | 'remotes';
-type ViewPanel = Exclude<Panel, 'hunks'>;
-type FocusArea = 'panel' | 'viewer' | 'editor-hunk' | 'editor-edit' | 'none';
-
-const REFRESH_INTERVAL_MS = 10_000;
-const STATE_KEY = 'lazygitvs.navigationState';
-const VIEW_IDS: Record<ViewPanel, string> = {
-  status: 'lazygitvs.statusView',
-  files: 'lazygitvs.filesView',
-  branches: 'lazygitvs.branchesView',
-  tags: 'lazygitvs.tagsView',
-  remotes: 'lazygitvs.remotesView',
-  commits: 'lazygitvs.commitsView',
-  stash: 'lazygitvs.stashView',
-  conflicts: 'lazygitvs.conflictsView'
-};
-const PANEL_ORDER: ViewPanel[] = ['status', 'files', 'branches', 'commits', 'stash', 'conflicts', 'tags', 'remotes'];
+import { FocusArea, isPanel, isViewPanel, PANEL_ORDER, REFRESH_INTERVAL_MS, STATE_KEY, VIEW_IDS, type FileTreeRow, type Panel, type ViewPanel } from './panels';
+import { dirRow, escapeHtml, fileRow, fileStateLabel, fileStatusHtml, row, treeFileRow } from './panelRows';
+import { originCommitUrl, pickGitAction, runGitAction, executeGitMenuItem, showCommitCopyMenu, showCommitResetMenu, showDiscardFileMenu, showDiscardHunkMenu, showPullMenu, showPushMenu, showResetMenu, showStashCreateMenu, type GitMenuItem } from './gitMenus';
+import { findMenuItemByKey } from './lazygitMenu';
+import { dangerousGitMenuItem } from './destructiveActions';
+import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, openPath, previewDiff, revealVisibleEditorLine } from './workspaceActions';
+import { deletedGhostDecorations, editorLineRange, excludeRangeLines, hunkChangedEditorRanges, rangeLineSet } from './hunkEditorDecorations';
 
 function gutterBadge(letter: 'S' | 'U', fill: string) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="12" rx="3" fill="${fill}"/><text x="8" y="11.5" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="10" font-weight="700" fill="#ffffff">${letter}</text></svg>`;
   return vscode.Uri.parse(`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
 }
-function isViewPanel(value: unknown): value is ViewPanel { return value === 'status' || value === 'files' || value === 'branches' || value === 'commits' || value === 'stash' || value === 'conflicts' || value === 'tags' || value === 'remotes'; }
-function isPanel(value: unknown): value is Panel { return isViewPanel(value) || value === 'hunks'; }
-
-function shellWords(command: string): string[] {
-  const words: string[] = [];
-  let current = '';
-  let quote: 'single' | 'double' | undefined;
-  for (let i = 0; i < command.length; i++) {
-    const ch = command[i];
-    if (quote === 'single') { if (ch === "'") quote = undefined; else current += ch; continue; }
-    if (quote === 'double') { if (ch === '"') quote = undefined; else if (ch === '\\' && i + 1 < command.length) current += command[++i]; else current += ch; continue; }
-    if (ch === "'") { quote = 'single'; continue; }
-    if (ch === '"') { quote = 'double'; continue; }
-    if (/\s/.test(ch)) { if (current) { words.push(current); current = ''; } continue; }
-    if (ch === '\\' && i + 1 < command.length) current += command[++i]; else current += ch;
-  }
-  if (current) words.push(current);
-  return words;
-}
-function branchLogArgs(gitConfig: LazyGitGitRuntimeConfig, branchName: string): string[] {
-  const template = typeof gitConfig.branchLogCmd === 'string' && gitConfig.branchLogCmd.trim()
-    ? gitConfig.branchLogCmd
-    : cloneGitConfig().branchLogCmd;
-  const argv = shellWords(template.replace(/{{\s*branchName\s*}}/g, branchName));
-  return argv[0] === 'git' ? argv.slice(1) : argv;
-}
-
-async function closeLazyGitVSPreviewTabsIfSingle() {
-  const mode = vscode.workspace.getConfiguration('lazygitvs').get<'single' | 'multiple'>('previewTabs', 'single');
-  if (mode !== 'single') return;
-  const tabs = vscode.window.tabGroups.all.flatMap(group => group.tabs).filter(tab => tab.label.startsWith('LazyGitVS:'));
-  if (tabs.length) await vscode.window.tabGroups.close(tabs, true);
-}
-
-async function previewDiff(file: ChangedFile | ConflictFile, preserveFocus = true) {
-  await closeLazyGitVSPreviewTabsIfSingle();
-  const root = workspaceRoot();
-  const right = vscode.Uri.file(path.join(root, file.path));
-  const untracked = 'untracked' in file && file.untracked;
-  const left = untracked ? vscode.Uri.parse(`${EMPTY_PREVIEW_SCHEME}:${encodeURIComponent(file.path)}`) : right.with({ scheme: 'git', query: JSON.stringify({ path: right.fsPath, ref: 'HEAD' }) });
-  await vscode.commands.executeCommand('vscode.diff', left, right, `LazyGitVS: ${file.path}`, { preview: preserveFocus, preserveFocus, viewColumn: vscode.ViewColumn.Active });
-}
-function revealVisibleEditorLine(filePath: string, line: number) {
-  const target = path.join(workspaceRoot(), filePath);
-  const reveal = () => {
-    const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.fsPath === target);
-    if (!editor) return false;
-    const clamped = Math.min(Math.max(0, line), Math.max(0, editor.document.lineCount - 1));
-    const pos = new vscode.Position(clamped, 0);
-    editor.selection = new vscode.Selection(pos, pos);
-    editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-    return true;
-  };
-  if (!reveal()) setTimeout(reveal, 80);
-}
-async function editPath(filePath: string): Promise<vscode.TextEditor> {
-  await closeLazyGitVSPreviewTabsIfSingle();
-  const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(workspaceRoot(), filePath)));
-  return vscode.window.showTextDocument(doc, { preview: false, viewColumn: vscode.ViewColumn.Active });
-}
-async function openPath(filePath: string) { await vscode.env.openExternal(vscode.Uri.file(path.join(workspaceRoot(), filePath))); }
-async function copyText(text: string, label = 'Copied') { await vscode.env.clipboard.writeText(text); vscode.window.showInformationMessage(`LazyGitVS: ${label}.`); }
-async function appendIgnore(fileName: '.gitignore' | '.git/info/exclude', pattern: string) {
-  const filePath = path.join(workspaceRoot(), fileName);
-  const edit = new vscode.WorkspaceEdit();
-  let existing = '';
-  try { existing = (await vscode.workspace.fs.readFile(vscode.Uri.file(filePath))).toString(); } catch { /* create */ }
-  const line = existing.endsWith('\n') || !existing ? pattern + '\n' : '\n' + pattern + '\n';
-  edit.insert(vscode.Uri.file(filePath), new vscode.Position(existing.split(/\r?\n/).length, 0), line);
-  await vscode.workspace.applyEdit(edit);
-}
-
-async function commitFlow(requested?: 'commit' | 'body' | 'amend' | 'amendNoEdit' | 'noVerify') {
-  const picked = requested ? { id: requested } : await vscode.window.showQuickPick([
-    { label: '$(check) Commit staged changes', id: 'commit' },
-    { label: '$(shield) Commit without pre-commit hook', id: 'noVerify' },
-    { label: '$(edit) Commit with body', id: 'body' },
-    { label: '$(history) Amend last commit', id: 'amend' },
-    { label: '$(history) Amend without editing message', id: 'amendNoEdit' }
-  ], { title: 'LazyGitVS Commit' });
-  if (!picked) return;
-  const mode = picked.id;
-  if (mode === 'amendNoEdit') { await git(['commit', '--amend', '--no-edit']); return; }
-  const subject = await vscode.window.showInputBox({ title: mode === 'amend' ? 'Amend commit' : mode === 'noVerify' ? 'Commit without pre-commit hook' : 'Commit', prompt: 'Subject', placeHolder: 'Commit message', ignoreFocusOut: true, validateInput: v => v.trim() ? undefined : 'Commit message required.' });
-  if (!subject?.trim()) return;
-  if (mode === 'body') {
-    const body = await vscode.window.showInputBox({ title: 'Commit body', prompt: 'Optional body', ignoreFocusOut: true });
-    const args = body?.trim() ? ['commit', '-m', subject.trim(), '-m', body.trim()] : ['commit', '-m', subject.trim()];
-    await git(args);
-  } else if (mode === 'amend') await git(['commit', '--amend', '-m', subject.trim()]);
-  else if (mode === 'noVerify') await git(['commit', '--no-verify', '-m', subject.trim()]);
-  else await git(['commit', '-m', subject.trim()]);
-}
-
-function editorLineRange(editor: vscode.TextEditor, lineIndex: number): vscode.Range {
-  const line = Math.min(Math.max(0, lineIndex), Math.max(0, editor.document.lineCount - 1));
-  return new vscode.Range(line, 0, line, editor.document.lineAt(line).range.end.character);
-}
-
-function hunkChangedEditorRanges(hunk: Hunk, editor: vscode.TextEditor): vscode.Range[] {
-  const changed = hunkSelectableLineIndexes(hunk);
-  if (!changed.length) return [editorLineRange(editor, hunkStartLine(hunk))];
-  const lines = Array.from(new Set(changed.map(index => hunkChangedEditorLine(hunk, index)))).sort((a, b) => a - b);
-  return lines.map(line => editorLineRange(editor, line));
-}
-function deletedGhostDecorations(hunk: Hunk, editor: vscode.TextEditor): vscode.DecorationOptions[] {
-  const body = hunkBodyLines(hunk);
-  const groups = new Map<number, string[]>();
-  let newLine = hunkStartLine(hunk);
-  for (const line of body) {
-    if (line.startsWith('-')) {
-      const anchor = Math.min(Math.max(0, newLine), Math.max(0, editor.document.lineCount - 1));
-      const deleted = line.slice(1) || '␠';
-      groups.set(anchor, [...(groups.get(anchor) ?? []), deleted]);
-    } else if (!line.startsWith('\\')) newLine++;
-  }
-  return [...groups.entries()].map(([line, deleted]) => ({
-    range: editorLineRange(editor, line),
-    hoverMessage: `Deleted staged text:\n\n${deleted.map(text => `- ${text}`).join('\n')}`,
-    renderOptions: { before: { contentText: deleted.map(text => `− ${text}`).join('  ⏎  '), color: '#f85149', backgroundColor: 'rgba(248,81,73,0.14)', fontStyle: 'italic', textDecoration: 'line-through; margin-right: 1ch;' } }
-  }));
-}
-function rangeLineSet(ranges: vscode.Range[]): Set<number> {
-  return new Set(ranges.map(range => range.start.line));
-}
-function excludeRangeLines(ranges: vscode.Range[], blocked: Set<number>): vscode.Range[] {
-  return blocked.size ? ranges.filter(range => !blocked.has(range.start.line)) : ranges;
-}
-async function upstreamBranch(): Promise<string | undefined> {
-  return git(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']).then(out => out.trim()).catch(() => undefined);
-}
-async function originCommitUrl(hash: string): Promise<string | undefined> {
-  const remote = (await git(['config', '--get', 'remote.origin.url']).catch(() => '')).trim();
-  if (!remote) return undefined;
-  let base = remote;
-  const ssh = base.match(/^git@([^:]+):(.+)$/);
-  if (ssh) base = `https://${ssh[1]}/${ssh[2]}`;
-  base = base.replace(/\.git$/, '');
-  if (!/^https?:\/\//.test(base)) return undefined;
-  return `${base}/commit/${encodeURIComponent(hash)}`;
-}
-async function showCommitResetMenu(commit: Commit) {
-  await pickGitAction(`Reset to ${commit.hash}`, [
-    dangerousGitMenuItem({ key: 's', label: '$(debug-restart) Soft reset to commit', description: 'keep index and working tree', args: ['reset', '--soft', commit.hash] }, resetConfirmation(commit.hash, 'soft'), 'history-rewrite'),
-    dangerousGitMenuItem({ key: 'm', label: '$(debug-restart) Mixed reset to commit', description: 'keep working tree', args: ['reset', '--mixed', commit.hash] }, resetConfirmation(commit.hash, 'mixed'), 'history-rewrite'),
-    dangerousGitMenuItem({ key: 'h', label: '$(warning) Hard reset to commit', description: 'discard index and working tree', args: ['reset', '--hard', commit.hash] }, resetConfirmation(commit.hash, 'hard'), 'history-rewrite')
-  ]);
-}
-async function showCommitCopyMenu(commit: Commit) {
-  await pickGitAction(`Copy commit ${commit.hash}`, [
-    { key: 'h', label: '$(copy) Copy hash', description: commit.hash, run: async () => copyText(commit.hash, 'commit hash copied') },
-    { key: 's', label: '$(copy) Copy subject', description: commit.subject, run: async () => copyText(commit.subject, 'commit subject copied') },
-    { key: 'c', label: '$(copy) Copy hash + subject', description: `${commit.hash} ${commit.subject}`, run: async () => copyText(`${commit.hash} ${commit.subject}`, 'commit copied') }
-  ]);
-}
-
-type GitMenuItem = vscode.QuickPickItem & { key?: string; args?: string[]; danger?: boolean; confirm?: string; run?: () => Promise<void> };
-async function runGitAction(title: string, args: string[]) { await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title, cancellable: false }, async () => git(args)); vscode.window.showInformationMessage(`LazyGitVS: ${title} done.`); }
-async function executeGitMenuItem(item: GitMenuItem) {
-  if (item.danger || item.confirm) { const ok = await vscode.window.showWarningMessage(item.confirm ?? `Run ${item.label}?`, { modal: true }, 'Run'); if (ok !== 'Run') return false; }
-  if (item.run) await item.run(); else if (item.args) await runGitAction(item.label.replace(/^([^ ]+\s+)?\$\([^)]*\)\s*/, '').replace(/^[^ ]+\s+/, ''), item.args);
-  return true;
-}
-async function pickGitAction(title: string, items: GitMenuItem[]) {
-  const qp = vscode.window.createQuickPick<GitMenuItem>();
-  qp.title = title;
-  qp.placeholder = 'type the lazygit key or filter options';
-  qp.items = decorateMenuItems(items) as GitMenuItem[];
-  return await new Promise<boolean>(resolve => {
-    let done = false;
-    const finish = async (item?: GitMenuItem) => {
-      if (done) return;
-      done = true;
-      qp.hide();
-      if (!item || !('args' in item || 'run' in item)) { resolve(false); return; }
-      resolve(await executeGitMenuItem(item));
-    };
-    qp.onDidChangeValue(value => {
-      const item = findMenuItemByKey(items, value);
-      if (item) void finish(item);
-    });
-    qp.onDidAccept(() => void finish(qp.selectedItems[0] ?? qp.activeItems[0]));
-    qp.onDidHide(() => { if (!done) { done = true; resolve(false); } qp.dispose(); });
-    qp.show();
-  });
-}
-async function showPushMenu() { await pickGitAction('Push options', [
-  { key: 'p', label: '$(cloud-upload) Push', description: 'git push', args: ['push'] },
-  { key: 'P', label: '$(cloud-upload) Push current branch', description: 'git push origin HEAD', args: ['push', 'origin', 'HEAD'] },
-  { key: 't', label: '$(tag) Push tags', description: 'git push --tags', args: ['push', '--tags'] },
-  { key: 'f', label: '$(warning) Force push with lease', description: 'git push --force-with-lease', args: ['push', '--force-with-lease'], danger: true, confirm: 'Force push with lease? Safer than --force, still remote-changing.' },
-  { key: 'u', label: '$(repo-push) Set upstream and push', description: 'git push -u origin HEAD', args: ['push', '-u', 'origin', 'HEAD'] }
-]); }
-async function showPullMenu() { await pickGitAction('Pull / fetch options', [
-  { key: 'p', label: '$(cloud-download) Pull', description: 'git pull', args: ['pull'] },
-  { key: 'r', label: '$(git-compare) Pull --rebase', description: 'git pull --rebase', args: ['pull', '--rebase'] },
-  { key: 'f', label: '$(sync) Fetch', description: 'git fetch', args: ['fetch'] },
-  { key: 'a', label: '$(sync) Fetch all', description: 'git fetch --all --prune', args: ['fetch', '--all', '--prune'] },
-  { key: 'P', label: '$(trash) Prune remotes', description: 'git remote prune origin', args: ['remote', 'prune', 'origin'] }
-]); }
-async function showStashCreateMenu() { await pickGitAction('Stash options', [
-  { key: 'a', label: '$(archive) Stash all changes', description: 'git stash push', args: ['stash', 'push'] },
-  { key: 'i', label: '$(archive) Stash all changes and keep index', description: 'git stash push --keep-index', args: ['stash', 'push', '--keep-index'] },
-  { key: 'U', label: '$(archive) Stash include untracked changes', description: 'git stash push -u', args: ['stash', 'push', '-u'] },
-  { key: 's', label: '$(archive) Stash staged changes', description: 'git stash push --staged', args: ['stash', 'push', '--staged'] },
-  { key: 'u', label: '$(archive) Stash unstaged changes', description: 'git stash push --keep-index', args: ['stash', 'push', '--keep-index'] }
-]); }
-async function showResetMenu(onNuke?: () => void | Promise<void>) {
-  const upstream = await upstreamBranch();
-  const items: GitMenuItem[] = [
-    { key: 's', label: '$(debug-restart) Soft reset to previous commit', description: 'keep index and working tree', args: ['reset', '--soft', 'HEAD~1'], danger: true },
-    { key: 'm', label: '$(debug-restart) Mixed reset to previous commit', description: 'keep working tree', args: ['reset', '--mixed', 'HEAD~1'], danger: true },
-    { key: 'h', label: '$(warning) Hard reset to HEAD', description: 'discard working tree and index', args: ['reset', '--hard', 'HEAD'], danger: true, confirm: 'Hard reset discards local changes. Do it?' },
-  ];
-  if (upstream) items.push(dangerousGitMenuItem({ key: 'u', label: '$(repo-pull) Reset to upstream', description: upstream, args: ['reset', '--hard', upstream] }, `Hard reset current branch to ${upstream}?`, 'history-rewrite'));
-  items.push(dangerousGitMenuItem({ key: 'n', label: '💣 Nuke working tree', description: 'git reset --hard HEAD && git clean -fd', run: async () => { await onNuke?.(); await git(['reset', '--hard', 'HEAD']); await git(['clean', '-fd']); } }, nukeWorkingTreeConfirmation(), 'nuke'));
-  await pickGitAction('Reset options', items);
-}
-async function showDiscardFileMenu(file: ChangedFile, confirmKey = 'x') { await pickGitAction(`Discard changes · ${file.path}`, [
-  dangerousGitMenuItem({ key: confirmKey, label: '$(warning) Discard all changes', description: 'unstage and restore file', run: async () => { await git(['restore', '--staged', '--', file.path]); await git(['restore', '--', file.path]); } }, discardAllConfirmation(file.path), 'discard'),
-  dangerousGitMenuItem({ key: 'u', label: '$(discard) Discard unstaged changes', description: 'git restore -- file', args: ['restore', '--', file.path] }, discardConfirmation(file.path), 'discard')
-]); }
-async function showDiscardHunkMenu(hunk: Hunk) { await pickGitAction('Hunk options', hunk.staged ? [
-  { key: 'd', label: '$(remove) Unstage hunk', description: 'git apply --cached --reverse', run: () => applyHunk(hunk) }
-] : [
-  { key: 'd', label: '$(discard) Discard hunk', description: 'git apply --reverse', danger: true, confirm: 'Discard this unstaged hunk from the working tree?', run: () => discardUnstagedHunk(hunk) },
-  { key: '<space>', label: '$(add) Stage hunk', description: 'git apply --cached', run: () => applyHunk(hunk) }
-]); }
-
 function statusIcon(f: ChangedFile | ConflictFile): string { return f.xy; }
 function statusClass(f: ChangedFile): string { if (f.untracked) return 'untracked'; if (f.staged && f.xy[1] !== ' ') return 'mixed'; if (f.staged) return 'staged'; return 'unstaged'; }
-function statusKind(ch: string): string { return ch === 'M' ? 'modified' : ch === 'A' ? 'added' : ch === 'D' ? 'deleted' : ch === 'R' ? 'renamed' : ch === 'C' ? 'copied' : ch === 'U' ? 'conflict' : ch === '?' ? 'untracked' : 'clean'; }
-function fileStateLabel(f: ChangedFile): string { if (f.untracked) return 'untracked'; if (f.staged && f.xy[1] !== ' ') return 'staged + unstaged'; if (f.staged) return 'staged'; return 'unstaged'; }
-function fileStatusHtml(f: ChangedFile): string {
-  const [index, worktree] = [f.xy[0] ?? ' ', f.xy[1] ?? ' '];
-  const slot = (kind: 'index' | 'worktree', ch: string) => ch === ' '
-    ? `<span class="slot empty ${kind}" aria-hidden="true"></span>`
-    : `<span class="slot ${kind} ${statusKind(ch)}" title="${kind === 'index' ? 'index/staged' : 'worktree/unstaged'}: ${escapeHtml(ch)}">${escapeHtml(ch)}</span>`;
-  return `<span class="status-pair" title="${escapeHtml(f.xy)} · ${escapeHtml(fileStateLabel(f))}">${slot('index', index)}${slot('worktree', worktree)}</span>`;
-}
 async function showChangedFilesQuickPick() {
   const files = await changedFiles();
   if (!files.length) return vscode.window.showInformationMessage('LazyGitVS: clean working tree.');
@@ -1370,7 +1118,7 @@ class LazyGitVSController {
     if (!c) return [];
     return [
       { key: key(u.goInto) || '<enter>', label: '$(list-unordered) View files in commit', description: c.subject, run: async () => this.enterCommit() },
-      { key: key(k.copyCommitAttributeToClipboard) || key(u.copyToClipboard) || 'y', label: '$(copy) Copy commit attribute', description: 'hash / subject / both', run: async () => showCommitCopyMenu(c) },
+      { key: key(k.copyCommitAttributeToClipboard) || key(u.copyToClipboard) || 'y', label: '$(copy) Copy commit attribute', description: 'hash / subject / both', run: async () => showCommitCopyMenu(c, copyText) },
       { key: key(k.checkoutCommit) || '<space>', label: '$(debug-step-over) Checkout commit detached', description: c.hash, danger: true, confirm: `Checkout ${c.hash} as detached HEAD?`, args: ['checkout', c.hash] },
       { key: key(k.newBranch) || 'n', label: '$(git-branch) New branch off commit', description: c.hash, run: async () => { const name = await vscode.window.showInputBox({ title: `New branch at ${c.hash}`, validateInput: v => v.trim() ? undefined : 'Branch name required.' }); if (name?.trim()) await git(['checkout', '-b', name.trim(), c.hash]); } },
       { key: key(k.renameCommit) || 'r', label: '$(edit) Reword HEAD commit', description: 'git commit --amend', run: async () => { const msg = await vscode.window.showInputBox({ title: 'Reword HEAD commit', value: c.subject, validateInput: v => v.trim() ? undefined : 'Commit message required.' }); if (msg?.trim()) await git(['commit', '--amend', '-m', msg.trim()]); } },
@@ -1987,11 +1735,6 @@ class LazyGitVSController {
   }
 }
 function clamp(index: number, length: number): number { return length ? Math.max(0, Math.min(length - 1, index)) : 0; }
-function row(sel: boolean, klass: string, status: string, main: string, meta = '', index?: number): string { const data = typeof index === 'number' ? ` data-index="${index}"` : ''; return `<div class="row ${sel ? 'sel' : ''} ${klass}" role="option" aria-selected="${sel ? 'true' : 'false'}"${data}><span class="cursor">${sel ? '›' : ' '}</span><span class="status">${escapeHtml(status)}</span><span class="path">${escapeHtml(main)}</span>${meta ? `<span class="meta">${escapeHtml(meta)}</span>` : ''}</div>`; }
-function dirRow(sel: boolean, klass: string, row: FileTreeRow, index: number): string { const arrow = row.kind === 'dir' && row.collapsed ? '▶' : '▼'; return `<div class="row ${sel ? 'sel' : ''} ${klass}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(row.path)}"><span class="cursor">${sel ? '›' : ' '}</span><span class="path tree-line"><span class="tree-indent" style="--tree-indent:${row.depth * 2}ch"></span><span class="tree-arrow">${arrow}</span><span class="tree-name">${escapeHtml(row.label)}</span></span></div>`; }
-function treeFileRow(sel: boolean, klass: string, file: ChangedFile, main: string, depth: number, index: number): string { return `<div class="row file tree ${sel ? 'sel' : ''} ${klass}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(file.xy)} · ${escapeHtml(fileStateLabel(file))} · ${escapeHtml(file.path)}"><span class="cursor">${sel ? '›' : ' '}</span><span class="path tree-line"><span class="tree-indent" style="--tree-indent:${depth * 2}ch"></span>${fileStatusHtml(file)}<span class="tree-name">${escapeHtml(main)}</span></span></div>`; }
-function fileRow(sel: boolean, klass: string, file: ChangedFile, main: string, index: number): string { return `<div class="row file ${sel ? 'sel' : ''} ${klass}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(file.xy)} · ${escapeHtml(fileStateLabel(file))} · ${escapeHtml(file.path)}"><span class="cursor">${sel ? '›' : ' '}</span><span class="status">${fileStatusHtml(file)}</span><span class="path">${escapeHtml(main)}</span></div>`; }
-function escapeHtml(s: string): string { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!)); }
 function stripAnsi(s: string): string { return s.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, ''); }
 async function showText(title: string, content: string, preserveFocus = false, preview = false) {
   await closeLazyGitVSPreviewTabsIfSingle();
