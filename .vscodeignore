@@ -22,6 +22,8 @@ dogfood-output/**
 scripts/**
 .vscode-test/**
 dist/**
+coverage/**
+.nyc_output/**
 .local/**
 .env
 .env.*

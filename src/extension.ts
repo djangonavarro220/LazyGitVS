@@ -2,9 +2,12 @@ import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import * as path from 'path';
 import { cloneGitConfig, cloneGuiConfig, cloneKeymap, readLazyGitConfig } from './lazygitConfig';
-import { branches, changedFiles, commitFiles, commits, compactRefs, conflictFiles, discoverWorkspaceRepositories, getActiveWorkspaceRoot, git, gitInput, remotes, setActiveWorkspaceRoot, stashes, stashFiles, tags, workspaceRoot, type Branch, type ChangedFile, type Commit, type CommitFile, type ConflictFile, type LazyGitGitRuntimeConfig, type Remote, type Stash, type StashFile, type Tag, type WorkspaceRepository } from './gitService';
+import { branches, changedFiles, commitFiles, commits, compactRefs, conflictFiles, discoverWorkspaceRepositories, getActiveWorkspaceRoot, git, remotes, setActiveWorkspaceRoot, stashes, stashFiles, tags, workspaceRoot, type Branch, type ChangedFile, type Commit, type CommitFile, type ConflictFile, type LazyGitGitRuntimeConfig, type Remote, type Stash, type StashFile, type Tag, type WorkspaceRepository } from './gitService';
+import { applyHunk, applyLine, discardUnstagedHunk, discardUnstagedLine, gitDiffConfigArgs, hunksForFile, toggleStage, toggleStageAll, toggleStageSelected } from './gitActions';
+import { dangerousGitMenuItem, discardAllConfirmation, discardConfirmation, nukeWorkingTreeConfirmation, resetConfirmation } from './destructiveActions';
+import { normalizeWebviewMessage, scriptJson, webviewContentSecurityPolicy } from './webviewSecurity';
 import { decorateMenuItems, findMenuItemByKey } from './lazygitMenu';
-import { assertPatchableHunk, hunkBodyLines, hunkChangedEditorLine, hunkSelectableLineIndexes, hunkStartLine, parseDiffHunks, singleLinePatch, type Hunk } from './hunkPatch';
+import { hunkBodyLines, hunkChangedEditorLine, hunkSelectableLineIndexes, hunkStartLine, parseDiffHunks, type Hunk } from './hunkPatch';
 
 type FileTreeRow = { kind: 'dir'; path: string; label: string; depth: number; collapsed: boolean; file?: never } | { kind: 'file'; path: string; label: string; depth: number; file: ChangedFile };
 type Panel = 'status' | 'files' | 'hunks' | 'branches' | 'commits' | 'stash' | 'conflicts' | 'tags' | 'remotes';
@@ -84,19 +87,6 @@ function revealVisibleEditorLine(filePath: string, line: number) {
   };
   if (!reveal()) setTimeout(reveal, 80);
 }
-async function toggleStage(file: ChangedFile) { if (file.staged) { if (file.xy[0] === 'A') await git(['rm', '--cached', '--', file.path]); else await git(['restore', '--staged', '--', file.path]); } else await git(['add', '--', file.path]); }
-async function toggleStageAll(files: ChangedFile[]) { if (files.some(f => f.untracked || f.xy[1] !== ' ')) await git(['add', '-A']); else await git(['restore', '--staged', '.']); }
-async function toggleStageSelected(files: ChangedFile[]) {
-  const paths = files.map(f => f.path).filter(Boolean);
-  if (!paths.length) return;
-  if (files.some(f => f.untracked || f.xy[1] !== ' ')) await git(['add', '--', ...paths]);
-  else {
-    for (const file of files) {
-      if (file.xy[0] === 'A') await git(['rm', '--cached', '--', file.path]);
-      else await git(['restore', '--staged', '--', file.path]);
-    }
-  }
-}
 async function editPath(filePath: string): Promise<vscode.TextEditor> {
   await closeLazyGitVSPreviewTabsIfSingle();
   const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(path.join(workspaceRoot(), filePath)));
@@ -136,35 +126,6 @@ async function commitFlow(requested?: 'commit' | 'body' | 'amend' | 'amendNoEdit
   else await git(['commit', '-m', subject.trim()]);
 }
 
-async function hunksForFile(file: ChangedFile, gitConfig: LazyGitGitRuntimeConfig = cloneGitConfig()): Promise<Hunk[]> {
-  if (file.untracked) return [];
-  const hunks: Hunk[] = [];
-  const diffArgs = ['diff', '--unified=0', ...gitDiffConfigArgs(gitConfig, false).filter(arg => !arg.startsWith('--unified=')), '--', file.path];
-  const cachedDiffArgs = ['diff', '--cached', '--unified=0', ...gitDiffConfigArgs(gitConfig, false).filter(arg => !arg.startsWith('--unified=')), '--', file.path];
-  if (file.xy[1] !== ' ') hunks.push(...parseDiffHunks(await git(diffArgs), false));
-  if (file.staged) hunks.push(...parseDiffHunks(await git(cachedDiffArgs), true));
-  return hunks;
-}
-function gitDiffConfigArgs(gitConfig: LazyGitGitRuntimeConfig, includeWhitespace: boolean): string[] {
-  const args: string[] = [];
-  const context = Number(gitConfig.diffContextSize);
-  if (Number.isInteger(context) && context >= 0) args.push(`--unified=${context}`);
-  if (includeWhitespace && gitConfig.ignoreWhitespaceInDiffView) args.push('--ignore-all-space');
-  return args;
-}
-function zeroContextPatch(patch: string): boolean {
-  const lines = patch.split('\n');
-  const headerIndex = lines.findIndex(line => line.startsWith('@@ '));
-  if (headerIndex < 0) return false;
-  const body = lines.slice(headerIndex + 1).filter(line => line !== '');
-  return body.length > 0 && body.every(line => line.startsWith('+') || line.startsWith('-'));
-}
-function gitApplyArgs(base: string[], patch: string, forceUnidiffZero = false): string[] {
-  return forceUnidiffZero || zeroContextPatch(patch) || /\n@@ [^\n]*,0 [^\n]*@@|\n@@ [^\n]* [^\n]*,0 @@|^@@ [^\n]*,0 [^\n]*@@|^@@ [^\n]* [^\n]*,0 @@/.test(patch) ? [...base, '--unidiff-zero'] : base;
-}
-async function applyHunk(hunk: Hunk) { assertPatchableHunk(hunk, hunk.staged ? 'unstage hunk' : 'stage hunk'); const args = hunk.staged ? ['apply', '--cached', '--reverse', '--whitespace=nowarn', '--recount'] : ['apply', '--cached', '--whitespace=nowarn', '--recount']; await gitInput(gitApplyArgs(args, hunk.patch), hunk.patch); }
-async function discardUnstagedHunk(hunk: Hunk) { assertPatchableHunk(hunk, 'discard hunk'); if (hunk.staged) throw new Error('Discard only applies to unstaged hunks.'); const args = ['apply', '--reverse', '--whitespace=nowarn', '--recount']; await gitInput(gitApplyArgs(args, hunk.patch), hunk.patch); }
-
 function editorLineRange(editor: vscode.TextEditor, lineIndex: number): vscode.Range {
   const line = Math.min(Math.max(0, lineIndex), Math.max(0, editor.document.lineCount - 1));
   return new vscode.Range(line, 0, line, editor.document.lineAt(line).range.end.character);
@@ -199,16 +160,6 @@ function rangeLineSet(ranges: vscode.Range[]): Set<number> {
 function excludeRangeLines(ranges: vscode.Range[], blocked: Set<number>): vscode.Range[] {
   return blocked.size ? ranges.filter(range => !blocked.has(range.start.line)) : ranges;
 }
-async function applyLine(hunk: Hunk, changedIndex: number) {
-  const linePatch = singleLinePatch(hunk, changedIndex);
-  const args = hunk.staged ? ['apply', '--cached', '--reverse', '--whitespace=nowarn', '--recount'] : ['apply', '--cached', '--whitespace=nowarn', '--recount'];
-  await gitInput(gitApplyArgs(args, linePatch, true), linePatch);
-}
-async function discardUnstagedLine(hunk: Hunk, changedIndex: number) {
-  const linePatch = singleLinePatch(hunk, changedIndex);
-  const args = ['apply', '--reverse', '--whitespace=nowarn', '--recount'];
-  await gitInput(gitApplyArgs(args, linePatch, true), linePatch);
-}
 async function upstreamBranch(): Promise<string | undefined> {
   return git(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']).then(out => out.trim()).catch(() => undefined);
 }
@@ -224,9 +175,9 @@ async function originCommitUrl(hash: string): Promise<string | undefined> {
 }
 async function showCommitResetMenu(commit: Commit) {
   await pickGitAction(`Reset to ${commit.hash}`, [
-    { key: 's', label: '$(debug-restart) Soft reset to commit', description: 'keep index and working tree', args: ['reset', '--soft', commit.hash], danger: true, confirm: `Soft reset to ${commit.hash}?` },
-    { key: 'm', label: '$(debug-restart) Mixed reset to commit', description: 'keep working tree', args: ['reset', '--mixed', commit.hash], danger: true, confirm: `Mixed reset to ${commit.hash}?` },
-    { key: 'h', label: '$(warning) Hard reset to commit', description: 'discard index and working tree', args: ['reset', '--hard', commit.hash], danger: true, confirm: `Hard reset to ${commit.hash}? Not undoable here.` }
+    dangerousGitMenuItem({ key: 's', label: '$(debug-restart) Soft reset to commit', description: 'keep index and working tree', args: ['reset', '--soft', commit.hash] }, resetConfirmation(commit.hash, 'soft'), 'history-rewrite'),
+    dangerousGitMenuItem({ key: 'm', label: '$(debug-restart) Mixed reset to commit', description: 'keep working tree', args: ['reset', '--mixed', commit.hash] }, resetConfirmation(commit.hash, 'mixed'), 'history-rewrite'),
+    dangerousGitMenuItem({ key: 'h', label: '$(warning) Hard reset to commit', description: 'discard index and working tree', args: ['reset', '--hard', commit.hash] }, resetConfirmation(commit.hash, 'hard'), 'history-rewrite')
   ]);
 }
 async function showCommitCopyMenu(commit: Commit) {
@@ -295,13 +246,13 @@ async function showResetMenu(onNuke?: () => void | Promise<void>) {
     { key: 'm', label: '$(debug-restart) Mixed reset to previous commit', description: 'keep working tree', args: ['reset', '--mixed', 'HEAD~1'], danger: true },
     { key: 'h', label: '$(warning) Hard reset to HEAD', description: 'discard working tree and index', args: ['reset', '--hard', 'HEAD'], danger: true, confirm: 'Hard reset discards local changes. Do it?' },
   ];
-  if (upstream) items.push({ key: 'u', label: '$(repo-pull) Reset to upstream', description: upstream, args: ['reset', '--hard', upstream], danger: true, confirm: `Hard reset current branch to ${upstream}?` });
-  items.push({ key: 'n', label: '💣 Nuke working tree', description: 'git reset --hard HEAD && git clean -fd', danger: true, confirm: '💣 Nuke working tree? This discards staged, unstaged and untracked changes. Not undoable.', run: async () => { await onNuke?.(); await git(['reset', '--hard', 'HEAD']); await git(['clean', '-fd']); } });
+  if (upstream) items.push(dangerousGitMenuItem({ key: 'u', label: '$(repo-pull) Reset to upstream', description: upstream, args: ['reset', '--hard', upstream] }, `Hard reset current branch to ${upstream}?`, 'history-rewrite'));
+  items.push(dangerousGitMenuItem({ key: 'n', label: '💣 Nuke working tree', description: 'git reset --hard HEAD && git clean -fd', run: async () => { await onNuke?.(); await git(['reset', '--hard', 'HEAD']); await git(['clean', '-fd']); } }, nukeWorkingTreeConfirmation(), 'nuke'));
   await pickGitAction('Reset options', items);
 }
 async function showDiscardFileMenu(file: ChangedFile, confirmKey = 'x') { await pickGitAction(`Discard changes · ${file.path}`, [
-  { key: confirmKey, label: '$(warning) Discard all changes', description: 'unstage and restore file', danger: true, confirm: `Discard all staged and unstaged changes in ${file.path}?`, run: async () => { await git(['restore', '--staged', '--', file.path]); await git(['restore', '--', file.path]); } },
-  { key: 'u', label: '$(discard) Discard unstaged changes', description: 'git restore -- file', args: ['restore', '--', file.path], danger: true, confirm: `Discard unstaged changes in ${file.path}?` }
+  dangerousGitMenuItem({ key: confirmKey, label: '$(warning) Discard all changes', description: 'unstage and restore file', run: async () => { await git(['restore', '--staged', '--', file.path]); await git(['restore', '--', file.path]); } }, discardAllConfirmation(file.path), 'discard'),
+  dangerousGitMenuItem({ key: 'u', label: '$(discard) Discard unstaged changes', description: 'git restore -- file', args: ['restore', '--', file.path] }, discardConfirmation(file.path), 'discard')
 ]); }
 async function showDiscardHunkMenu(hunk: Hunk) { await pickGitAction('Hunk options', hunk.staged ? [
   { key: 'd', label: '$(remove) Unstage hunk', description: 'git apply --cached --reverse', run: () => applyHunk(hunk) }
@@ -480,54 +431,57 @@ class LazyGitVSController {
     this.views.set(panel, view);
     view.webview.options = { enableScripts: true };
     view.onDidChangeVisibility(() => { if (view.visible) this.scheduleRefresh(0); }, null, this.context.subscriptions);
-    view.webview.onDidReceiveMessage(async msg => {
+    view.webview.onDidReceiveMessage(async rawMessage => {
       try {
-        if (msg.type === 'focusArea') this.setFocusArea(msg.area === 'panel' ? 'panel' : 'none');
-        if (msg.type === 'commandPalette') await this.openCommandPalette();
-        if (msg.type === 'move') await this.move(panel, msg.delta);
-        if (msg.type === 'moveTo') await this.moveTo(panel, msg.position);
-        if (msg.type === 'rangeToggle') await this.toggleRange(panel);
-        if (msg.type === 'rangeMove') await this.rangeMove(panel, msg.delta);
-        if (msg.type === 'select') await this.select(panel, Number(msg.index));
-        if (msg.type === 'switchPanel') { if (this.webviewKeyboardOwner && this.focusArea === 'panel' && this.ownsModeStatus && !this.editorHunkMode && !this.editorEditMode) await this.focusPanel(msg.panel); return; }
-        if (msg.type === 'toggle') await this.toggle(panel);
-        if (msg.type === 'enter') await this.enter(panel);
-        if (msg.type === 'openDiff') await this.openCurrent(panel, false);
-        if (msg.type === 'openFile') await this.editCurrent(panel);
-        if (msg.type === 'editFile') await this.editCurrent(panel);
-        if (msg.type === 'copyPath') await this.copyCurrentPath(panel);
-        if (msg.type === 'copyInfo') await this.copyCurrentInfo(panel);
-        if (msg.type === 'ignoreMenu') await this.ignoreCurrentFile();
-        if (msg.type === 'fetch') await this.fetch();
-        if (msg.type === 'statusMenu') await this.statusMenu();
-        if (msg.type === 'repoMenu') await this.recentReposMenu();
-        if (msg.type === 'helpMenu') await this.helpMenu(panel);
-        if (msg.type === 'commitAction') await this.runCommitCommand(String(msg.key ?? ''));
-        if (msg.type === 'panelAction') await this.runPanelCommand(panel, String(msg.key ?? ''));
-        if (msg.type === 'moveBlock') await this.moveBlock(panel, msg.delta);
-        if (msg.type === 'focusMainView') await this.focusMainView(panel);
-        if (msg.type === 'stageAll') await this.stageAll();
-        if (msg.type === 'commit') await this.commit();
-        if (msg.type === 'commitNoVerify') await this.commit('noVerify');
-        if (msg.type === 'amendLastCommit') await this.commit('amendNoEdit');
-        if (msg.type === 'commitWithEditor') await this.commit('body');
-        if (msg.type === 'push') await this.push();
-        if (msg.type === 'pull') await this.pull();
-        if (msg.type === 'pushMenu') await this.runMenu(showPushMenu, panel);
-        if (msg.type === 'pullMenu') await this.runMenu(showPullMenu, panel);
-        if (msg.type === 'stashAll') await this.stashAll();
-        if (msg.type === 'stashMenu') await this.runMenu(showStashCreateMenu, panel);
-        if (msg.type === 'discardMenu') await this.discardMenu(panel);
-        if (msg.type === 'resetMenu') await this.runMenu(() => showResetMenu(() => this.animateExplosion()), panel);
-        if (msg.type === 'search') await this.searchPanel();
-        if (msg.type === 'clearFilter') await this.clearFilterOrBack(panel);
-        if (msg.type === 'statusFilter') await this.statusFilterMenu();
-        if (msg.type === 'diffingMenu') await this.diffingMenu();
-        if (msg.type === 'refresh') await this.refresh(true);
-        if (msg.type === 'close') await this.close();
-        if (msg.type === 'back') await this.back(panel);
-        if (msg.type === 'togglePanel') await this.toggleHunkPanel();
-        if (msg.type === 'toggleHunkSelection') this.showPendingLineMode();
+        const message = normalizeWebviewMessage(rawMessage);
+        if (!message) return;
+        const type = message.type;
+        if (type === 'focusArea') this.setFocusArea(message.area === 'panel' ? 'panel' : 'none');
+        if (type === 'commandPalette') await this.openCommandPalette();
+        if (type === 'move') await this.move(panel, message.delta);
+        if (type === 'moveTo') await this.moveTo(panel, message.position);
+        if (type === 'rangeToggle') await this.toggleRange(panel);
+        if (type === 'rangeMove') await this.rangeMove(panel, message.delta);
+        if (type === 'select') await this.select(panel, Number(message.index));
+        if (type === 'switchPanel') { if (this.webviewKeyboardOwner && this.focusArea === 'panel' && this.ownsModeStatus && !this.editorHunkMode && !this.editorEditMode) await this.focusPanel(message.panel); return; }
+        if (type === 'toggle') await this.toggle(panel);
+        if (type === 'enter') await this.enter(panel);
+        if (type === 'openDiff') await this.openCurrent(panel, false);
+        if (type === 'openFile') await this.editCurrent(panel);
+        if (type === 'editFile') await this.editCurrent(panel);
+        if (type === 'copyPath') await this.copyCurrentPath(panel);
+        if (type === 'copyInfo') await this.copyCurrentInfo(panel);
+        if (type === 'ignoreMenu') await this.ignoreCurrentFile();
+        if (type === 'fetch') await this.fetch();
+        if (type === 'statusMenu') await this.statusMenu();
+        if (type === 'repoMenu') await this.recentReposMenu();
+        if (type === 'helpMenu') await this.helpMenu(panel);
+        if (type === 'commitAction') await this.runCommitCommand(String(message.key ?? ''));
+        if (type === 'panelAction') await this.runPanelCommand(panel, String(message.key ?? ''));
+        if (type === 'moveBlock') await this.moveBlock(panel, message.delta);
+        if (type === 'focusMainView') await this.focusMainView(panel);
+        if (type === 'stageAll') await this.stageAll();
+        if (type === 'commit') await this.commit();
+        if (type === 'commitNoVerify') await this.commit('noVerify');
+        if (type === 'amendLastCommit') await this.commit('amendNoEdit');
+        if (type === 'commitWithEditor') await this.commit('body');
+        if (type === 'push') await this.push();
+        if (type === 'pull') await this.pull();
+        if (type === 'pushMenu') await this.runMenu(showPushMenu, panel);
+        if (type === 'pullMenu') await this.runMenu(showPullMenu, panel);
+        if (type === 'stashAll') await this.stashAll();
+        if (type === 'stashMenu') await this.runMenu(showStashCreateMenu, panel);
+        if (type === 'discardMenu') await this.discardMenu(panel);
+        if (type === 'resetMenu') await this.runMenu(() => showResetMenu(() => this.animateExplosion()), panel);
+        if (type === 'search') await this.searchPanel();
+        if (type === 'clearFilter') await this.clearFilterOrBack(panel);
+        if (type === 'statusFilter') await this.statusFilterMenu();
+        if (type === 'diffingMenu') await this.diffingMenu();
+        if (type === 'refresh') await this.refresh(true);
+        if (type === 'close') await this.close();
+        if (type === 'back') await this.back(panel);
+        if (type === 'togglePanel') await this.toggleHunkPanel();
+        if (type === 'toggleHunkSelection') this.showPendingLineMode();
       } catch (e: any) { vscode.window.showErrorMessage(e.message); }
     }, null, this.context.subscriptions);
     if (!this.intervalTimer) {
@@ -1458,7 +1412,7 @@ class LazyGitVSController {
       { key: key(k.popStash) || 'g', label: '$(archive) Pop stash', description: s.ref, args: ['stash', 'pop', s.ref] },
       { key: key(k.newBranch) || 'n', label: '$(git-branch) New branch from stash', description: s.ref, run: async () => { const name = await vscode.window.showInputBox({ title: `New branch from ${s.ref}`, validateInput: v => v.trim() ? undefined : 'Branch name required.' }); if (name?.trim()) await git(['stash', 'branch', name.trim(), s.ref]); } },
       { key: key(k.renameStash) || 'r', label: '$(edit) Rename stash', description: 'store new message and drop old ref', run: async () => { const msg = await vscode.window.showInputBox({ title: `Rename ${s.ref}`, value: s.message, validateInput: v => v.trim() ? undefined : 'Stash message required.' }); if (!msg?.trim()) return; const sha = (await git(['rev-parse', s.ref])).trim(); await git(['stash', 'store', '-m', msg.trim(), sha]); await git(['stash', 'drop', s.ref]); } },
-      { key: 'd', label: '$(trash) Drop stash', description: s.ref, danger: true, confirm: `Drop ${s.ref}?`, args: ['stash', 'drop', s.ref] }
+      dangerousGitMenuItem({ key: 'd', label: '$(trash) Drop stash', description: s.ref, args: ['stash', 'drop', s.ref] }, `Drop ${s.ref}?`, 'discard')
     ];
   }
   private conflictCommandCatalog(): GitMenuItem[] {
@@ -1953,7 +1907,7 @@ class LazyGitVSController {
     const footer = '';
     const boom = this.explosion && (viewPanel === 'status' || viewPanel === 'files') ? '<div class="boom"><div class="bomb">💣</div><div class="blast">💥</div></div>' : '';
     const nonce = crypto.randomBytes(16).toString('base64');
-    const csp = `default-src 'none'; img-src ${view.webview.cspSource} data:; style-src ${view.webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';`;
+    const csp = webviewContentSecurityPolicy(view.webview, nonce);
     try { view.webview.html = `<!doctype html><html><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><style>
       html,body{height:100%;margin:0;}body{font-family:var(--vscode-font-family);font-size:var(--vscode-font-size);line-height:1.4;color:var(--vscode-foreground);background:var(--vscode-sideBar-background);overflow:hidden;}
       .root{position:relative;height:100%;display:flex;flex-direction:column;}.title{display:${panel === viewPanel ? 'none' : 'block'};padding:4px 8px;color:var(--vscode-descriptionForeground);border-bottom:1px solid var(--vscode-sideBarSectionHeader-border);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.rows{overflow:auto;flex:1;padding:2px 0;}
@@ -2053,7 +2007,6 @@ function dirRow(sel: boolean, klass: string, row: FileTreeRow, index: number): s
 function treeFileRow(sel: boolean, klass: string, file: ChangedFile, main: string, depth: number, index: number): string { return `<div class="row file tree ${sel ? 'sel' : ''} ${klass}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(file.xy)} · ${escapeHtml(fileStateLabel(file))} · ${escapeHtml(file.path)}"><span class="cursor">${sel ? '›' : ' '}</span><span class="path tree-line"><span class="tree-indent" style="--tree-indent:${depth * 2}ch"></span>${fileStatusHtml(file)}<span class="tree-name">${escapeHtml(main)}</span></span></div>`; }
 function fileRow(sel: boolean, klass: string, file: ChangedFile, main: string, index: number): string { return `<div class="row file ${sel ? 'sel' : ''} ${klass}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(file.xy)} · ${escapeHtml(fileStateLabel(file))} · ${escapeHtml(file.path)}"><span class="cursor">${sel ? '›' : ' '}</span><span class="status">${fileStatusHtml(file)}</span><span class="path">${escapeHtml(main)}</span></div>`; }
 function escapeHtml(s: string): string { return s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!)); }
-function scriptJson(value: unknown): string { return JSON.stringify(value).replace(/[<>&\u2028\u2029]/g, c => ({ '<': '\\u003c', '>': '\\u003e', '&': '\\u0026', '\u2028': '\\u2028', '\u2029': '\\u2029' }[c]!)); }
 function stripAnsi(s: string): string { return s.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, ''); }
 async function showText(title: string, content: string, preserveFocus = false, preview = false) {
   await closeLazyGitVSPreviewTabsIfSingle();

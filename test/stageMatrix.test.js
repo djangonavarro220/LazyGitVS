@@ -7,6 +7,7 @@ const { parseDiffHunks, hunkSelectableLineIndexes, singleLinePatch } = require('
 
 const root = path.join(__dirname, '..');
 const extensionSource = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
+const gitActionsSource = fs.readFileSync(path.join(root, 'src', 'gitActions.ts'), 'utf8');
 
 function sh(command, cwd, input) {
   return cp.execFileSync(command[0], command.slice(1), {
@@ -55,15 +56,15 @@ function commitBase(dir, rel, text) {
 }
 
 test('LGVS source keeps explicit stage/unstage commands for common git states', () => {
-  assert.match(extensionSource, /git\(\['restore', '--staged', '--', file\.path\]\)/, 'tracked file unstage must use git restore --staged -- path');
-  assert.match(extensionSource, /git\(\['rm', '--cached', '--', file\.path\]\)/, 'new added file unstage must use git rm --cached -- path');
-  assert.match(extensionSource, /git\(\['add', '--', file\.path\]\)/, 'file stage must use git add -- path');
-  assert.match(extensionSource, /\['apply', '--cached', '--reverse', '--whitespace=nowarn', '--recount'\]/, 'staged hunk/line unstage must reverse-apply to the index');
+  assert.match(gitActionsSource, /git\(\['restore', '--staged', '--', file\.path\]\)/, 'tracked file unstage must use git restore --staged -- path');
+  assert.match(gitActionsSource, /git\(\['rm', '--cached', '--', file\.path\]\)/, 'new added file unstage must use git rm --cached -- path');
+  assert.match(gitActionsSource, /git\(\['add', '--', file\.path\]\)/, 'file stage must use git add -- path');
+  assert.match(gitActionsSource, /\['apply', '--cached', '--reverse', '--whitespace=nowarn', '--recount'\]/, 'staged hunk/line unstage must reverse-apply to the index');
 });
 
 test('range and folder stage/unstage are scoped to selected files, never repo-wide', () => {
-  assert.match(extensionSource, /async function toggleStageSelected\(files: ChangedFile\[\]\)/, 'range/folder selection must use a dedicated selected-files helper');
-  assert.match(extensionSource, /git\(\['add', '--', \.\.\.paths\]\)/, 'range/folder stage must pass only selected paths to git add');
+  assert.match(gitActionsSource, /export async function toggleStageSelected\(files: ChangedFile\[\]\)/, 'range/folder selection must use a dedicated selected-files helper');
+  assert.match(gitActionsSource, /git\(\['add', '--', \.\.\.paths\]\)/, 'range/folder stage must pass only selected paths to git add');
   assert.match(extensionSource, /private filesUnderFileTreeDir\(dirPath: string\): ChangedFile\[\]/, 'Files directory rows need a helper that expands a folder to changed files');
   assert.match(extensionSource, /file\.path\.startsWith\(`\$\{dirPath\}\/`\)/, 'Folder staging must recurse only under the selected directory prefix');
   assert.match(extensionSource, /if \(row\?\.kind === 'dir'\).*await toggleStageSelected\(files\)/, 'Space on a Files directory row must toggle all changed files under that folder');
