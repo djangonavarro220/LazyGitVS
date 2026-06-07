@@ -1,0 +1,269 @@
+{
+  "version": 1,
+  "description": "Canonical dogfood scenario coverage manifest. Each scenario maps a product risk to the lane/report and check name that must prove it.",
+  "reports": {
+    "full-no-vim": "dogfood-output/last-run-no-vim-full.json",
+    "full-vim": "dogfood-output/last-run-vim-full.json",
+    "edge-files": "dogfood-output/last-run-no-vim-edge-files.json",
+    "binary-file": "dogfood-output/last-run-no-vim-binary-file.json",
+    "large-repo": "dogfood-output/last-run-no-vim-large-repo.json",
+    "dark-theme": "dogfood-output/last-run-no-vim-dark-theme.json",
+    "high-contrast-theme": "dogfood-output/last-run-no-vim-high-contrast-theme.json",
+    "git-failure": "dogfood-output/last-run-no-vim-git-failure.json",
+    "destructive-cancel": "dogfood-output/last-run-no-vim-destructive-cancel.json"
+  },
+  "scenarios": [
+    {
+      "id": "theme-light-active",
+      "risk": "visual",
+      "lane": "full-no-vim",
+      "check": "Light theme dogfood profile is active"
+    },
+    {
+      "id": "no-vim-variant-active",
+      "risk": "keyboard",
+      "lane": "full-no-vim",
+      "check": "No Vim dogfood variant is active"
+    },
+    {
+      "id": "vim-variant-active",
+      "risk": "keyboard",
+      "lane": "full-vim",
+      "check": "VSCodeVim dogfood variant is active"
+    },
+    {
+      "id": "scm-panels-visible",
+      "risk": "navigation",
+      "lane": "full-no-vim",
+      "check": "SCM sidebar exposes default LazyGitVS panels while Status stays hidden until 1"
+    },
+    {
+      "id": "no-focus-footer",
+      "risk": "visual",
+      "lane": "full-no-vim",
+      "check": "No noisy focus footer in LGVS panels"
+    },
+    {
+      "id": "right-chat-closed",
+      "risk": "visual",
+      "lane": "full-no-vim",
+      "check": "Right chat / secondary side bar stays closed in screenshots"
+    },
+    {
+      "id": "status-panel-focus",
+      "risk": "navigation",
+      "lane": "full-no-vim",
+      "check": "Focus 1 keeps LGVS ownership or reveals Status panel"
+    },
+    {
+      "id": "files-panel-return",
+      "risk": "navigation",
+      "lane": "full-no-vim",
+      "check": "Moving from 1 Status to 2 Files hides Status again"
+    },
+    {
+      "id": "tags-panel-visible",
+      "risk": "navigation",
+      "lane": "full-no-vim",
+      "check": "Focus 7 reveals Tags in the SCM sidebar"
+    },
+    {
+      "id": "remotes-panel-visible",
+      "risk": "navigation",
+      "lane": "full-no-vim",
+      "check": "Focus 8 reveals Remotes in the SCM sidebar"
+    },
+    {
+      "id": "preview-tabs-single",
+      "risk": "preview",
+      "lane": "full-no-vim",
+      "check": "Default preview tab policy keeps only one dynamic LazyGitVS tab while navigating previews"
+    },
+    {
+      "id": "branches-escape-stays",
+      "risk": "keyboard",
+      "lane": "full-no-vim",
+      "check": "Escape on 3 BRANCHES keeps the current panel"
+    },
+    {
+      "id": "commits-escape-stays",
+      "risk": "keyboard",
+      "lane": "full-no-vim",
+      "check": "Escape on 4 COMMITS keeps the current panel"
+    },
+    {
+      "id": "stash-escape-stays",
+      "risk": "keyboard",
+      "lane": "full-no-vim",
+      "check": "Escape on 5 STASH keeps the current panel"
+    },
+    {
+      "id": "commit-files-enter",
+      "risk": "commits",
+      "lane": "full-no-vim",
+      "check": "Commit Enter shows changed files for the selected commit"
+    },
+    {
+      "id": "commit-files-escape-return",
+      "risk": "commits",
+      "lane": "full-no-vim",
+      "check": "Esc from commit files returns to the commit list"
+    },
+    {
+      "id": "contextual-help-focus-return",
+      "risk": "keyboard",
+      "lane": "full-no-vim",
+      "check": "Contextual help opens and returns to LGVS focus"
+    },
+    {
+      "id": "nearby-hunks-zero-context",
+      "risk": "hunks",
+      "lane": "full-no-vim",
+      "check": "Nearby staged settings edits stay separate zero-context hunks"
+    },
+    {
+      "id": "hunk-navigation",
+      "risk": "hunks",
+      "lane": "full-no-vim",
+      "check": "HUNK navigation moves between changed areas"
+    },
+    {
+      "id": "hunk-wrap",
+      "risk": "hunks",
+      "lane": "full-no-vim",
+      "check": "HUNK j/k wraps between first and last changed areas"
+    },
+    {
+      "id": "hunk-decorations-scoped",
+      "risk": "hunks",
+      "lane": "full-no-vim",
+      "check": "HUNK decorations stay scoped to changed lines"
+    },
+    {
+      "id": "viewer-focus",
+      "risk": "focus",
+      "lane": "full-no-vim",
+      "check": "Main/hunk viewer focus keeps Files context without noisy footer"
+    },
+    {
+      "id": "discard-modal-focus",
+      "risk": "modal",
+      "lane": "full-no-vim",
+      "check": "Files d-discard modal restores keyboard focus to the Files panel"
+    },
+    {
+      "id": "modal-sentinel-safe",
+      "risk": "modal",
+      "lane": "full-no-vim",
+      "check": "Post-modal physical sentinel key does not leak into the active editor"
+    },
+    {
+      "id": "preview-named-documents",
+      "risk": "preview",
+      "lane": "full-no-vim",
+      "check": "Generated previews use named virtual documents, not Untitled buffers"
+    },
+    {
+      "id": "line-stage",
+      "risk": "staging",
+      "lane": "full-no-vim",
+      "check": "Space in LINE mode stages the selected line change"
+    },
+    {
+      "id": "line-unstage",
+      "risk": "staging",
+      "lane": "full-no-vim",
+      "check": "Space on staged LINE side unstages the selected README change"
+    },
+    {
+      "id": "vim-escape-normal",
+      "risk": "vim",
+      "lane": "full-vim",
+      "check": "VSCodeVim physical Esc returns Normal after LGVS opens the real editor"
+    },
+    {
+      "id": "vim-colon-digit-owned",
+      "risk": "vim",
+      "lane": "full-vim",
+      "check": "VSCodeVim :6 keeps the digit in Vim command-line instead of jumping to LGVS panel 6"
+    },
+    {
+      "id": "multi-repo-status-switch",
+      "risk": "multi-root",
+      "lane": "full-no-vim",
+      "check": "Status Enter switches from the current repository row to other-repo"
+    },
+    {
+      "id": "multi-repo-files-switch",
+      "risk": "multi-root",
+      "lane": "full-no-vim",
+      "check": "Files panel shows the selected repository changes after Status Enter"
+    },
+    {
+      "id": "edge-files-render",
+      "risk": "edge-files",
+      "lane": "edge-files",
+      "check": "Deleted, renamed, and conflict files render in Files/Conflicts UI"
+    },
+    {
+      "id": "conflict-choose-ours-cancel-safe",
+      "risk": "conflicts",
+      "lane": "edge-files",
+      "check": "Conflict choose ours can be cancelled safely"
+    },
+    {
+      "id": "conflict-choose-ours-physical-resolution",
+      "risk": "conflicts",
+      "lane": "edge-files",
+      "check": "Conflict choose ours resolves physical conflict path"
+    },
+    {
+      "id": "deleted-preview-sane",
+      "risk": "edge-files",
+      "lane": "edge-files",
+      "check": "Deleted file preview stays sane"
+    },
+    {
+      "id": "renamed-preview-sane",
+      "risk": "edge-files",
+      "lane": "edge-files",
+      "check": "Renamed file preview stays sane"
+    },
+    {
+      "id": "binary-file-preview-sane",
+      "risk": "binary",
+      "lane": "binary-file",
+      "check": "Binary file preview stays sane"
+    },
+    {
+      "id": "large-repo-refresh-budget",
+      "risk": "performance",
+      "lane": "large-repo",
+      "check": "Large repo refresh stays inside budget"
+    },
+    {
+      "id": "dark-theme-smoke",
+      "risk": "theme",
+      "lane": "dark-theme",
+      "check": "Dark theme dogfood smoke stays readable"
+    },
+    {
+      "id": "high-contrast-theme-smoke",
+      "risk": "theme",
+      "lane": "high-contrast-theme",
+      "check": "High contrast dogfood smoke stays readable"
+    },
+    {
+      "id": "git-failure-path-visible",
+      "risk": "failure",
+      "lane": "git-failure",
+      "check": "Git failure path is visible and non-fatal"
+    },
+    {
+      "id": "destructive-discard-cancel-safe",
+      "risk": "destructive",
+      "lane": "destructive-cancel",
+      "check": "Destructive discard cancel keeps worktree intact"
+    }
+  ]
+}

@@ -639,7 +639,14 @@
     "dogfood:ui:deep-tree": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_DEEP_TREE=1 node scripts/dogfood-ui.js",
     "dogfood:ui:cramped": "LGVS_DOGFOOD_WINDOW_SIZE=900,260 npm run dogfood:ui",
     "dogfood:ui:edge-files": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_EDGE_FILES=1 node scripts/dogfood-ui.js",
-    "coverage": "node scripts/run-coverage.js"
+    "coverage": "node scripts/run-coverage.js",
+    "dogfood:coverage": "node scripts/dogfood-coverage.js",
+    "dogfood:ui:binary-file": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_BINARY_FILE=1 node scripts/dogfood-ui.js",
+    "dogfood:ui:large-repo": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_LARGE_REPO=1 node scripts/dogfood-ui.js",
+    "dogfood:ui:dark-theme": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_THEME=dark LGVS_DOGFOOD_THEME=\"Default Dark Modern\" node scripts/dogfood-ui.js",
+    "dogfood:ui:high-contrast": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_THEME=high-contrast LGVS_DOGFOOD_THEME=\"Default High Contrast\" node scripts/dogfood-ui.js",
+    "dogfood:ui:git-failure": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_GIT_FAILURE=1 node scripts/dogfood-ui.js",
+    "dogfood:ui:destructive-cancel": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_DESTRUCTIVE_CANCEL=1 node scripts/dogfood-ui.js"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
