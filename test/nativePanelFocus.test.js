@@ -4,6 +4,8 @@ const path = require('path');
 
 const root = path.join(__dirname, '..');
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
+const previewDocuments = fs.readFileSync(path.join(root, 'src', 'previewDocuments.ts'), 'utf8');
+const source = `${extension}\n${previewDocuments}`;
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
 const views = pkg.contributes.views.scm;
@@ -40,7 +42,7 @@ assert(extension.includes('vscode.window.onDidChangeActiveTextEditor(editor => t
 assert(extension.includes('private isLGVSOwnedEditor(editor: vscode.TextEditor | undefined): boolean'), 'LGVS must explicitly identify which editors it owns');
 assert(extension.includes("this.editorHunkMode || this.focusArea === 'viewer' || this.editorEditMode"), 'normal editor focus while LGVS thinks it owns HUNK/VIEW/EDIT must trigger a hard ownership release');
 assert(extension.includes('!this.isLGVSOwnedEditor(editor)'), 'ownership release must happen when the active editor is not a LazyGitVS preview/hunk surface');
-assert(extension.includes("uri.scheme === 'lazygitvs-preview' || uri.scheme === 'lazygitvs-empty'"), 'only LazyGitVS virtual preview schemes count as LGVS-owned generated viewers');
+assert(source.includes("uri.scheme === 'lazygitvs-preview' || uri.scheme === 'lazygitvs-empty'") || (source.includes('VIRTUAL_PREVIEW_SCHEME') && source.includes('EMPTY_PREVIEW_SCHEME')), 'only LazyGitVS virtual preview schemes count as LGVS-owned generated viewers');
 const broadKeyboardModeEditorBindings = pkg.contributes.keybindings.filter(binding => String(binding.when) === 'lazygitvs.keyboardMode && editorTextFocus');
 assert.deepStrictEqual(broadKeyboardModeEditorBindings, [], 'LGVS must not bind bare editor keys through broad keyboardMode; outside HUNK/LINE/VIEW the editor belongs to VSCodeVim/VS Code');
 for (const key of ['1', '2', '3', '4', '5', '6', '7', '8']) {

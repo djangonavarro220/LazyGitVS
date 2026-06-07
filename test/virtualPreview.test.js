@@ -1,7 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
+const extensionSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'extension.ts'), 'utf8');
+const previewSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'previewDocuments.ts'), 'utf8');
+const src = `${extensionSrc}\n${previewSrc}`;
 const pkg = fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8');
 
 function assert(cond, msg) {
@@ -9,7 +11,7 @@ function assert(cond, msg) {
 }
 
 assert(src.includes('class VirtualPreviewProvider implements vscode.TextDocumentContentProvider'), 'missing virtual preview provider');
-assert(src.includes("registerTextDocumentContentProvider('lazygitvs-preview'"), 'missing lazygitvs-preview provider registration');
+assert(src.includes("registerTextDocumentContentProvider('lazygitvs-preview'") || (src.includes('registerTextDocumentContentProvider(VIRTUAL_PREVIEW_SCHEME') && src.includes("VIRTUAL_PREVIEW_SCHEME = 'lazygitvs-preview'")), 'missing lazygitvs-preview provider registration');
 assert(src.includes("vscode.workspace.openTextDocument(uri)"), 'showText should open virtual preview URI');
 assert(!src.includes("openTextDocument({ content: stripAnsi(content), language: 'diff' })"), 'showText must not create Untitled content buffers');
 assert(src.includes('stripAnsi(content)'), 'showText should keep ANSI stripping before preview');
