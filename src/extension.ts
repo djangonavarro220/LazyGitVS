@@ -12,7 +12,7 @@ import { dirRow, escapeHtml, fileRow, fileStateLabel, fileStatusHtml, row, treeF
 import { originCommitUrl, pickGitAction, runGitAction, executeGitMenuItem, showCommitCopyMenu, showCommitResetMenu, showDiscardFileMenu, showDiscardHunkMenu, showPullMenu, showPushMenu, showResetMenu, showStashCreateMenu, type GitMenuItem } from './gitMenus';
 import { findMenuItemByKey } from './lazygitMenu';
 import { dangerousGitMenuItem } from './destructiveActions';
-import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, openPath, previewDiff, revealVisibleEditorLine } from './workspaceActions';
+import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, openPath, previewCommitFileDiff, previewDiff, revealVisibleEditorLine } from './workspaceActions';
 import { deletedGhostDecorations, editorLineRange, excludeRangeLines, hunkChangedEditorRanges, rangeLineSet } from './hunkEditorDecorations';
 
 function gutterBadge(letter: 'S' | 'U', fill: string) {
@@ -1488,7 +1488,7 @@ class LazyGitVSController {
     else if (panel === 'commits') {
       if (this.commitFilesFor) {
         const f = this.commitFileItems[this.commitFileSelected];
-        if (f) await showText(`LazyGitVS ${this.commitFilesFor.hash}:${f.path}`, await git(this.showArgs('--patch', '--stat', this.commitFilesFor.hash, '--', f.path)), preserveFocus, preserveFocus);
+        if (f) await previewCommitFileDiff(this.commitFilesFor, f, preserveFocus);
       } else {
         const c = this.currentCommit();
         if (c) await showText(`LazyGitVS Commit ${c.hash}`, await git(this.showArgs('--stat', '--patch', c.hash)), preserveFocus, preserveFocus);

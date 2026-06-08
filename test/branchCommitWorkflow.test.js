@@ -6,7 +6,10 @@ const path = require('path');
 
 const root = path.join(__dirname, '..');
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
+const gitService = fs.readFileSync(path.join(root, 'src', 'gitService.ts'), 'utf8');
 const lazygitConfig = fs.readFileSync(path.join(root, 'src', 'lazygitConfig.ts'), 'utf8');
+
+assert(gitService.includes("'diff-tree', '--root', '--no-commit-id', '--name-status', '-r', hash"), 'Commit file list must include root commits too; otherwise Enter on the first commit never opens the lazygit-style file subview');
 
 assert(extension.includes("else if (panel === 'branches') { const b = this.currentBranch(); if (b) await showText(`LazyGitVS Branch ${b.name}`, await git(branchLogArgs(this.lazygitGit, b.name)), preserveFocus, preserveFocus); }"), 'Branches navigation must render the selected branch log in the right/main pane, like lazygit localBranches GetOnRenderToMain');
 assert(extension.includes("if (panel === 'branches') return this.enterBranchCommits();"), 'Branches Enter must switch to the commits panel scoped to the selected branch, matching lazygit View commits for selected branch');
@@ -18,6 +21,8 @@ assert(extension.includes("if(hit(e,u.focusMainView)){e.preventDefault();vscode.
 assert(extension.includes("else if (panel === 'commits') {\n      if (this.commitFilesFor)"), 'Commits panel must distinguish commit list vs commit-files subview');
 assert(extension.includes("await git(this.showArgs('--stat', '--patch', c.hash))"), 'Commit navigation must render git show --stat --patch for the selected commit, like lazygit Patch main pane');
 assert(extension.includes("await this.openCurrent('commits', true);"), 'Commit Enter must push into commit files and immediately preview the first file diff');
+assert(extension.includes('previewCommitFileDiff(this.commitFilesFor, f, preserveFocus)'), 'Moving through files inside a commit must use the same VS Code diff-editor preview UX as Files panel, not a passive text patch');
+assert(!extension.includes("showText(`LazyGitVS ${this.commitFilesFor.hash}:${f.path}`"), 'Commit-file navigation must not regress to readonly text patch buffers');
 assert(extension.includes("if (f) return this.enterCommitFileHunkMode(f);"), 'Commit-file Enter must open the selected commit file in HUNK/LINE mode, not just a passive patch preview');
 assert(extension.includes('private async enterCommitFileHunkMode(file: CommitFile)'), 'Commit file HUNK/LINE mode must have an explicit read-only entry path');
 assert(extension.includes("this.allHunks = parseDiffHunks(patch, false);"), 'Commit file HUNK/LINE mode must parse hunks from the selected commit-file patch');
