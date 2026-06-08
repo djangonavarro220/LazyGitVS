@@ -2,7 +2,9 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { cloneGitConfig } from './lazygitConfig';
 import { git, workspaceRoot, type ChangedFile, type Commit, type CommitFile, type ConflictFile, type LazyGitGitRuntimeConfig, type Stash, type StashFile } from './gitService';
+import { gitDiffConfigArgs } from './gitActions';
 import { EMPTY_PREVIEW_SCHEME } from './previewDocuments';
+import { commitPatchPreviewHtml } from './richPreview';
 
 function shellWords(command: string): string[] {
   const words: string[] = [];
@@ -71,6 +73,30 @@ export async function previewStashFileDiff(stash: Stash, file: StashFile, preser
   const left = status === 'A' ? empty : before;
   const right = status === 'D' ? empty : after;
   await vscode.commands.executeCommand('vscode.diff', left, right, `LazyGitVS: ${file.path}`, { preview: preserveFocus, preserveFocus, viewColumn: vscode.ViewColumn.Active });
+}
+
+export async function showCommitPreview(commit: Commit, gitConfig: LazyGitGitRuntimeConfig = cloneGitConfig(), preserveFocus = true) {
+  await closeLazyGitVSPreviewTabsIfSingle();
+  const patch = await git(['show', ...gitDiffConfigArgs(gitConfig, true), '--stat', '--patch', commit.hash]);
+  const panel = vscode.window.createWebviewPanel(
+    'lazygitvs.preview',
+    `LazyGitVS: Commit ${commit.hash}`,
+    { viewColumn: vscode.ViewColumn.Active, preserveFocus },
+    { enableScripts: false, retainContextWhenHidden: false }
+  );
+  panel.webview.html = commitPatchPreviewHtml({ title: `Commit ${commit.hash}`, hash: commit.hash, subject: commit.subject, author: commit.author, relativeDate: commit.relativeDate }, patch);
+}
+
+export async function showStashPreview(stash: Stash, gitConfig: LazyGitGitRuntimeConfig = cloneGitConfig(), preserveFocus = true) {
+  await closeLazyGitVSPreviewTabsIfSingle();
+  const patch = await git(['stash', 'show', ...gitDiffConfigArgs(gitConfig, true), '--stat', '--patch', stash.ref]);
+  const panel = vscode.window.createWebviewPanel(
+    'lazygitvs.preview',
+    `LazyGitVS: ${stash.ref}`,
+    { viewColumn: vscode.ViewColumn.Active, preserveFocus },
+    { enableScripts: false, retainContextWhenHidden: false }
+  );
+  panel.webview.html = commitPatchPreviewHtml({ title: stash.ref, subject: stash.message, subtitle: stash.ref }, patch);
 }
 
 export function revealVisibleEditorLine(filePath: string, line: number) {

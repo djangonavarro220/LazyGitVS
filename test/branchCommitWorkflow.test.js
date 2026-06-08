@@ -21,7 +21,7 @@ assert(extension.includes("await commits(b.name)"), 'Branch-scoped commits shoul
 assert(lazygitConfig.includes("focusMainView: '0'"), 'LazyGitVS must preserve lazygit universal.focusMainView=0 for focusing the right/main preview pane');
 assert(extension.includes("if(hit(e,u.focusMainView)){e.preventDefault();vscode.postMessage({type:'focusMainView'});return;}"), 'Webview key handling must route lazygit focusMainView to the right/main preview instead of overloading Enter');
 assert(extension.includes("else if (panel === 'commits') {\n      if (this.commitFilesFor)"), 'Commits panel must distinguish commit list vs commit-files subview');
-assert(extension.includes("await git(this.showArgs('--stat', '--patch', c.hash))"), 'Commit navigation must render git show --stat --patch for the selected commit, like lazygit Patch main pane');
+assert(extension.includes('if (c) await showCommitPreview(c, this.lazygitGit, preserveFocus);'), 'Commit navigation must render a rich semantic stat+patch preview for the selected commit, not a raw git show text buffer');
 assert(extension.includes("await this.openCurrent('commits', true);"), 'Commit Enter must push into commit files and immediately preview the first file diff');
 assert(extension.includes('previewCommitFileDiff(this.commitFilesFor, f, preserveFocus)'), 'Moving through files inside a commit must use the same VS Code diff-editor preview UX as Files panel, not a passive text patch');
 assert(extension.includes('previewStashFileDiff(this.stashFilesFor, f, preserveFocus)'), 'Moving through files inside a stash must use the same VS Code diff-editor preview UX as Files panel, not a stale preview or text patch');
