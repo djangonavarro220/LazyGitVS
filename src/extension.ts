@@ -12,7 +12,7 @@ import { dirRow, escapeHtml, fileRow, fileStateLabel, fileStatusHtml, row, treeF
 import { originCommitUrl, pickGitAction, runGitAction, executeGitMenuItem, showCommitCopyMenu, showCommitResetMenu, showDiscardFileMenu, showDiscardHunkMenu, showPullMenu, showPushMenu, showResetMenu, showStashCreateMenu, type GitMenuItem } from './gitMenus';
 import { findMenuItemByKey } from './lazygitMenu';
 import { dangerousGitMenuItem } from './destructiveActions';
-import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, openPath, previewCommitFileDiff, previewDiff, revealVisibleEditorLine } from './workspaceActions';
+import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, openPath, previewCommitFileDiff, previewDiff, previewStashFileDiff, revealVisibleEditorLine } from './workspaceActions';
 import { deletedGhostDecorations, editorLineRange, excludeRangeLines, hunkChangedEditorRanges, rangeLineSet } from './hunkEditorDecorations';
 
 function gutterBadge(letter: 'S' | 'U', fill: string) {
@@ -917,7 +917,7 @@ class LazyGitVSController {
   private async back(viewPanel: ViewPanel) {
     if (viewPanel === 'files' && this.activePanel === 'hunks') { this.activePanel = 'files'; this.updateModeStatusBar(); this.renderAll(); return; }
     if (viewPanel === 'commits' && this.commitFilesFor) { this.commitFilesFor = undefined; this.commitFileItems = []; this.commitFileSelected = 0; this.renderAll(); await this.openCurrent('commits', true).catch(() => undefined); return; }
-    if (viewPanel === 'stash' && this.stashFilesFor) { this.stashFilesFor = undefined; this.stashFileItems = []; this.stashFileSelected = 0; this.renderAll(); return; }
+    if (viewPanel === 'stash' && this.stashFilesFor) { this.stashFilesFor = undefined; this.stashFileItems = []; this.stashFileSelected = 0; this.renderAll(); await this.openCurrent('stash', true).catch(() => undefined); return; }
     await this.focusPanel(viewPanel);
   }
   private async focusMainView(viewPanel: ViewPanel) {
@@ -1495,7 +1495,15 @@ class LazyGitVSController {
       }
     }
    
-    if (panel === 'stash') { const s = this.currentStash(); if (s && !preserveFocus) await git(['stash', 'show', '--stat', s.ref]).then(out => showText(`LazyGitVS ${s.ref}`, out)); }
+    if (panel === 'stash') {
+      if (this.stashFilesFor) {
+        const f = this.stashFileItems[this.stashFileSelected];
+        if (f) await previewStashFileDiff(this.stashFilesFor, f, preserveFocus);
+      } else {
+        const s = this.currentStash();
+        if (s) await showText(`LazyGitVS ${s.ref}`, await git(['stash', 'show', ...gitDiffConfigArgs(this.lazygitGit, true), '--stat', '--patch', s.ref]), preserveFocus, preserveFocus);
+      }
+    }
   }
 
   private diffArgs(...args: string[]): string[] { return ['diff', ...gitDiffConfigArgs(this.lazygitGit, true), ...args]; }
@@ -1548,7 +1556,7 @@ class LazyGitVSController {
   private async enterStash() {
     if (this.stashFilesFor) {
       const f = this.stashFileItems[this.stashFileSelected];
-      if (f && this.stashFilesFor) await showText(`LazyGitVS ${this.stashFilesFor.ref}:${f.path}`, await git(['stash', 'show', ...gitDiffConfigArgs(this.lazygitGit, true), '--patch', this.stashFilesFor.ref, '--', f.path]).catch(() => git(['stash', 'show', ...gitDiffConfigArgs(this.lazygitGit, true), '--patch', this.stashFilesFor!.ref])));
+      if (f && this.stashFilesFor) await previewStashFileDiff(this.stashFilesFor, f, false);
       return;
     }
     const s = this.currentStash(); if (!s) return showStashCreateMenu();
@@ -1556,6 +1564,7 @@ class LazyGitVSController {
     this.stashFileItems = await stashFiles(s.ref);
     this.stashFileSelected = 0;
     this.renderAll();
+    await this.openCurrent('stash', true);
   }
 
   private async clearFilterOrBack(viewPanel: ViewPanel) {
