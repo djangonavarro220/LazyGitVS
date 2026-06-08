@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { cloneGitConfig } from './lazygitConfig';
-import { git, workspaceRoot, type ChangedFile, type Commit, type CommitFile, type ConflictFile, type LazyGitGitRuntimeConfig } from './gitService';
+import { git, workspaceRoot, type ChangedFile, type Commit, type CommitFile, type ConflictFile, type LazyGitGitRuntimeConfig, type Stash, type StashFile } from './gitService';
 import { EMPTY_PREVIEW_SCHEME } from './previewDocuments';
 
 function shellWords(command: string): string[] {
@@ -53,6 +53,20 @@ export async function previewCommitFileDiff(commit: Commit, file: CommitFile, pr
   const before = vscode.Uri.file(path.join(root, beforePath)).with({ scheme: 'git', query: JSON.stringify({ path: path.join(root, beforePath), ref: `${commit.hash}^` }) });
   const after = vscode.Uri.file(path.join(root, afterPath)).with({ scheme: 'git', query: JSON.stringify({ path: path.join(root, afterPath), ref: commit.hash }) });
   const empty = vscode.Uri.parse(`${EMPTY_PREVIEW_SCHEME}:${encodeURIComponent(`${commit.hash}:${file.path}:empty`)}`);
+  const status = file.status[0];
+  const left = status === 'A' ? empty : before;
+  const right = status === 'D' ? empty : after;
+  await vscode.commands.executeCommand('vscode.diff', left, right, `LazyGitVS: ${file.path}`, { preview: preserveFocus, preserveFocus, viewColumn: vscode.ViewColumn.Active });
+}
+
+export async function previewStashFileDiff(stash: Stash, file: StashFile, preserveFocus = true) {
+  await closeLazyGitVSPreviewTabsIfSingle();
+  const root = workspaceRoot();
+  const beforePath = file.oldPath ?? file.path;
+  const afterPath = file.path;
+  const before = vscode.Uri.file(path.join(root, beforePath)).with({ scheme: 'git', query: JSON.stringify({ path: path.join(root, beforePath), ref: `${stash.ref}^1` }) });
+  const after = vscode.Uri.file(path.join(root, afterPath)).with({ scheme: 'git', query: JSON.stringify({ path: path.join(root, afterPath), ref: stash.ref }) });
+  const empty = vscode.Uri.parse(`${EMPTY_PREVIEW_SCHEME}:${encodeURIComponent(`${stash.ref}:${file.path}:empty`)}`);
   const status = file.status[0];
   const left = status === 'A' ? empty : before;
   const right = status === 'D' ? empty : after;

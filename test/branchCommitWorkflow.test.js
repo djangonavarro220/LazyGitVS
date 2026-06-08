@@ -10,6 +10,8 @@ const gitService = fs.readFileSync(path.join(root, 'src', 'gitService.ts'), 'utf
 const lazygitConfig = fs.readFileSync(path.join(root, 'src', 'lazygitConfig.ts'), 'utf8');
 
 assert(gitService.includes("'diff-tree', '--root', '--no-commit-id', '--name-status', '-r', hash"), 'Commit file list must include root commits too; otherwise Enter on the first commit never opens the lazygit-style file subview');
+assert(gitService.includes("'stash', 'show', '--name-status', '--find-renames', ref"), 'Stash file list must keep real paths/renames for diff-editor preview, not display-only joined paths');
+assert(gitService.includes('export type StashFile = { status: string; path: string; oldPath?: string };'), 'StashFile must preserve oldPath for renamed stash entries');
 
 assert(extension.includes("else if (panel === 'branches') { const b = this.currentBranch(); if (b) await showText(`LazyGitVS Branch ${b.name}`, await git(branchLogArgs(this.lazygitGit, b.name)), preserveFocus, preserveFocus); }"), 'Branches navigation must render the selected branch log in the right/main pane, like lazygit localBranches GetOnRenderToMain');
 assert(extension.includes("if (panel === 'branches') return this.enterBranchCommits();"), 'Branches Enter must switch to the commits panel scoped to the selected branch, matching lazygit View commits for selected branch');
@@ -22,6 +24,12 @@ assert(extension.includes("else if (panel === 'commits') {\n      if (this.commi
 assert(extension.includes("await git(this.showArgs('--stat', '--patch', c.hash))"), 'Commit navigation must render git show --stat --patch for the selected commit, like lazygit Patch main pane');
 assert(extension.includes("await this.openCurrent('commits', true);"), 'Commit Enter must push into commit files and immediately preview the first file diff');
 assert(extension.includes('previewCommitFileDiff(this.commitFilesFor, f, preserveFocus)'), 'Moving through files inside a commit must use the same VS Code diff-editor preview UX as Files panel, not a passive text patch');
+assert(extension.includes('previewStashFileDiff(this.stashFilesFor, f, preserveFocus)'), 'Moving through files inside a stash must use the same VS Code diff-editor preview UX as Files panel, not a stale preview or text patch');
+assert(extension.includes("if (f && this.stashFilesFor) await previewStashFileDiff(this.stashFilesFor, f, false);"), 'Enter on a stash file must focus the VS Code diff editor instead of opening a passive text patch');
+assert(extension.includes("await this.openCurrent('stash', true);"), 'Entering stash files must immediately preview the first file diff, like commit-files');
+assert(extension.includes("if (viewPanel === 'stash' && this.stashFilesFor) { this.stashFilesFor = undefined; this.stashFileItems = []; this.stashFileSelected = 0; this.renderAll(); await this.openCurrent('stash', true).catch(() => undefined); return; }"), 'Esc/Back from stash files must return to stash list and restore selected stash patch preview');
+assert(!extension.includes("showText(`LazyGitVS ${this.stashFilesFor.ref}:${f.path}`"), 'Stash-file navigation must not regress to readonly text patch buffers');
+assert(!gitService.includes("rest.join(' → ')"), 'Stash files must not collapse rename columns into a display-only path');
 assert(!extension.includes("showText(`LazyGitVS ${this.commitFilesFor.hash}:${f.path}`"), 'Commit-file navigation must not regress to readonly text patch buffers');
 assert(extension.includes("if (f) return this.enterCommitFileHunkMode(f);"), 'Commit-file Enter must open the selected commit file in HUNK/LINE mode, not just a passive patch preview');
 assert(extension.includes('private async enterCommitFileHunkMode(file: CommitFile)'), 'Commit file HUNK/LINE mode must have an explicit read-only entry path');
@@ -89,6 +97,20 @@ withRepo('commit Enter workflow can list files then render selected file patch',
   assert.match(patch, /second/);
   assert.match(patch, /-one/);
   assert.match(patch, /\+two/);
+});
+
+withRepo('stash Enter workflow can list files and preserve rename paths for diff preview', dir => {
+  fs.writeFileSync(path.join(dir, 'a.txt'), 'one\n');
+  git(dir, 'add', 'a.txt');
+  git(dir, 'commit', '-m', 'base');
+  git(dir, 'mv', 'a.txt', 'b.txt');
+  fs.writeFileSync(path.join(dir, 'b.txt'), 'one\ntwo\n');
+  git(dir, 'stash', 'push', '-m', 'rename stash');
+  const files = git(dir, 'stash', 'show', '--name-status', '--find-renames', 'stash@{0}');
+  assert.match(files, /^R\d*\ta.txt\tb.txt/m);
+  const parts = files.trim().split('\t');
+  assert.strictEqual(parts[1], 'a.txt');
+  assert.strictEqual(parts[2], 'b.txt');
 });
 
 console.log('branchCommitWorkflow tests passed');

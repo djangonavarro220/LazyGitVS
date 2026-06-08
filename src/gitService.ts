@@ -11,7 +11,7 @@ export type Remote = { name: string; fetchUrl: string; pushUrl: string };
 export type Commit = { hash: string; subject: string; refs: string };
 export type CommitFile = { status: string; path: string; oldPath?: string };
 export type Stash = { ref: string; message: string };
-export type StashFile = { status: string; path: string };
+export type StashFile = { status: string; path: string; oldPath?: string };
 export type ConflictFile = { xy: string; path: string };
 export type WorkspaceRepository = { path: string; name: string; branch: string; workspaceFolder: string };
 
@@ -175,8 +175,8 @@ export async function commitFiles(hash: string): Promise<CommitFile[]> {
 }
 
 export async function stashFiles(ref: string): Promise<StashFile[]> {
-  const out = await git(['stash', 'show', '--name-status', ref]);
-  return out.split('\n').filter(Boolean).map(line => { const [status, ...rest] = line.split('\t'); return { status, path: rest.join(' → ') }; });
+  const out = await git(['stash', 'show', '--name-status', '--find-renames', ref]);
+  return out.split('\n').filter(Boolean).map(line => { const parts = line.split('\t'); return { status: parts[0], oldPath: parts.length > 2 ? parts[1] : undefined, path: parts[parts.length - 1] }; });
 }
 
 export async function conflictFiles(): Promise<ConflictFile[]> {
