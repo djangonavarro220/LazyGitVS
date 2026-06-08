@@ -1,4 +1,4 @@
-import type { ChangedFile } from './gitService';
+import type { Branch, ChangedFile, Commit } from './gitService';
 import type { FileTreeRow } from './panels';
 
 export function statusKind(ch: string): string {
@@ -36,6 +36,34 @@ export function treeFileRow(sel: boolean, klass: string, file: ChangedFile, main
 
 export function fileRow(sel: boolean, klass: string, file: ChangedFile, main: string, index: number): string {
   return `<div class="row file ${sel ? 'sel' : ''} ${klass}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(file.xy)} · ${escapeHtml(fileStateLabel(file))} · ${escapeHtml(file.path)}"><span class="cursor">${sel ? '›' : ' '}</span><span class="status">${fileStatusHtml(file)}</span><span class="path">${escapeHtml(main)}</span></div>`;
+}
+
+function refChips(refs: string): string {
+  return refs.split(',')
+    .map(ref => ref.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .map(ref => {
+      const label = ref.replace(/^HEAD -> /, '').replace(/^tag: /, '');
+      const klass = ref.startsWith('tag: ') ? 'tag-ref' : ref.includes('HEAD') ? 'head-ref' : 'branch-ref';
+      return `<span class="ref-chip ${klass}" title="${escapeHtml(ref)}">${escapeHtml(label)}</span>`;
+    })
+    .join('');
+}
+
+export function branchRow(sel: boolean, branch: Branch, index: number): string {
+  const kindLabel = branch.kind === 'remote' ? 'R' : branch.kind === 'tag' ? 'T' : branch.kind === 'worktree' ? 'W' : 'L';
+  const sync = `${branch.ahead ? `↑${branch.ahead}` : ''}${branch.ahead && branch.behind ? ' ' : ''}${branch.behind ? `↓${branch.behind}` : ''}`;
+  const meta = sync || branch.upstream || branch.kind;
+  const title = [branch.kind, branch.current ? 'current' : '', branch.upstream ? `upstream ${branch.upstream}` : '', sync].filter(Boolean).join(' · ');
+  return `<div class="row branch-row ${sel ? 'sel' : ''} ${branch.current ? 'current' : ''} ${branch.kind}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(title)}"><span class="cursor">${sel ? '›' : ' '}</span><span class="ref-kind">${branch.current ? '●' : kindLabel}</span><span class="path branch-name">${escapeHtml(branch.label)}</span>${meta ? `<span class="meta branch-meta">${escapeHtml(meta)}</span>` : ''}</div>`;
+}
+
+export function commitRow(sel: boolean, commit: Commit, index: number): string {
+  const chips = refChips(commit.refs);
+  const details = commit.relativeDate;
+  const titleDetails = [commit.relativeDate, commit.author].filter(Boolean).join(' · ');
+  return `<div class="row commit-row ${sel ? 'sel' : ''}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(commit.hash)} · ${escapeHtml(commit.subject)}${titleDetails ? ` · ${escapeHtml(titleDetails)}` : ''}"><span class="cursor">${sel ? '›' : ' '}</span><span class="commit-block"><span class="commit-top"><span class="hash-pill">${escapeHtml(commit.hash)}</span><span class="summary">${escapeHtml(commit.subject)}</span></span><span class="commit-sub">${chips ? `<span class="refs">${chips}</span>` : ''}${details ? `<span class="meta commit-meta">${escapeHtml(details)}</span>` : ''}</span></span></div>`;
 }
 
 export function escapeHtml(s: string): string {

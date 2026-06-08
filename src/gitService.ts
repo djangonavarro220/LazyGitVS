@@ -5,10 +5,10 @@ import { cloneGitConfig } from './lazygitConfig';
 
 export type ChangedFile = { xy: string; path: string; staged: boolean; untracked: boolean };
 export type LazyGitGitRuntimeConfig = ReturnType<typeof cloneGitConfig>;
-export type Branch = { name: string; label: string; current: boolean; kind: 'local' | 'remote' | 'tag' | 'worktree'; upstream: string };
+export type Branch = { name: string; label: string; current: boolean; kind: 'local' | 'remote' | 'tag' | 'worktree'; upstream: string; ahead: number; behind: number };
 export type Tag = { name: string; date: string; subject: string };
 export type Remote = { name: string; fetchUrl: string; pushUrl: string };
-export type Commit = { hash: string; subject: string; refs: string };
+export type Commit = { hash: string; subject: string; refs: string; author: string; relativeDate: string; graph: string };
 export type CommitFile = { status: string; path: string; oldPath?: string };
 export type Stash = { ref: string; message: string };
 export type StashFile = { status: string; path: string; oldPath?: string };
@@ -108,16 +108,22 @@ export async function changedFiles(gitConfig: LazyGitGitRuntimeConfig = cloneGit
   return files;
 }
 
+function parseAheadBehind(track: string): { ahead: number; behind: number } {
+  const ahead = Number(track.match(/ahead (\d+)/)?.[1] ?? 0);
+  const behind = Number(track.match(/behind (\d+)/)?.[1] ?? 0);
+  return { ahead, behind };
+}
+
 export async function branches(): Promise<Branch[]> {
-  const out = await git(['branch', '--all', '--format=%(HEAD)%09%(refname:short)%09%(upstream:short)']);
+  const out = await git(['branch', '--all', '--format=%(HEAD)%09%(refname:short)%09%(upstream:short)%09%(upstream:track)']);
   const items: Branch[] = out.split('\n').filter(Boolean).map(line => {
-    const [head, raw, upstream = ''] = line.split('\t');
+    const [head, raw, upstream = '', track = ''] = line.split('\t');
     const kind = raw.startsWith('remotes/') ? 'remote' : 'local';
     const name = kind === 'remote' ? raw.replace(/^remotes\//, '') : raw;
-    return { name, label: name, current: head.trim() === '*', kind, upstream };
+    return { name, label: name, current: head.trim() === '*', kind, upstream, ...parseAheadBehind(track) };
   });
   const worktrees = await git(['worktree', 'list', '--porcelain']).catch(() => '');
-  for (const line of worktrees.split('\n')) if (line.startsWith('branch ')) { const name = line.slice(7).replace(/^refs\/heads\//, ''); if (!items.some(b => b.kind === 'worktree' && b.name === name)) items.push({ name, label: name, current: false, kind: 'worktree', upstream: '' }); }
+  for (const line of worktrees.split('\n')) if (line.startsWith('branch ')) { const name = line.slice(7).replace(/^refs\/heads\//, ''); if (!items.some(b => b.kind === 'worktree' && b.name === name)) items.push({ name, label: name, current: false, kind: 'worktree', upstream: '', ahead: 0, behind: 0 }); }
   return items.sort((a, b) => {
     if (a.current !== b.current) return a.current ? -1 : 1;
     const kindRank = (branch: Branch) => branch.kind === 'local' ? 0 : branch.kind === 'worktree' ? 1 : 2;
@@ -148,12 +154,12 @@ export async function remotes(): Promise<Remote[]> {
 }
 
 export async function commits(ref?: string): Promise<Commit[]> {
-  const args = ['log', '--decorate=short', '--max-count=80', '--pretty=format:%h%x09%D%x09%s'];
+  const args = ['log', '--decorate=short', '--max-count=80', '--pretty=format:%h%x09%D%x09%s%x09%an%x09%ar'];
   if (ref) args.push(ref, '--');
   const out = await git(args);
   return out.split('\n').filter(Boolean).map(line => {
-    const [hash, refs, ...subject] = line.split('\t');
-    return { hash, refs, subject: subject.join('\t') };
+    const [hash, refs, subject = '', author = '', relativeDate = ''] = line.split('\t');
+    return { hash, refs, subject, author, relativeDate, graph: '' };
   });
 }
 
