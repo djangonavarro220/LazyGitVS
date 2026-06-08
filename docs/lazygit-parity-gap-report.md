@@ -135,6 +135,13 @@ Last reviewed after commit `e432187 feat: close next lazygit parity gaps`.
 - [x] Rows use `role="option"` and `aria-selected`.
 - [x] Basic virtualization for large lists.
 
+## Needs upstream re-audit / suspected mismatches
+
+These are behaviours that currently work in LGVS but are not trusted enough to call lazygit parity. Re-check against upstream lazygit before polishing or documenting them as done.
+
+- [ ] `3 Branches` `<enter>` semantics are suspect. Current LGVS drills into `4 Commits` for the selected branch, but older repo notes say lazygit-style branch movement should preview the branch log and `Space` should checkout. Verify upstream lazygit's actual branch-row `<enter>` behaviour instead of guessing by vibes.
+- [ ] `4 Commits` commit-file `<enter>` should feel like the normal VS Code diff/editor path. Current LGVS can enter a weird readonly patch/HUNK-ish view for a file inside a commit; verify whether the right target is a native VS Code diff preview, a lazygit-style patch viewer, or an LGVS-specific read-only hunk view.
+
 ## Remaining gaps
 
 ### Global workflows

@@ -38,19 +38,6 @@ export function fileRow(sel: boolean, klass: string, file: ChangedFile, main: st
   return `<div class="row file ${sel ? 'sel' : ''} ${klass}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(file.xy)} · ${escapeHtml(fileStateLabel(file))} · ${escapeHtml(file.path)}"><span class="cursor">${sel ? '›' : ' '}</span><span class="status">${fileStatusHtml(file)}</span><span class="path">${escapeHtml(main)}</span></div>`;
 }
 
-function refChips(refs: string): string {
-  return refs.split(',')
-    .map(ref => ref.trim())
-    .filter(Boolean)
-    .slice(0, 3)
-    .map(ref => {
-      const label = ref.replace(/^HEAD -> /, '').replace(/^tag: /, '');
-      const klass = ref.startsWith('tag: ') ? 'tag-ref' : ref.includes('HEAD') ? 'head-ref' : 'branch-ref';
-      return `<span class="ref-chip ${klass}" title="${escapeHtml(ref)}">${escapeHtml(label)}</span>`;
-    })
-    .join('');
-}
-
 export function branchRow(sel: boolean, branch: Branch, index: number): string {
   const kindLabel = branch.kind === 'remote' ? 'R' : branch.kind === 'tag' ? 'T' : branch.kind === 'worktree' ? 'W' : 'L';
   const sync = `${branch.ahead ? `↑${branch.ahead}` : ''}${branch.ahead && branch.behind ? ' ' : ''}${branch.behind ? `↓${branch.behind}` : ''}`;
@@ -60,11 +47,9 @@ export function branchRow(sel: boolean, branch: Branch, index: number): string {
 }
 
 export function commitRow(sel: boolean, commit: Commit, index: number): string {
-  const chips = refChips(commit.refs);
   const details = commit.relativeDate;
-  const titleDetails = [commit.relativeDate, commit.author].filter(Boolean).join(' · ');
-  const meta = `${chips ? `<span class="refs">${chips}</span>` : ''}${details ? `<span class="commit-date">${escapeHtml(details)}</span>` : ''}`;
-  return `<div class="row commit-row ${sel ? 'sel' : ''}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(commit.hash)} · ${escapeHtml(commit.subject)}${titleDetails ? ` · ${escapeHtml(titleDetails)}` : ''}"><span class="cursor">${sel ? '›' : ' '}</span><span class="hash-pill">${escapeHtml(commit.hash)}</span><span class="commit-main path">${escapeHtml(commit.subject)}</span>${meta ? `<span class="meta commit-meta">${meta}</span>` : ''}</div>`;
+  const titleDetails = `${commit.refs ? ` · ${escapeHtml(commit.refs)}` : ''}${[commit.relativeDate, commit.author].filter(Boolean).map(escapeHtml).map(part => ` · ${part}`).join('')}`;
+  return `<div class="row commit-row ${sel ? 'sel' : ''}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(commit.hash)} · ${escapeHtml(commit.subject)}${titleDetails}"><span class="cursor">${sel ? '›' : ' '}</span><span class="hash-pill">${escapeHtml(commit.hash)}</span><span class="commit-main path">${escapeHtml(commit.subject)}</span>${details ? `<span class="meta commit-meta">${escapeHtml(details)}</span>` : ''}</div>`;
 }
 
 export function escapeHtml(s: string): string {
