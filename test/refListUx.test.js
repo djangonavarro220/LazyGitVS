@@ -13,6 +13,10 @@ assert(panelRows.includes('export function branchRow(sel: boolean, branch: Branc
 assert(panelRows.includes('export function commitRow(sel: boolean, commit: Commit, index: number): string'), 'Commits need a dedicated semantic renderer, not the generic raw row');
 assert(panelRows.includes('class="hash-pill"'), 'Commit hashes should render as VS Code-styled pills');
 assert(panelRows.includes('class="ref-chip'), 'Commit refs should render as compact chips, not a clipped raw meta string');
+assert(panelRows.includes('class="commit-main path"'), 'Commit rows should be compact one-line rows, matching the rest of the panels');
+assert(!panelRows.includes('class="commit-block"'), 'Commit rows must not use a tall two-line block layout');
+assert(extension.includes('.commit-row{grid-template-columns:7px 44px minmax(0,1fr) minmax(0,34%);'), 'Commit CSS should keep one normal-height row with hash, subject, and compact meta columns');
+assert(!extension.includes('height:34px'), 'Commit rows must not force a taller two-line height');
 assert(panelRows.includes('class="ref-kind"'), 'Branch kind/current marker should render as a compact UI badge');
 assert(extension.includes('branchRow(active && i===this.branchSelected, b, i)'), 'Branches panel must use the semantic branch row renderer');
 assert(extension.includes('commitRow(active && i===this.commitSelected, c, i)'), 'Commits panel must use the semantic commit row renderer');

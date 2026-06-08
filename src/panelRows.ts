@@ -63,7 +63,8 @@ export function commitRow(sel: boolean, commit: Commit, index: number): string {
   const chips = refChips(commit.refs);
   const details = commit.relativeDate;
   const titleDetails = [commit.relativeDate, commit.author].filter(Boolean).join(' · ');
-  return `<div class="row commit-row ${sel ? 'sel' : ''}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(commit.hash)} · ${escapeHtml(commit.subject)}${titleDetails ? ` · ${escapeHtml(titleDetails)}` : ''}"><span class="cursor">${sel ? '›' : ' '}</span><span class="commit-block"><span class="commit-top"><span class="hash-pill">${escapeHtml(commit.hash)}</span><span class="summary">${escapeHtml(commit.subject)}</span></span><span class="commit-sub">${chips ? `<span class="refs">${chips}</span>` : ''}${details ? `<span class="meta commit-meta">${escapeHtml(details)}</span>` : ''}</span></span></div>`;
+  const meta = `${chips ? `<span class="refs">${chips}</span>` : ''}${details ? `<span class="commit-date">${escapeHtml(details)}</span>` : ''}`;
+  return `<div class="row commit-row ${sel ? 'sel' : ''}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(commit.hash)} · ${escapeHtml(commit.subject)}${titleDetails ? ` · ${escapeHtml(titleDetails)}` : ''}"><span class="cursor">${sel ? '›' : ' '}</span><span class="hash-pill">${escapeHtml(commit.hash)}</span><span class="commit-main path">${escapeHtml(commit.subject)}</span>${meta ? `<span class="meta commit-meta">${meta}</span>` : ''}</div>`;
 }
 
 export function escapeHtml(s: string): string {
