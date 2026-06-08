@@ -12,7 +12,7 @@ import { branchRow, commitRow, dirRow, escapeHtml, fileRow, fileStateLabel, file
 import { originCommitUrl, pickGitAction, runGitAction, executeGitMenuItem, showCommitCopyMenu, showCommitResetMenu, showDiscardFileMenu, showDiscardHunkMenu, showPullMenu, showPushMenu, showResetMenu, showStashCreateMenu, type GitMenuItem } from './gitMenus';
 import { findMenuItemByKey } from './lazygitMenu';
 import { dangerousGitMenuItem } from './destructiveActions';
-import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, openPath, previewCommitFileDiff, previewDiff, previewStashFileDiff, revealVisibleEditorLine } from './workspaceActions';
+import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, openPath, previewCommitFileDiff, previewDiff, previewStashFileDiff, revealVisibleEditorLine, showCommitPreview, showStashPreview } from './workspaceActions';
 import { deletedGhostDecorations, editorLineRange, excludeRangeLines, hunkChangedEditorRanges, rangeLineSet } from './hunkEditorDecorations';
 
 function gutterBadge(letter: 'S' | 'U', fill: string) {
@@ -1131,7 +1131,7 @@ class LazyGitVSController {
       { key: key(k.createTag) || key(k.tagCommit) || 'T', label: '$(tag) Tag commit', description: c.hash, run: async () => { const tag = await vscode.window.showInputBox({ title: `Tag ${c.hash}`, validateInput: v => v.trim() ? undefined : 'Tag name required.' }); if (tag?.trim()) await git(['tag', tag.trim(), c.hash]); } },
       { key: key(k.viewResetOptions) || 'g', label: '$(debug-restart) Reset options', description: c.hash, run: async () => showCommitResetMenu(c) },
       { key: key(k.openInBrowser) || 'o', label: '$(globe) Open commit in browser', description: 'origin remote URL', run: async () => { const url = await originCommitUrl(c.hash); if (url) await vscode.env.openExternal(vscode.Uri.parse(url)); else vscode.window.showInformationMessage('LazyGitVS: no browser URL for origin remote.'); } },
-      { key: key(k.openLogMenu) || '<ctrl+l>', label: '$(git-commit) Commit log patch', description: 'show --stat --patch', run: async () => showText(`LazyGitVS Commit ${c.hash}`, await git(this.showArgs('--stat', '--patch', c.hash))) }
+      { key: key(k.openLogMenu) || '<ctrl+l>', label: '$(git-commit) Commit preview', description: 'rich stat + patch', run: async () => showCommitPreview(c, this.lazygitGit, false) }
     ];
   }
   private stashCommandCatalog(): GitMenuItem[] {
@@ -1140,7 +1140,7 @@ class LazyGitVSController {
     const k = this.lazygitKeymap.stash;
     const key = (value: string | string[] | undefined) => this.keyLabel(value);
     return [
-      { key: '<enter>', label: '$(eye) Show stash', description: s.message, run: async () => showText(`LazyGitVS ${s.ref}`, await git(['stash', 'show', ...gitDiffConfigArgs(this.lazygitGit, true), '--stat', '--patch', s.ref])) },
+      { key: '<enter>', label: '$(eye) Show stash', description: s.message, run: async () => showStashPreview(s, this.lazygitGit, false) },
       { key: key(k.apply) || '<space>', label: '$(archive) Apply stash', description: s.ref, args: ['stash', 'apply', s.ref] },
       { key: key(k.popStash) || 'g', label: '$(archive) Pop stash', description: s.ref, args: ['stash', 'pop', s.ref] },
       { key: key(k.newBranch) || 'n', label: '$(git-branch) New branch from stash', description: s.ref, run: async () => { const name = await vscode.window.showInputBox({ title: `New branch from ${s.ref}`, validateInput: v => v.trim() ? undefined : 'Branch name required.' }); if (name?.trim()) await git(['stash', 'branch', name.trim(), s.ref]); } },
@@ -1491,7 +1491,7 @@ class LazyGitVSController {
         if (f) await previewCommitFileDiff(this.commitFilesFor, f, preserveFocus);
       } else {
         const c = this.currentCommit();
-        if (c) await showText(`LazyGitVS Commit ${c.hash}`, await git(this.showArgs('--stat', '--patch', c.hash)), preserveFocus, preserveFocus);
+        if (c) await showCommitPreview(c, this.lazygitGit, preserveFocus);
       }
     }
    
@@ -1501,7 +1501,7 @@ class LazyGitVSController {
         if (f) await previewStashFileDiff(this.stashFilesFor, f, preserveFocus);
       } else {
         const s = this.currentStash();
-        if (s) await showText(`LazyGitVS ${s.ref}`, await git(['stash', 'show', ...gitDiffConfigArgs(this.lazygitGit, true), '--stat', '--patch', s.ref]), preserveFocus, preserveFocus);
+        if (s) await showStashPreview(s, this.lazygitGit, preserveFocus);
       }
     }
   }
