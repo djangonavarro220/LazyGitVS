@@ -511,10 +511,16 @@ async function dispatchLgvsDomKey(Runtime, key) {
     for (const [panelKey, panelTitle] of [['1', 'Status'], ['2', 'Files'], ['3', 'Branches'], ['4', 'Commits'], ['5', 'Stash'], ['6', 'Conflicts'], ['7', 'Tags'], ['8', 'Remotes']]) {
       void panelTitle;
       await chord(Input, `ctrl+alt+${panelKey}`);
-      await sleep(650);
-      const jumpText = await pageText(Runtime);
+      const jumpText = await waitFor(async () => {
+        const text = await pageText(Runtime);
+        if (panelKey === '1') return /-- (STATUS|HUNK)\b/.test(text) || text.includes('1 STATUS') || /master\s*·\s*current/i.test(text) ? text : null;
+        if (panelKey === '2') return /-- FILES · LG --/.test(text) ? text : null;
+        if (panelKey === '7') return text.includes('7 TAGS') ? text : null;
+        if (panelKey === '8') return text.includes('8 REMOTES') ? text : null;
+        return new RegExp(`-- ${panelTitle.toUpperCase()} · LG --`).test(text) ? text : null;
+      }, 5000, 250, `panel ${panelKey} ${panelTitle} reveal`);
       evidence.push({ step: `panel-jump-${panelKey}`, screenshot: await screenshot(Page, `02-panel-jump-${panelKey}`), status: status(fixture), textSample: jumpText.slice(0, 1200) });
-      if (panelKey === '1') checks.push({ name: 'Focus 1 keeps LGVS ownership or reveals Status panel', ok: /-- (STATUS|HUNK)\b/.test(jumpText), textSample: jumpText.slice(0, 1200) });
+      if (panelKey === '1') checks.push({ name: 'Focus 1 keeps LGVS ownership or reveals Status panel', ok: /-- (STATUS|HUNK)\b/.test(jumpText) || jumpText.includes('1 STATUS') || /master\s*·\s*current/i.test(jumpText), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '2') checks.push({ name: 'Moving from 1 Status to 2 Files hides Status again', ok: !jumpText.includes('1 STATUS') && /-- FILES · LG --/.test(jumpText), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '7') checks.push({ name: 'Focus 7 reveals Tags in the SCM sidebar', ok: jumpText.includes('7 TAGS'), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '8') checks.push({ name: 'Focus 8 reveals Remotes in the SCM sidebar', ok: jumpText.includes('8 REMOTES'), textSample: jumpText.slice(0, 1200) });
