@@ -2,6 +2,12 @@
 
 All notable changes to LazyGitVS will be documented here.
 
+## 0.1.99 - Compact commit rows and parity doubts
+
+- Commits panel rows now stay compact on one line without visible ref chips eating the subject in narrow SCM sidebars.
+- Commit refs remain available in row metadata/tooltips instead of stealing layout width.
+- Tracks uncertain lazygit parity for Branches `Enter` and commit-file `Enter` flows so they get re-audited before being treated as done.
+
 ## 0.1.98 - Folder staging and HUNK escape polish
 
 - Files tree directory rows now support `Space` to stage/unstage all changed files under the selected folder.
