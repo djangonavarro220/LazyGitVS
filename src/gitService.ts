@@ -15,6 +15,9 @@ export type StashFile = { status: string; path: string; oldPath?: string };
 export type ConflictFile = { xy: string; path: string };
 export type WorkspaceRepository = { path: string; name: string; branch: string; workspaceFolder: string };
 
+type VsCodeGitRepository = { rootUri?: vscode.Uri; state?: { HEAD?: { name?: string } } };
+type VsCodeGitApi = { repositories?: VsCodeGitRepository[] };
+
 let activeWorkspaceRoot: string | undefined;
 
 export function getActiveWorkspaceRoot(): string | undefined {
@@ -67,13 +70,31 @@ async function currentBranchForRepo(repoPath: string): Promise<string> {
   return hash || '(detached)';
 }
 
+async function addVsCodeGitRepositories(roots: Map<string, string>, branches: Map<string, string>): Promise<void> {
+  const gitExtension = vscode.extensions.getExtension('vscode.git');
+  if (!gitExtension) return;
+  if (!gitExtension.isActive) await gitExtension.activate();
+  const api = gitExtension.exports?.getAPI?.(1) as VsCodeGitApi | undefined;
+  const repositories = api ? api.repositories ?? [] : [];
+  for (const repo of repositories) {
+    const rootUri = repo.rootUri;
+    const root = rootUri?.fsPath;
+    if (!root || !rootUri) continue;
+    roots.set(root, vscode.workspace.getWorkspaceFolder(rootUri)?.name ?? path.basename(root));
+    const branch = repo.state?.HEAD?.name;
+    if (branch) branches.set(root, branch);
+  }
+}
+
 export async function discoverWorkspaceRepositories(): Promise<WorkspaceRepository[]> {
   const folders = vscode.workspace.workspaceFolders ?? [];
   const roots = new Map<string, string>();
+  const branchHints = new Map<string, string>();
   for (const folder of folders) {
     const root = await repoRootFor(folder.uri.fsPath).catch(() => undefined);
     if (root) roots.set(root, folder.name);
   }
+  await addVsCodeGitRepositories(roots, branchHints).catch(() => undefined);
   let gitDirs: vscode.Uri[] = [];
   try { gitDirs = await vscode.workspace.findFiles('**/.git/HEAD', '**/{node_modules,.vscode-test,out,dist,dogfood-output}/**', 80); } catch { gitDirs = []; }
   for (const uri of gitDirs) {
@@ -85,7 +106,7 @@ export async function discoverWorkspaceRepositories(): Promise<WorkspaceReposito
   const repos = await Promise.all(Array.from(roots.entries()).map(async ([repoPath, workspaceFolder]) => ({
     path: repoPath,
     name: path.basename(repoPath),
-    branch: await currentBranchForRepo(repoPath),
+    branch: branchHints.get(repoPath) ?? await currentBranchForRepo(repoPath),
     workspaceFolder
   })));
   return repos.sort((a, b) => a.name.localeCompare(b.name) || a.path.localeCompare(b.path));

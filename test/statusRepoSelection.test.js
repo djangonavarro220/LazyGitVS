@@ -10,8 +10,11 @@ const pkg = fs.readFileSync(path.join(root, 'package.json'), 'utf8');
 
 assert(lazygitConfig.includes("recentRepos: '<enter>'") || extension.includes("key: '<enter>', label: '$(repo) Switch to workspace repository'"), 'Status repo switching must preserve lazygit Status recentRepos=<enter> behavior');
 assert(gitService.includes('export async function discoverWorkspaceRepositories(): Promise<WorkspaceRepository[]>'), 'LGVS must discover available Git repositories inside the VS Code workspace');
-assert(gitService.includes("repoRootFor(folder.uri.fsPath)"), 'Workspace folder Git roots must be included in the Status repository selector');
-assert(gitService.includes("findFiles('**/.git/HEAD'"), 'Nested workspace repositories must be discovered without shelling out through find/grep');
+assert(gitService.includes("vscode.extensions.getExtension('vscode.git')"), 'Status repository discovery must start from VS Code Git extension, matching the official SCM view');
+assert(gitService.includes('gitExtension.activate()'), 'LGVS must activate VS Code Git before reading the official repository model');
+assert(gitService.includes('api.repositories'), 'LGVS must include every repository known to VS Code Git SCM, not only workspace folder roots');
+assert(gitService.includes("repoRootFor(folder.uri.fsPath)"), 'Workspace folder Git roots must remain as fallback when VS Code Git has not discovered repos yet');
+assert(gitService.includes("findFiles('**/.git/HEAD'"), 'Nested workspace repositories must remain as fallback without shelling out through find/grep');
 assert(extension.includes("if (panel === 'status') return this.recentReposMenu();"), 'Enter on 1 Status must open the repository selector, matching lazygit original recent repos behavior');
 assert(extension.includes('class StatusTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem>'), '1 Status should use a native compact TreeView instead of a tall webview');
 assert(extension.includes("vscode.window.createTreeView(VIEW_IDS.status, { treeDataProvider: statusProvider })"), '1 Status must be registered as a native TreeView');
