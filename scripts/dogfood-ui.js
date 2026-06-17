@@ -9,7 +9,7 @@ const os = require('os');
 const path = require('path');
 const http = require('http');
 const { spawn, spawnSync, execFileSync } = require('child_process');
-const { makeFixture, secondaryFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write } = require('./dogfood/fixtures');
+const { makeFixture, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write } = require('./dogfood/fixtures');
 const { targetLane, finishReport, writeJson } = require('./dogfood/reporting');
 const CDP = require('chrome-remote-interface');
 const { downloadAndUnzipVSCode } = require('@vscode/test-electron');
@@ -253,12 +253,15 @@ async function dispatchLgvsDomKey(Runtime, key) {
   const started = new Date().toISOString();
   const fixture = makeFixture();
   const secondaryRepo = secondaryFixtureRepo(fixture);
+  const deepRepo = deepNestedFixtureRepo(fixture);
   const codePath = await downloadAndUnzipVSCode('stable');
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-code-user-'));
   write(path.join(userData, 'User', 'settings.json'), JSON.stringify({
     'workbench.colorTheme': THEME,
     'workbench.startupEditor': 'none',
     'workbench.secondarySideBar.defaultVisibility': 'hidden',
+    'git.repositoryScanMaxDepth': 4,
+    'git.repositoryScanIgnoredFolders': ['node_modules'],
     'telemetry.telemetryLevel': 'off'
   }, null, 2));
   write(path.join(userData, 'User', 'keybindings.json'), JSON.stringify([
@@ -829,6 +832,27 @@ async function dispatchLgvsDomKey(Runtime, key) {
     const secondaryFilesText = (await pageText(Runtime)).slice(0, 3000);
     evidence.push({ step: 'files-after-other-repo-select', screenshot: await screenshot(Page, '02-files-after-other-repo-select'), status: status(secondaryRepo), textSample: secondaryFilesText });
     checks.push({ name: 'Files panel shows the selected repository changes after Status Enter', ok: secondaryFilesText.includes('OTHER_REPO_SENTINEL.md'), textSample: secondaryFilesText.slice(0, 1200) });
+
+    await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
+    await key(Input, '1');
+    await sleep(STEP_DELAY);
+    const nestedStatusListText = (await pageText(Runtime)).slice(0, 4000);
+    evidence.push({ step: 'status-shows-scan-depth-nested-repo', screenshot: await screenshot(Page, '02-status-shows-scan-depth-nested-repo'), status: status(deepRepo), textSample: nestedStatusListText });
+    checks.push({ name: 'Status shows nested repo discovered through git.repositoryScanMaxDepth', ok: nestedStatusListText.includes('deep-repo') && nestedStatusListText.includes('lgvs-dogfood'), textSample: nestedStatusListText.slice(0, 1600) });
+    await key(Input, 'Enter');
+    await sleep(STEP_DELAY);
+    await key(Input, 'ArrowDown');
+    await sleep(STEP_DELAY);
+    await key(Input, 'Enter');
+    await sleep(1800);
+    const nestedStatusText = (await pageText(Runtime)).slice(0, 4000);
+    evidence.push({ step: 'status-enter-select-scan-depth-nested-repo', screenshot: await screenshot(Page, '02-status-enter-select-scan-depth-nested-repo'), status: status(deepRepo), textSample: nestedStatusText });
+    checks.push({ name: 'Status Enter switches to nested repo discovered by scan depth', ok: /deep-repo[\s\S]*current/i.test(nestedStatusText), textSample: nestedStatusText.slice(0, 1600) });
+    await key(Input, '2');
+    await sleep(STEP_DELAY);
+    const nestedFilesText = (await pageText(Runtime)).slice(0, 4000);
+    evidence.push({ step: 'files-after-scan-depth-nested-repo-select', screenshot: await screenshot(Page, '02-files-after-scan-depth-nested-repo-select'), status: status(deepRepo), textSample: nestedFilesText });
+    checks.push({ name: 'Files panel shows nested scan-depth repository changes', ok: nestedFilesText.includes('DEEP_REPO_SENTINEL.md'), textSample: nestedFilesText.slice(0, 1600) });
 
     await runCommandPalette(Input, 'LazyGitVS: Close Sidebar');
     evidence.push({ step: 'close-sidebar', screenshot: await screenshot(Page, '11-close-sidebar'), status: status(fixture) });

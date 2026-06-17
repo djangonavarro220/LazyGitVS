@@ -25,6 +25,7 @@ function makeFixture() {
   write(path.join(dir, 'settings.json'), JSON.stringify({ alpha: 'one', beta: 'two', gamma: 'three', delta: 'four' }, null, 2) + '\n');
   write(path.join(dir, 'README.md'), '# LGVS dogfood\n\nbase\n\nline 4\nline 5\nline 6\nline 7\nline 8\ntail\n');
   write(path.join(dir, 'src/app.ts'), 'export const value = 1;\n\nexport function greet() {\n  return "hello";\n}\n');
+  write(path.join(dir, '.gitignore'), 'workspace/\n');
   if (process.env.LGVS_DOGFOOD_EDGE_FILES) {
     write(path.join(dir, 'DELETE_ME.md'), 'delete me baseline\n');
     write(path.join(dir, 'RENAME_ME.md'), 'rename me baseline\n');
@@ -94,14 +95,25 @@ function makeFixture() {
   git(secondaryRepo, 'add', '.');
   git(secondaryRepo, 'commit', '-m', 'initial secondary');
   append(path.join(secondaryRepo, 'OTHER_REPO_SENTINEL.md'), 'secondary repository changed\n');
+
+  const deepRepo = path.join(dir, 'workspace', 'level-one', 'level-two', 'deep-repo');
+  ensureDir(deepRepo);
+  git(deepRepo, 'init');
+  git(deepRepo, 'config', 'user.email', 'lgvs@example.test');
+  git(deepRepo, 'config', 'user.name', 'LGVS Dogfood');
+  write(path.join(deepRepo, 'DEEP_REPO_SENTINEL.md'), 'deep repository baseline\n');
+  git(deepRepo, 'add', '.');
+  git(deepRepo, 'commit', '-m', 'initial deep');
+  append(path.join(deepRepo, 'DEEP_REPO_SENTINEL.md'), 'deep repository changed\n');
   // Keep the primary keyboard flow on tracked files. Untracked files are useful,
   // but if they sort first they turn Enter into the no-hunk untracked edge case
   // and mask the real HUNK/LINE staging path.
   return dir;
 }
 function secondaryFixtureRepo(fixture) { return `${fixture}-other-repo`; }
+function deepNestedFixtureRepo(fixture) { return path.join(fixture, 'workspace', 'level-one', 'level-two', 'deep-repo'); }
 function status(cwd) { return git(cwd, 'status', '--short'); }
 function diffCachedNames(cwd) { return git(cwd, 'diff', '--cached', '--name-only'); }
 function diffNames(cwd) { return git(cwd, 'diff', '--name-only'); }
 
-module.exports = { makeFixture, secondaryFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write };
+module.exports = { makeFixture, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write };

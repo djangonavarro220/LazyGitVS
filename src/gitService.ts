@@ -86,6 +86,40 @@ async function addVsCodeGitRepositories(roots: Map<string, string>, branches: Ma
   }
 }
 
+function repositoryScanMaxDepth(): number {
+  const configured = vscode.workspace.getConfiguration('git').get<number>('repositoryScanMaxDepth', 1);
+  return Number.isFinite(configured) && configured >= 0 ? Math.floor(configured) : 1;
+}
+
+function repositoryScanIgnoredGlob(): string | undefined {
+  const configured = vscode.workspace.getConfiguration('git').get<string[]>('repositoryScanIgnoredFolders', ['node_modules']);
+  const ignored = Array.from(new Set([...(Array.isArray(configured) ? configured : []), 'node_modules', '.vscode-test', 'out', 'dist', 'dogfood-output']))
+    .map(entry => entry.trim())
+    .filter(Boolean);
+  return ignored.length ? `**/{${ignored.join(',')}}/**` : undefined;
+}
+
+function repositoryScanHeadPatterns(maxDepth: number): string[] {
+  const cappedDepth = Math.min(Math.max(maxDepth, 0), 12);
+  return Array.from({ length: cappedDepth + 1 }, (_unused, depth) => `${'*/'.repeat(depth)}.git/HEAD`);
+}
+
+async function addWorkspaceScannedRepositories(roots: Map<string, string>): Promise<void> {
+  const maxDepth = repositoryScanMaxDepth();
+  const exclude = repositoryScanIgnoredGlob();
+  for (const folder of vscode.workspace.workspaceFolders ?? []) {
+    for (const pattern of repositoryScanHeadPatterns(maxDepth)) {
+      let gitDirs: vscode.Uri[] = [];
+      try { gitDirs = await vscode.workspace.findFiles(new vscode.RelativePattern(folder, pattern), exclude, 80); } catch { gitDirs = []; }
+      for (const uri of gitDirs) {
+        const candidate = path.dirname(path.dirname(uri.fsPath));
+        const root = await repoRootFor(candidate).catch(() => undefined);
+        if (root) roots.set(root, vscode.workspace.getWorkspaceFolder(uri)?.name ?? path.basename(root));
+      }
+    }
+  }
+}
+
 export async function discoverWorkspaceRepositories(): Promise<WorkspaceRepository[]> {
   const folders = vscode.workspace.workspaceFolders ?? [];
   const roots = new Map<string, string>();
@@ -95,13 +129,7 @@ export async function discoverWorkspaceRepositories(): Promise<WorkspaceReposito
     if (root) roots.set(root, folder.name);
   }
   await addVsCodeGitRepositories(roots, branchHints).catch(() => undefined);
-  let gitDirs: vscode.Uri[] = [];
-  try { gitDirs = await vscode.workspace.findFiles('**/.git/HEAD', '**/{node_modules,.vscode-test,out,dist,dogfood-output}/**', 80); } catch { gitDirs = []; }
-  for (const uri of gitDirs) {
-    const candidate = path.dirname(path.dirname(uri.fsPath));
-    const root = await repoRootFor(candidate).catch(() => undefined);
-    if (root) roots.set(root, vscode.workspace.getWorkspaceFolder(uri)?.name ?? path.basename(root));
-  }
+  await addWorkspaceScannedRepositories(roots).catch(() => undefined);
   if (!activeWorkspaceRoot || !roots.has(activeWorkspaceRoot)) activeWorkspaceRoot = roots.keys().next().value;
   const repos = await Promise.all(Array.from(roots.entries()).map(async ([repoPath, workspaceFolder]) => ({
     path: repoPath,
