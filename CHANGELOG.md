@@ -2,6 +2,12 @@
 
 All notable changes to LazyGitVS will be documented here.
 
+## 0.1.100 - SCM repository scan depth
+
+- `1 Status` repository switching now uses VS Code Git's repository model first, matching the native SCM view when multiple repositories are open.
+- Fallback nested repository discovery now honors VS Code Git's `git.repositoryScanMaxDepth` and `git.repositoryScanIgnoredFolders` settings instead of scanning every nested `.git` directory.
+- Dogfood now covers selecting a nested repository found through the native scan-depth setting and verifies `2 Files` switches to that repository.
+
 ## 0.1.99 - Compact commit rows and parity doubts
 
 - Commits panel rows now stay compact on one line without visible ref chips eating the subject in narrow SCM sidebars.

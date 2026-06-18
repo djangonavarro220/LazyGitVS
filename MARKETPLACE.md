@@ -40,9 +40,9 @@ VSCE_PAT
 Tag format must match `package.json` exactly:
 
 ```bash
-# package.json version 0.1.99 -> tag v0.1.99
-git tag v0.1.99
-git push origin v0.1.99
+# package.json version 0.1.100 -> tag v0.1.100
+git tag v0.1.100
+git push origin v0.1.100
 ```
 
 The publish workflow checks release consistency, runs tests, packages the VSIX, publishes it to the Visual Studio Marketplace, and attaches the VSIX to the GitHub release.
