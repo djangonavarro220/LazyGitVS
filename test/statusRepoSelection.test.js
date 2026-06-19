@@ -10,6 +10,9 @@ const pkg = fs.readFileSync(path.join(root, 'package.json'), 'utf8');
 
 assert(lazygitConfig.includes("recentRepos: '<enter>'") || extension.includes("key: '<enter>', label: '$(repo) Switch to workspace repository'"), 'Status repo switching must preserve lazygit Status recentRepos=<enter> behavior');
 assert(gitService.includes('export async function discoverWorkspaceRepositories(): Promise<WorkspaceRepository[]>'), 'LGVS must discover available Git repositories inside the VS Code workspace');
+assert(gitService.includes('changeCount: number'), 'Workspace repository discovery must expose a pending-change count for every repo');
+assert(gitService.includes("['status', '--porcelain', '-z']"), 'Pending-change counts must come from real git status porcelain output per repo, not guessed UI state');
+assert(gitService.includes('pendingChangeCountForRepo(repoPath)'), 'Repository discovery must populate change counts before Status renders rows');
 assert(gitService.includes("vscode.extensions.getExtension('vscode.git')"), 'Status repository discovery must start from VS Code Git extension, matching the official SCM view');
 assert(gitService.includes('gitExtension.activate()'), 'LGVS must activate VS Code Git before reading the official repository model');
 assert(gitService.includes('api.repositories'), 'LGVS must include every repository known to VS Code Git SCM, not only workspace folder roots');
@@ -31,7 +34,10 @@ assert(extension.includes('statusTreeItems(): vscode.TreeItem[]'), '1 Status mus
 assert(extension.includes("item.command = { command: 'lazygitvs.statusEnter', title: 'Select repository', arguments: [repo.path] };"), 'Status repo rows must be selectable with Enter');
 const keybindings = JSON.parse(pkg).contributes.keybindings;
 assert(keybindings.some(binding => binding.key === 'enter' && binding.command === 'lazygitvs.statusEnter' && binding.when === 'focusedView == lazygitvs.statusView'), 'Pressing 1 then Enter must select/open the focused Status repository row');
-assert(extension.includes("item.description = isCurrent ? `${repo.branch} · current` : repo.branch;"), '1 Status must mark the active repository row as current');
+assert(extension.includes('repoDescription(repo, isCurrent)'), '1 Status must mark the active repository row as current while preserving branch and change count');
+assert(extension.includes('repoChangeDescription(repo)'), '1 Status rows must show pending-change counts next to each repository, like VS Code SCM badges');
+assert(extension.includes("repo.changeCount ? `${repo.changeCount} change${repo.changeCount === 1 ? '' : 's'}` : 'clean'"), 'Clean and dirty repositories must be distinguishable in the Status repository list');
+assert(extension.includes('description: repoChangeDescription(repo)'), 'Repository QuickPick must also show pending-change counts before switching repos');
 assert(extension.includes("if (isCurrent) item.iconPath = new vscode.ThemeIcon('check');"), '1 Status must visually mark the active repository row');
 assert(extension.includes('qp.activeItems = items.filter(item => item.repo.path === current).slice(0, 1);'), 'Repository QuickPick must open with the current repository selected so Enter confirms it');
 assert(extension.includes("qp.title = 'Recent repositories';"), 'Repository selector title should mirror lazygit original wording');
@@ -50,6 +56,7 @@ assert(dogfoodSource.includes("OTHER_REPO_SENTINEL.md"), 'Dogfood second repo mu
 assert(dogfoodUi.includes("Status Enter switches from the current repository row to other-repo"), 'Dogfood must press 1, move to the other repo row, press Enter, and verify current repo changes');
 assert(dogfoodUi.includes("Files panel shows the selected repository changes after Status Enter"), 'Dogfood must verify Files reflects the selected repository, not only the Status label');
 assert(dogfoodUi.includes("Status shows nested repo discovered through git.repositoryScanMaxDepth"), 'Dogfood must prove nested repos from the VS Code Git scan-depth setting appear in Status');
+assert(dogfoodUi.includes("Status shows pending-change counts for every repository"), 'Dogfood must prove the Status repository list shows change counts for dirty repos');
 assert(dogfoodUi.includes("Status Enter switches to nested repo discovered by scan depth"), 'Dogfood must select the nested repo through Status and verify it becomes current');
 assert(dogfoodUi.includes("Files panel shows nested scan-depth repository changes"), 'Dogfood must verify Files reflects the nested scan-depth repository, not only the Status label');
 assert(dogfoodUi.includes("Moving from 1 Status to 2 Files hides Status again"), 'Dogfood must prove 1 Status disappears when focus leaves panel 1');

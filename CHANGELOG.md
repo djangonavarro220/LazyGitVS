@@ -2,6 +2,12 @@
 
 All notable changes to LazyGitVS will be documented here.
 
+## 0.1.101 - Repository pending-change counts
+
+- `1 Status` repository rows now show each repository's pending file/change count, making dirty repos visible before switching.
+- The repository picker also shows the same dirty/clean count so keyboard switching has the same signal.
+- Dogfood now verifies the Status repo list shows `1 change`/`3 changes` counts across root, sibling, and scan-depth nested repos.
+
 ## 0.1.100 - SCM repository scan depth
 
 - `1 Status` repository switching now uses VS Code Git's repository model first, matching the native SCM view when multiple repositories are open.

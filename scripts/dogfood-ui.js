@@ -839,6 +839,7 @@ async function dispatchLgvsDomKey(Runtime, key) {
     const nestedStatusListText = (await pageText(Runtime)).slice(0, 4000);
     evidence.push({ step: 'status-shows-scan-depth-nested-repo', screenshot: await screenshot(Page, '02-status-shows-scan-depth-nested-repo'), status: status(deepRepo), textSample: nestedStatusListText });
     checks.push({ name: 'Status shows nested repo discovered through git.repositoryScanMaxDepth', ok: nestedStatusListText.includes('deep-repo') && nestedStatusListText.includes('lgvs-dogfood'), textSample: nestedStatusListText.slice(0, 1600) });
+    checks.push({ name: 'Status shows pending-change counts for every repository', ok: /lgvs-dogfood-[^\n]*master\s*·\s*3 changes/.test(nestedStatusListText) && /other-repo[\s\S]*master\s*·\s*1 change/.test(nestedStatusListText) && /deep-repo[\s\S]*master\s*·\s*1 change/.test(nestedStatusListText), textSample: nestedStatusListText.slice(0, 1600) });
     await key(Input, 'Enter');
     await sleep(STEP_DELAY);
     await key(Input, 'ArrowDown');

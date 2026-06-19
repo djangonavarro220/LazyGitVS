@@ -13,7 +13,7 @@ export type CommitFile = { status: string; path: string; oldPath?: string };
 export type Stash = { ref: string; message: string };
 export type StashFile = { status: string; path: string; oldPath?: string };
 export type ConflictFile = { xy: string; path: string };
-export type WorkspaceRepository = { path: string; name: string; branch: string; workspaceFolder: string };
+export type WorkspaceRepository = { path: string; name: string; branch: string; workspaceFolder: string; changeCount: number };
 
 type VsCodeGitRepository = { rootUri?: vscode.Uri; state?: { HEAD?: { name?: string } } };
 type VsCodeGitApi = { repositories?: VsCodeGitRepository[] };
@@ -68,6 +68,20 @@ async function currentBranchForRepo(repoPath: string): Promise<string> {
   if (branch) return branch;
   const hash = (await gitMaybe(['rev-parse', '--short', 'HEAD'], repoPath)).trim();
   return hash || '(detached)';
+}
+
+async function pendingChangeCountForRepo(repoPath: string): Promise<number> {
+  const out = await gitMaybe(['status', '--porcelain', '-z'], repoPath);
+  let count = 0;
+  const parts = out.split('\0').filter(Boolean);
+  for (let i = 0; i < parts.length; i++) {
+    const entry = parts[i];
+    if (entry.length < 3) continue;
+    count++;
+    const xy = entry.slice(0, 2);
+    if (xy[0] === 'R' || xy[0] === 'C') i++;
+  }
+  return count;
 }
 
 async function addVsCodeGitRepositories(roots: Map<string, string>, branches: Map<string, string>): Promise<void> {
@@ -135,7 +149,8 @@ export async function discoverWorkspaceRepositories(): Promise<WorkspaceReposito
     path: repoPath,
     name: path.basename(repoPath),
     branch: branchHints.get(repoPath) ?? await currentBranchForRepo(repoPath),
-    workspaceFolder
+    workspaceFolder,
+    changeCount: await pendingChangeCountForRepo(repoPath)
   })));
   return repos.sort((a, b) => a.name.localeCompare(b.name) || a.path.localeCompare(b.path));
 }

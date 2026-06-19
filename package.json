@@ -2,7 +2,7 @@
   "name": "lazygitvs",
   "displayName": "LazyGitVS",
   "description": "A lazygit-inspired, keyboard-first Git workflow in the VS Code SCM sidebar.",
-  "version": "0.1.100",
+  "version": "0.1.101",
   "preview": true,
   "publisher": "lazygitvs",
   "license": "MIT",

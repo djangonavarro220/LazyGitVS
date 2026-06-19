@@ -21,6 +21,8 @@ function gutterBadge(letter: 'S' | 'U', fill: string) {
 }
 function statusIcon(f: ChangedFile | ConflictFile): string { return f.xy; }
 function statusClass(f: ChangedFile): string { if (f.untracked) return 'untracked'; if (f.staged && f.xy[1] !== ' ') return 'mixed'; if (f.staged) return 'staged'; return 'unstaged'; }
+function repoChangeDescription(repo: WorkspaceRepository): string { return repo.changeCount ? `${repo.changeCount} change${repo.changeCount === 1 ? '' : 's'}` : 'clean'; }
+function repoDescription(repo: WorkspaceRepository, isCurrent: boolean): string { return [repo.branch, repoChangeDescription(repo), isCurrent ? 'current' : ''].filter(Boolean).join(' · '); }
 async function showChangedFilesQuickPick() {
   const files = await changedFiles();
   if (!files.length) return vscode.window.showInformationMessage('LazyGitVS: clean working tree.');
@@ -245,7 +247,7 @@ class LazyGitVSController {
       const isCurrent = repo.path === current;
       const item = new vscode.TreeItem(repo.name, vscode.TreeItemCollapsibleState.None);
       item.id = repo.path;
-      item.description = isCurrent ? `${repo.branch} · current` : repo.branch;
+      item.description = repoDescription(repo, isCurrent);
       item.tooltip = repo.path;
       if (isCurrent) item.iconPath = new vscode.ThemeIcon('check');
       item.command = { command: 'lazygitvs.statusEnter', title: 'Select repository', arguments: [repo.path] };
@@ -984,8 +986,8 @@ class LazyGitVSController {
     const current = workspaceRoot();
     const items = repos.map(repo => ({
       label: `${repo.path === current ? '$(check) ' : ''}${repo.name}`,
-      description: repo.branch,
-      detail: repo.path,
+      description: repoChangeDescription(repo),
+      detail: `${repo.branch} · ${repo.path}`,
       repo
     }));
     const qp = vscode.window.createQuickPick<typeof items[number]>();
