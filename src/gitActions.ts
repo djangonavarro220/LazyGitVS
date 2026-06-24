@@ -42,17 +42,47 @@ function zeroContextPatch(patch: string): boolean {
 function gitApplyArgs(base: string[], patch: string, forceUnidiffZero = false): string[] {
   return forceUnidiffZero || zeroContextPatch(patch) || /\n@@ [^\n]*,0 [^\n]*@@|\n@@ [^\n]* [^\n]*,0 @@|^@@ [^\n]*,0 [^\n]*@@|^@@ [^\n]* [^\n]*,0 @@/.test(patch) ? [...base, '--unidiff-zero'] : base;
 }
-export async function applyHunk(hunk: Hunk) { assertPatchableHunk(hunk, hunk.staged ? 'unstage hunk' : 'stage hunk'); const args = hunk.staged ? ['apply', '--cached', '--reverse', '--whitespace=nowarn', '--recount'] : ['apply', '--cached', '--whitespace=nowarn', '--recount']; await gitInput(gitApplyArgs(args, hunk.patch), hunk.patch); }
-export async function discardUnstagedHunk(hunk: Hunk) { assertPatchableHunk(hunk, 'discard hunk'); if (hunk.staged) throw new Error('Discard only applies to unstaged hunks.'); const args = ['apply', '--reverse', '--whitespace=nowarn', '--recount']; await gitInput(gitApplyArgs(args, hunk.patch), hunk.patch); }
+
+export class PatchApplyError extends Error {
+  readonly patchOperation: string;
+  readonly patchPhase: 'check' | 'apply';
+  readonly causeMessage: string;
+
+  constructor(operation: string, phase: 'check' | 'apply', cause: unknown) {
+    const causeMessage = cause instanceof Error ? cause.message : String(cause);
+    super(`Cannot ${operation}: patch no longer applies cleanly. Refresh the file/hunk view and try again. Git said: ${causeMessage}`);
+    this.name = 'PatchApplyError';
+    this.patchOperation = operation;
+    this.patchPhase = phase;
+    this.causeMessage = causeMessage;
+  }
+}
+
+async function checkedGitApply(args: string[], patch: string, operation: string) {
+  try {
+    await gitInput([...args, '--check'], patch);
+  } catch (error) {
+    throw new PatchApplyError(operation, 'check', error);
+  }
+  try {
+    await gitInput(args, patch);
+  } catch (error) {
+    throw new PatchApplyError(operation, 'apply', error);
+  }
+}
+
+export async function applyHunk(hunk: Hunk) { assertPatchableHunk(hunk, hunk.staged ? 'unstage hunk' : 'stage hunk'); const operation = hunk.staged ? 'unstage hunk' : 'stage hunk'; const args = hunk.staged ? ['apply', '--cached', '--reverse', '--whitespace=nowarn', '--recount'] : ['apply', '--cached', '--whitespace=nowarn', '--recount']; await checkedGitApply(gitApplyArgs(args, hunk.patch), hunk.patch, operation); }
+export async function discardUnstagedHunk(hunk: Hunk) { assertPatchableHunk(hunk, 'discard hunk'); if (hunk.staged) throw new Error('Discard only applies to unstaged hunks.'); const args = ['apply', '--reverse', '--whitespace=nowarn', '--recount']; await checkedGitApply(gitApplyArgs(args, hunk.patch), hunk.patch, 'discard hunk'); }
 
 
 export async function applyLine(hunk: Hunk, changedIndex: number) {
   const linePatch = singleLinePatch(hunk, changedIndex);
+  const operation = hunk.staged ? 'unstage line' : 'stage line';
   const args = hunk.staged ? ['apply', '--cached', '--reverse', '--whitespace=nowarn', '--recount'] : ['apply', '--cached', '--whitespace=nowarn', '--recount'];
-  await gitInput(gitApplyArgs(args, linePatch, true), linePatch);
+  await checkedGitApply(gitApplyArgs(args, linePatch, true), linePatch, operation);
 }
 export async function discardUnstagedLine(hunk: Hunk, changedIndex: number) {
   const linePatch = singleLinePatch(hunk, changedIndex);
   const args = ['apply', '--reverse', '--whitespace=nowarn', '--recount'];
-  await gitInput(gitApplyArgs(args, linePatch, true), linePatch);
+  await checkedGitApply(gitApplyArgs(args, linePatch, true), linePatch, 'discard line');
 }
