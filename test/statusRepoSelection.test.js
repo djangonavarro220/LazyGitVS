@@ -1,6 +1,26 @@
 const assert = require('assert');
 const fs = require('fs');
+const Module = require('module');
 const path = require('path');
+const { createWorkspaceRepos, cleanupFixture } = require('./helpers/gitFixtures');
+
+const vscodeMock = {
+  workspace: {
+    workspaceFolders: [],
+    getWorkspaceFolder: uri => vscodeMock.workspace.workspaceFolders.find(folder => folder.uri.fsPath === uri.fsPath),
+    getConfiguration: () => ({ get: (_key, fallback) => fallback }),
+    findFiles: async () => []
+  },
+  extensions: { getExtension: () => undefined },
+  RelativePattern: class { constructor(base, pattern) { this.base = base; this.pattern = pattern; } }
+};
+const originalLoad = Module._load;
+Module._load = function mockVscode(request, parent, isMain) {
+  if (request === 'vscode') return vscodeMock;
+  return originalLoad.call(this, request, parent, isMain);
+};
+
+const { changedFiles, discoverWorkspaceRepositories, getActiveWorkspaceRoot, setActiveWorkspaceRoot, workspaceRoot } = require('../out/gitService');
 
 const root = path.join(__dirname, '..');
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
@@ -39,9 +59,13 @@ assert(extension.includes('repoChangeDescription(repo)'), '1 Status rows must sh
 assert(extension.includes("repo.changeCount ? `${repo.changeCount} change${repo.changeCount === 1 ? '' : 's'}` : 'clean'"), 'Clean and dirty repositories must be distinguishable in the Status repository list');
 assert(extension.includes('description: repoChangeDescription(repo)'), 'Repository QuickPick must also show pending-change counts before switching repos');
 assert(extension.includes("if (isCurrent) item.iconPath = new vscode.ThemeIcon('check');"), '1 Status must visually mark the active repository row');
+assert(extension.includes('const current = getActiveWorkspaceRoot();'), '1 Status must not visually mark the first repository as current before explicit Status selection');
+assert(!extension.includes('const current = getActiveWorkspaceRoot() ?? repos[0]?.path'), '1 Status must not silently fall back to the first repo for visual current/check state');
+assert(!extension.includes('path.basename(workspaceRoot()), vscode.TreeItemCollapsibleState.None'), '1 Status empty-state must not call workspaceRoot before the user can select a repo');
+assert(extension.includes("new vscode.TreeItem('Select repository', vscode.TreeItemCollapsibleState.None)"), '1 Status empty-state should show a safe selection placeholder instead of resolving an ambiguous root');
 assert(extension.includes('qp.activeItems = items.filter(item => item.repo.path === current).slice(0, 1);'), 'Repository QuickPick must open with the current repository selected so Enter confirms it');
 assert(extension.includes("qp.title = 'Recent repositories';"), 'Repository selector title should mirror lazygit original wording');
-assert(gitService.includes("if (!activeWorkspaceRoot || !roots.has(activeWorkspaceRoot)) activeWorkspaceRoot = roots.keys().next().value"), 'Active repo must reset when the workspace repo set changes, not cling to a stale previous root');
+assert(!gitService.includes("if (!activeWorkspaceRoot || !roots.has(activeWorkspaceRoot)) activeWorkspaceRoot = roots.keys().next().value"), 'Active repo must not silently fall back to the first discovered repository when multiple repos are open');
 assert(extension.includes('setActiveWorkspaceRoot(repo.path)'), 'Selecting a repository must switch the active Git root used by LGVS commands');
 assert(extension.indexOf('this.workspaceRepos = await discoverWorkspaceRepositories().catch(() => []);') < extension.indexOf('this.files = await changedFiles(this.lazygitGit);'), 'Refresh must discover workspace repos before Git status so nested/non-root repos can become the active root');
 const dogfoodUi = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
@@ -60,7 +84,7 @@ assert(dogfoodUi.includes("Status shows pending-change counts for every reposito
 assert(dogfoodUi.includes("Status Enter switches to nested repo discovered by scan depth"), 'Dogfood must select the nested repo through Status and verify it becomes current');
 assert(dogfoodUi.includes("Files panel shows nested scan-depth repository changes"), 'Dogfood must verify Files reflects the nested scan-depth repository, not only the Status label');
 assert(dogfoodUi.includes("Moving from 1 Status to 2 Files hides Status again"), 'Dogfood must prove 1 Status disappears when focus leaves panel 1');
-assert(extension.includes("const item = new vscode.TreeItem(path.basename(workspaceRoot()), vscode.TreeItemCollapsibleState.None);"), '1 Status must show one compact repo-name row without noisy enter text');
+assert(extension.includes("new vscode.TreeItem('Select repository', vscode.TreeItemCollapsibleState.None)") || extension.includes("const item = new vscode.TreeItem(repo.name, vscode.TreeItemCollapsibleState.None);"), '1 Status must show compact rows without noisy enter text');
 assert(!extension.includes("const item = new vscode.TreeItem('enter', vscode.TreeItemCollapsibleState.None);"), '1 Status must not render enter as visible row text');
 assert(!extension.includes('<div class="lg-logo">lazygit</div>'), '1 Status must not render a large dashboard/logo in the sidebar');
 assert(!extension.includes('All branches log'), '1 Status sidebar must not advertise a/A all-branches actions; lazygit original does not show those on-screen in Status');
@@ -68,4 +92,30 @@ assert(!extension.includes("row(false, staged ? 'staged' : '', 'staged', String(
 assert(extension.includes("private activePanel: Panel = 'files';"), 'LazyGitVS should default to Files so 1 Status stays collapsed until explicitly focused');
 assert(!extension.includes("row(false, '', 'gui'"), '1 Status must not dump internal gui config rows');
 
-console.log('statusRepoSelection tests passed');
+(async () => {
+  const fixture = createWorkspaceRepos();
+  try {
+    vscodeMock.workspace.workspaceFolders = [
+      { uri: { fsPath: fixture.primary }, name: 'primary-repo' },
+      { uri: { fsPath: fixture.secondary }, name: 'secondary-repo' }
+    ];
+    setActiveWorkspaceRoot(undefined);
+
+    const repos = await discoverWorkspaceRepositories();
+    assert.equal(repos.length, 2, 'fixture should expose two real Git repositories');
+    assert.equal(getActiveWorkspaceRoot(), undefined, 'multi-repo discovery must leave target unset until Status selection chooses one');
+    assert.throws(() => workspaceRoot(), /Select a Status repository/, 'Git actions must not silently target the first repo when several repos are open');
+
+    setActiveWorkspaceRoot(fixture.secondary);
+    const files = await changedFiles();
+    assert.deepEqual(files.map(file => file.path), ['secondary-only.txt'], 'after Status selection, Git actions/status are scoped to the selected repo');
+  } finally {
+    setActiveWorkspaceRoot(undefined);
+    vscodeMock.workspace.workspaceFolders = [];
+    cleanupFixture(fixture.root);
+  }
+  console.log('statusRepoSelection tests passed');
+})().catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});

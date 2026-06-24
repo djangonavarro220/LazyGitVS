@@ -191,6 +191,22 @@ async function quickInputState(Runtime) {
   const r = await Runtime.evaluate({ expression: `(() => { const widget = document.querySelector('.quick-input-widget'); const input = widget?.querySelector('input'); const style = widget ? getComputedStyle(widget) : undefined; return { visible: !!widget && style?.display !== 'none' && style?.visibility !== 'hidden' && widget.getBoundingClientRect().height > 0, text: input?.value || '', placeholder: input?.getAttribute('aria-label') || input?.getAttribute('placeholder') || '' }; })()`, returnByValue: true });
   return r.result.value || { visible: false, text: '', placeholder: '' };
 }
+async function clickQuickPickRowEndingWith(Runtime, Input, suffix) {
+  const r = await Runtime.evaluate({ expression: `(() => {
+    const suffix = ${JSON.stringify("__SUFFIX__")}.replace('__SUFFIX__', ${JSON.stringify(suffix)});
+    const rows = Array.from(document.querySelectorAll('.quick-input-list .monaco-list-row'));
+    const row = rows.find(el => (el.textContent || '').trim().endsWith(suffix));
+    if (!row) return undefined;
+    const rect = row.getBoundingClientRect();
+    return { x: rect.left + Math.min(40, Math.max(8, rect.width / 2)), y: rect.top + rect.height / 2, text: row.textContent || '' };
+  })()`, returnByValue: true });
+  const point = r.result.value;
+  if (!point) return undefined;
+  await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+  await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+  await sleep(STEP_DELAY);
+  return point;
+}
 async function clickLgvsRoot(Runtime, Input) {
   const r = await Runtime.evaluate({ expression: `(() => {
     function find(root, ox = 0, oy = 0) {
@@ -349,6 +365,19 @@ async function dispatchLgvsDomKey(Runtime, key) {
     checks.push({ name: 'SCM sidebar exposes default LazyGitVS panels while Status stays hidden until 1', ok: !sidebarText.includes('1 STATUS') && ['2 FILES', '3 BRANCHES', '4 COMMITS', '5 STASH', '6 CONFLICTS', '7 TAGS', '8 REMOTES'].every(label => sidebarText.includes(label)), textSample: sidebarText.slice(0, 1200) });
     checks.push({ name: 'No noisy focus footer in LGVS panels', ok: !/Focus:\s+LG panel/i.test(sidebarText), textSample: sidebarText.slice(-800) });
     checks.push({ name: 'Right chat / secondary side bar stays closed in screenshots', ok: !/CHAT\s+Build with Agent/i.test(sidebarText), textSample: sidebarText.slice(-800) });
+
+    await key(Input, '1');
+    await sleep(STEP_DELAY);
+    const unselectedStatusText = (await pageText(Runtime)).slice(0, 3000);
+    evidence.push({ step: 'status-requires-explicit-repo-selection', screenshot: await screenshot(Page, '02-status-requires-explicit-repo-selection'), status: status(fixture), textSample: unselectedStatusText });
+    checks.push({ name: 'Multi-repo Status starts without visually marking the first repo current', ok: /1 STATUS/.test(unselectedStatusText) && !/current/i.test(unselectedStatusText), textSample: unselectedStatusText.slice(0, 1200) });
+    await runCommandPalette(Input, 'LazyGitVS: Select Status Repository');
+    await waitFor(async () => (await quickInputState(Runtime)).visible, 5000, 200, 'repository selector QuickPick');
+    const pickedPrimary = await clickQuickPickRowEndingWith(Runtime, Input, fixture);
+    await sleep(1200);
+    const primarySelectedText = (await pageText(Runtime)).slice(0, 3000);
+    evidence.push({ step: 'status-select-primary-repo-before-main-flow', screenshot: await screenshot(Page, '02-status-select-primary-repo-before-main-flow'), status: status(fixture), pickedPrimary, textSample: primarySelectedText });
+    checks.push({ name: 'Dogfood explicitly selects the primary repo before file actions', ok: !!pickedPrimary && /2 FILES/.test(primarySelectedText) && /README\.md|settings\.json|src\/app\.ts/.test(primarySelectedText), pickedPrimary, textSample: primarySelectedText.slice(0, 1200) });
 
     if (process.env.LGVS_DOGFOOD_FAST_THEME) {
       const themeLabel = process.env.LGVS_DOGFOOD_FAST_THEME === 'high-contrast' ? 'High contrast smoke: LGVS stays readable' : 'Dark theme smoke: LGVS stays readable';

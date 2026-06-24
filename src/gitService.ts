@@ -19,6 +19,7 @@ type VsCodeGitRepository = { rootUri?: vscode.Uri; state?: { HEAD?: { name?: str
 type VsCodeGitApi = { repositories?: VsCodeGitRepository[] };
 
 let activeWorkspaceRoot: string | undefined;
+let discoveredWorkspaceRepoCount = 0;
 
 export function getActiveWorkspaceRoot(): string | undefined {
   return activeWorkspaceRoot;
@@ -30,6 +31,9 @@ export function setActiveWorkspaceRoot(root: string | undefined) {
 
 export function workspaceRoot(): string {
   if (activeWorkspaceRoot) return activeWorkspaceRoot;
+  if (discoveredWorkspaceRepoCount > 1 || (vscode.workspace.workspaceFolders?.length ?? 0) > 1) {
+    throw new Error('Select a Status repository before running Git actions in a multi-repo workspace.');
+  }
   const folder = vscode.workspace.workspaceFolders?.[0];
   if (!folder) throw new Error('Open a Git workspace first.');
   return folder.uri.fsPath;
@@ -144,7 +148,10 @@ export async function discoverWorkspaceRepositories(): Promise<WorkspaceReposito
   }
   await addVsCodeGitRepositories(roots, branchHints).catch(() => undefined);
   await addWorkspaceScannedRepositories(roots).catch(() => undefined);
-  if (!activeWorkspaceRoot || !roots.has(activeWorkspaceRoot)) activeWorkspaceRoot = roots.keys().next().value;
+  discoveredWorkspaceRepoCount = roots.size;
+  if (!activeWorkspaceRoot || !roots.has(activeWorkspaceRoot)) {
+    activeWorkspaceRoot = roots.size === 1 ? roots.keys().next().value : undefined;
+  }
   const repos = await Promise.all(Array.from(roots.entries()).map(async ([repoPath, workspaceFolder]) => ({
     path: repoPath,
     name: path.basename(repoPath),

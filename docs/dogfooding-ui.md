@@ -11,6 +11,8 @@ The harness creates a temporary Git repository with:
 - a tag
 - a remote
 - a stash entry
+- a second workspace repository
+- a nested repository discovered through VS Code Git scan depth
 
 Then it launches VS Code stable with LazyGitVS loaded through `--extensionDevelopmentPath`, using a light theme by default.
 

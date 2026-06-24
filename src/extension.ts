@@ -14,7 +14,6 @@ import { findMenuItemByKey } from './lazygitMenu';
 import { dangerousGitMenuItem } from './destructiveActions';
 import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, openPath, previewCommitFileDiff, previewDiff, previewStashFileDiff, revealVisibleEditorLine, showCommitPreview, showStashPreview } from './workspaceActions';
 import { deletedGhostDecorations, editorLineRange, excludeRangeLines, hunkChangedEditorRanges, rangeLineSet } from './hunkEditorDecorations';
-
 function gutterBadge(letter: 'S' | 'U', fill: string) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="12" rx="3" fill="${fill}"/><text x="8" y="11.5" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="10" font-weight="700" fill="#ffffff">${letter}</text></svg>`;
   return vscode.Uri.parse(`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
@@ -236,13 +235,13 @@ class LazyGitVSController {
   statusTreeItems(): vscode.TreeItem[] {
     const repos = this.workspaceRepos;
     if (!repos.length) {
-      const item = new vscode.TreeItem(path.basename(workspaceRoot()), vscode.TreeItemCollapsibleState.None);
-      item.tooltip = 'Enter: switch to a workspace repository';
+      const item = new vscode.TreeItem('Select repository', vscode.TreeItemCollapsibleState.None);
+      item.tooltip = 'Enter: discover and switch to a workspace repository';
       item.command = { command: 'lazygitvs.statusEnter', title: 'Switch to workspace repository' };
       item.contextValue = 'lazygitvs.statusRepo';
       return [item];
     }
-    const current = getActiveWorkspaceRoot() ?? repos[0]?.path;
+    const current = getActiveWorkspaceRoot();
     return repos.map(repo => {
       const isCurrent = repo.path === current;
       const item = new vscode.TreeItem(repo.name, vscode.TreeItemCollapsibleState.None);
@@ -661,6 +660,12 @@ class LazyGitVSController {
       const refreshEditorMode = this.editorHunkMode || this.editorEditMode;
       const previousPath = this.currentFile()?.path;
       this.workspaceRepos = await discoverWorkspaceRepositories().catch(() => []);
+      if (this.workspaceRepos.length > 1 && !getActiveWorkspaceRoot()) {
+        this.files = []; this.branchItems = []; this.tagItems = []; this.remoteItems = [];
+        this.commitItems = []; this.stashItems = []; this.conflictItems = [];
+        this.statusLine = 'Select a repository in 1 Status'; this.clampSelections(); this.updateModeStatusBar(); this.renderAll();
+        return;
+      }
       this.files = await changedFiles(this.lazygitGit);
       this.branchItems = await branches().catch(() => []);
       this.tagItems = await tags().catch(() => []);
@@ -983,7 +988,7 @@ class LazyGitVSController {
     const repos = await discoverWorkspaceRepositories();
     this.workspaceRepos = repos;
     if (!repos.length) { vscode.window.showInformationMessage('LazyGitVS: no Git repositories found in this workspace.'); return; }
-    const current = workspaceRoot();
+    const current = getActiveWorkspaceRoot();
     const items = repos.map(repo => ({
       label: `${repo.path === current ? '$(check) ' : ''}${repo.name}`,
       description: repoChangeDescription(repo),
@@ -1742,9 +1747,7 @@ class LazyGitVSController {
     }
     return this.hunks.length ? this.hunks.map((h,i)=>row(active && i===this.hunkSelected, `hunk ${h.staged?'staged':'unstaged'}`, h.staged?'S':'M', h.summary, '', i)).join('') : '<div class="empty">No hunks for this side.</div>';
   }
-  private renderStatus(active: boolean): string {
-    return row(active, 'status-repo', 'enter', path.basename(workspaceRoot()), '', 0);
-  }
+  private renderStatus(active: boolean): string { const root = getActiveWorkspaceRoot(); return row(active, 'status-repo', 'enter', root ? path.basename(root) : 'Select repository', '', 0); }
 }
 function clamp(index: number, length: number): number { return length ? Math.max(0, Math.min(length - 1, index)) : 0; }
 function stripAnsi(s: string): string { return s.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, ''); }
