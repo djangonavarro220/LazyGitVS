@@ -141,8 +141,10 @@ async function key(Input, key, opts = {}) {
 async function chord(Input, keys) {
   if (keys === 'ctrl+shift+p') return key(Input, 'p', { ctrl: true, shift: true });
   if (keys === 'ctrl+enter') return key(Input, 'Enter', { ctrl: true });
+  if (keys === 'ctrl+alt+enter') return key(Input, 'Enter', { ctrl: true, alt: true });
   if (keys === 'ctrl+1') return key(Input, '1', { ctrl: true });
   if (keys === 'ctrl+alt+h') return key(Input, 'h', { ctrl: true, alt: true });
+  if (keys === 'ctrl+alt+?') return key(Input, '?', { ctrl: true, alt: true });
   const panelChord = /^ctrl\+alt\+([1-8])$/.exec(keys);
   if (panelChord) return key(Input, panelChord[1], { ctrl: true, alt: true });
   throw new Error(`unknown chord ${keys}`);
@@ -282,6 +284,8 @@ async function dispatchLgvsDomKey(Runtime, key) {
   }, null, 2));
   write(path.join(userData, 'User', 'keybindings.json'), JSON.stringify([
     ...Array.from({ length: 8 }, (_, i) => ({ key: `ctrl+alt+${i + 1}`, command: `lazygitvs.focusPanel${i + 1}` })),
+    { key: 'ctrl+alt+enter', command: 'lazygitvs.enterSelected' },
+    { key: 'ctrl+alt+/', command: 'lazygitvs.helpCurrentPanel' },
     { key: 'ctrl+alt+h', command: 'lazygitvs.enterCurrentFileHunkMode' }
   ], null, 2));
   const extensionsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-code-ext-'));
@@ -576,26 +580,43 @@ async function dispatchLgvsDomKey(Runtime, key) {
       checks.push({ name: `Escape on ${panelKey} ${panelName} keeps the current panel`, ok: new RegExp(`-- ${panelName} · LG --`).test(escText), textSample: escText.slice(0, 1200) });
     }
 
+    await key(Input, '3');
+    await sleep(STEP_DELAY);
+    await key(Input, 'Enter');
+    await sleep(1800);
+    const branchEnterText = (await pageText(Runtime)).slice(0, 3000);
+    evidence.push({ step: 'branches-enter-shows-selected-branch-commits', screenshot: await screenshot(Page, '02-branches-enter-shows-selected-branch-commits'), status: status(fixture), textSample: branchEnterText });
+    checks.push({ name: 'Branches Enter shows commits for the selected branch', ok: /-- COMMITS · LG --/.test(branchEnterText) && /initial/.test(branchEnterText), textSample: branchEnterText.slice(0, 1200) });
+
     await key(Input, '4');
     await sleep(STEP_DELAY);
     await key(Input, 'Enter');
     await sleep(1800);
     const commitFilesText = (await pageText(Runtime)).slice(0, 3000);
     evidence.push({ step: 'commits-enter-shows-changed-files', screenshot: await screenshot(Page, '02-commits-enter-shows-changed-files'), status: status(fixture), textSample: commitFilesText });
-    checks.push({ name: 'Commit Enter shows changed files for the selected commit', ok: /-- COMMITS · LG --/.test(commitFilesText) && /README\.md|settings\.json|src\/app\.ts/.test(commitFilesText), textSample: commitFilesText.slice(0, 1200) });
+    checks.push({ name: 'Commit Enter shows changed files for the selected commit', ok: /-- COMMITS · LG --/.test(commitFilesText) && /README\.md|settings\.json|src\/app\.ts|\.gitignore/.test(commitFilesText), textSample: commitFilesText.slice(0, 1200) });
+    await chord(Input, 'ctrl+alt+enter');
+    await sleep(1800);
+    const commitFileHunkText = (await pageText(Runtime)).slice(0, 5000);
+    evidence.push({ step: 'commit-file-enter-readonly-hunk-mode', screenshot: await screenshot(Page, '02-commit-file-enter-readonly-hunk-mode'), status: status(fixture), textSample: commitFileHunkText });
+    checks.push({ name: 'Commit-file Enter opens read-only HUNK/LINE mode', ok: /-- (HUNK|LINE)\b/.test(commitFileHunkText), textSample: commitFileHunkText.slice(0, 1200) });
+    await key(Input, 'Escape');
+    await sleep(1200);
+    const commitFileReturnText = (await pageText(Runtime)).slice(0, 3000);
+    evidence.push({ step: 'commit-file-escape-returns-to-files-subview', screenshot: await screenshot(Page, '02-commit-file-escape-returns-to-files-subview'), status: status(fixture), textSample: commitFileReturnText });
+    checks.push({ name: 'Esc from commit-file HUNK mode returns to commit files', ok: /-- COMMITS · LG --/.test(commitFileReturnText) && /README\.md|settings\.json|src\/app\.ts/.test(commitFileReturnText), textSample: commitFileReturnText.slice(0, 1200) });
     await key(Input, 'Escape');
     await sleep(STEP_DELAY);
     const commitListReturnText = (await pageText(Runtime)).slice(0, 3000);
     evidence.push({ step: 'commits-escape-returns-to-list', screenshot: await screenshot(Page, '02-commits-escape-returns-to-list'), status: status(fixture), textSample: commitListReturnText });
     checks.push({ name: 'Esc from commit files returns to the commit list', ok: /-- COMMITS · LG --/.test(commitListReturnText) && /initial/.test(commitListReturnText), textSample: commitListReturnText.slice(0, 1200) });
 
-    await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
-    await runCommandPalette(Input, 'LazyGitVS: Focus 4 Commits');
+    await chord(Input, 'ctrl+alt+4');
     await key(Input, 'Escape');
     await sleep(300);
     await key(Input, 'Escape');
     await sleep(300);
-    await runCommandPalette(Input, 'LazyGitVS: Help current panel');
+    await chord(Input, 'ctrl+alt+?');
     const helpQuick = await waitFor(async () => {
       const state = await quickInputState(Runtime);
       return state.visible ? state : null;

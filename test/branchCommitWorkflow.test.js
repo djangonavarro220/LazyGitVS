@@ -8,6 +8,9 @@ const root = path.join(__dirname, '..');
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
 const gitService = fs.readFileSync(path.join(root, 'src', 'gitService.ts'), 'utf8');
 const lazygitConfig = fs.readFileSync(path.join(root, 'src', 'lazygitConfig.ts'), 'utf8');
+const dogfoodUi = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
+const parityGapReport = fs.readFileSync(path.join(root, 'docs', 'lazygit-parity-gap-report.md'), 'utf8');
+const parityAudit = fs.readFileSync(path.join(root, 'docs', 'lazygit-parity-audit.md'), 'utf8');
 
 assert(gitService.includes("'diff-tree', '--root', '--no-commit-id', '--name-status', '-r', hash"), 'Commit file list must include root commits too; otherwise Enter on the first commit never opens the lazygit-style file subview');
 assert(gitService.includes("'stash', 'show', '--name-status', '--find-renames', ref"), 'Stash file list must keep real paths/renames for diff-editor preview, not display-only joined paths');
@@ -36,9 +39,16 @@ assert(extension.includes('private async enterCommitFileHunkMode(file: CommitFil
 assert(extension.includes("this.allHunks = parseDiffHunks(patch, false);"), 'Commit file HUNK/LINE mode must parse hunks from the selected commit-file patch');
 assert(extension.includes('this.readOnlyHunkMode = true;'), 'Commit file HUNK/LINE mode must be read-only: no stage/unstage mutations on historical commits');
 assert(extension.includes("if (this.readOnlyHunkMode) { this.statusLine = 'Commit diff is read-only: j/k move · a line · Esc back';"), 'Read-only commit hunk mode must block stage/unstage toggles');
+assert(extension.includes("if (this.readOnlyHunkMode && this.commitFilesFor) { this.activePanel = 'commits';"), 'Esc from read-only commit-file HUNK mode must return to the commit-files subview, not jump to Files');
+assert(extension.includes("await this.revealPanelView('commits');"), 'Commit-file HUNK mode Esc should restore Commits webview focus for commit-file navigation parity');
 assert(extension.includes("if (viewPanel === 'commits' && this.commitFilesFor) { this.commitFilesFor = undefined; this.commitFileItems = []; this.commitFileSelected = 0; this.renderAll(); await this.openCurrent('commits', true).catch(() => undefined); return; }"), 'Esc/Back from commit files must return to commits and restore selected commit patch preview');
 assert(extension.includes("if(e.key==='Backspace'){e.preventDefault();vscode.postMessage({type:'clearFilter'});return;}"), 'Backspace must clear filters or return from commit files');
 assert(extension.includes("if(hit(e,u.return)){e.preventDefault();vscode.postMessage({type:'back'});return;}"), 'Esc must honor lazygit universal.return and return from commit files to the commit list when the LGVS webview owns focus');
+assert(dogfoodUi.includes("branches-enter-shows-selected-branch-commits"), 'Dogfood must exercise Branches Enter -> branch-scoped commits');
+assert(dogfoodUi.includes("commit-file-enter-readonly-hunk-mode"), 'Dogfood must exercise commit-file Enter -> read-only HUNK/LINE mode');
+assert(dogfoodUi.includes("commit-file-escape-returns-to-files-subview"), 'Dogfood must exercise Esc from read-only commit-file HUNK/LINE mode back to commit-files subview');
+assert(parityAudit.includes('Story 5 Enter re-audit'), 'Parity audit must record the Story 5 upstream lazygit Enter re-audit source notes');
+assert(parityGapReport.includes('Branches `<enter>` views commits for the selected branch; re-audited against lazygit keybinding docs/source extract') && !parityGapReport.includes('Branches` `<enter>` semantics are suspect') && !parityGapReport.includes('commit-file `<enter>` should feel like'), 'Parity gap report must clear the stale Enter suspect notes and document the VS Code-native commit-file difference');
 
 assert(extension.includes('private cherryPickCommitHashes: string[] = [];'), 'Commit C must copy commits into a cherry-pick buffer, not cherry-pick immediately');
 assert(extension.includes("label: '$(copy) Copy commit for cherry-pick'"), 'Commit C label must reflect lazygit copy-for-later semantics');

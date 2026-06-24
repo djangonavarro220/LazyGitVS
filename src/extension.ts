@@ -1359,6 +1359,7 @@ class LazyGitVSController {
   }
   async exitEditorHunkMode() {
     const filePath = this.editorModeFilePath ?? this.currentFile()?.path;
+    if (this.readOnlyHunkMode && this.commitFilesFor) { this.activePanel = 'commits'; this.ownsModeStatus = true; this.setFocusArea('panel'); await this.setEditorHunkMode(false); await this.updateActiveViewContext(); this.requestWebviewAutoFocus(); this.renderAll(); await this.revealPanelView('commits'); this.updateModeStatusBar(); return; }
     this.activePanel = 'files';
     this.ownsModeStatus = true;
     this.setFocusArea('panel');

@@ -271,6 +271,14 @@ Fuente: `pkg/config/app_config.go`.
 
 ```
 
+## Story 5 Enter re-audit — 2026-06-24
+
+Local upstream-source notes rechecked for Branches/Commits/commit-files Enter semantics:
+
+- `docs/keybindings/Keybindings_en.md` extract and this audit's generated keybinding dump list Local branches `<enter>` as **View commits** (`Local branches` lines in this file), matching LGVS `Branches` Enter routing to `enterBranchCommits()` / the `4 Commits` panel scoped to the selected branch. `Space` remains the checkout action.
+- Commits `<enter>` is listed as **View files**, matching LGVS `enterCommit()` drilling from the commit list into commit files and previewing the first file diff.
+- Commit files `<enter>` is listed as **Enter file / Toggle directory collapsed** and is tied to lazygit custom patch-builder line entry. LGVS does not yet implement patch-building mode, so the audited/documented VS Code-native behavior is: file rows enter a read-only HUNK/LINE editor view for the selected commit-file patch, staging/discard mutations are blocked, and `Esc` returns to the commit-files subview. The remaining patch-builder parity work stays tracked under Commit files gaps.
+
 ## Keybindings que LGVS debe copiar primero
 
 ### Global keybindings

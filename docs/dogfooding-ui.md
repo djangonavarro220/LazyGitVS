@@ -21,6 +21,9 @@ It drives the real workbench with keyboard input and captures screenshots for ev
 - Command Palette → `LazyGitVS: Focus SCM Sidebar`
 - verifies the full native LazyGitVS SCM panel set is present
 - panel jumps `1..8`, including `7 Tags` / `8 Remotes` reachability checks
+- Branches `Enter` → branch-scoped Commits list
+- Commits `Enter` → selected commit files, then `Esc` → commit list
+- commit-file `Enter` → read-only HUNK/LINE view, then `Esc` → commit files
 - Files `Enter` → editor HUNK mode
 - `a` → LINE mode
 - `Space` → stage selected line

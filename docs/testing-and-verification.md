@@ -164,6 +164,8 @@ The broad harness should keep covering at least:
 - the LGVS SCM panel set is present
 - panels `1..8` are reachable
 - `4 Commits` + `Enter` opens the selected commit details
+- `3 Branches` + `Enter` opens branch-scoped commits
+- commit-file `Enter` opens read-only HUNK/LINE mode and `Esc` returns to commit files
 - `?` opens contextual help and returns focus
 - deep-tree and cramped-sidebar lanes exist
 - deleted/renamed/conflict dogfood lane exists

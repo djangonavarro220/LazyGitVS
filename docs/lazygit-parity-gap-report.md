@@ -69,12 +69,13 @@ Last reviewed after commit `e432187 feat: close next lazygit parity gaps`.
 - [x] Fast-forward from upstream.
 - [x] Create tag from branch context.
 - [x] Branch sort menu.
-- [x] Branch `<enter>` views commits for selected branch.
+- [x] Branches `<enter>` views commits for the selected branch; re-audited against lazygit keybinding docs/source extract.
 
 ### Commits
 - [x] Show commit patch/stat preview.
 - [x] `<enter>` drills into commit files.
 - [x] Commit-file patch preview.
+- [x] Commit-file `<enter>` enters a read-only VS Code HUNK/LINE view for per-file commit patches, with `Esc` returning to the commit-files subview; lazygit uses this surface for patch-builder line entry, while LGVS documents this as a VS Code-native read-only difference until patch-builder support lands.
 - [x] Copy commit attribute menu.
 - [x] Checkout commit detached.
 - [x] New branch off commit.
@@ -139,8 +140,7 @@ Last reviewed after commit `e432187 feat: close next lazygit parity gaps`.
 
 These are behaviours that currently work in LGVS but are not trusted enough to call lazygit parity. Re-check against upstream lazygit before polishing or documenting them as done.
 
-- [ ] `3 Branches` `<enter>` semantics are suspect. Current LGVS drills into `4 Commits` for the selected branch, but older repo notes say lazygit-style branch movement should preview the branch log and `Space` should checkout. Verify upstream lazygit's actual branch-row `<enter>` behaviour instead of guessing by vibes.
-- [ ] `4 Commits` commit-file `<enter>` should feel like the normal VS Code diff/editor path. Current LGVS can enter a weird readonly patch/HUNK-ish view for a file inside a commit; verify whether the right target is a native VS Code diff preview, a lazygit-style patch viewer, or an LGVS-specific read-only hunk view.
+- No active Story 5 Enter-path suspects remain. Branches/Commits/commit-files Enter were re-audited on 2026-06-24; commit-file Enter is explicitly tracked as the VS Code-native read-only HUNK/LINE difference above and patch-builder parity remains in Commit files gaps.
 
 ## Remaining gaps
 
