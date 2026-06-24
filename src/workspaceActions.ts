@@ -3,7 +3,7 @@ import * as path from 'path';
 import { cloneGitConfig } from './lazygitConfig';
 import { git, workspaceRoot, type ChangedFile, type Commit, type CommitFile, type ConflictFile, type LazyGitGitRuntimeConfig, type Stash, type StashFile } from './gitService';
 import { gitDiffConfigArgs } from './gitActions';
-import { EMPTY_PREVIEW_SCHEME } from './previewDocuments';
+import { EMPTY_PREVIEW_SCHEME, VIRTUAL_PREVIEW_SCHEME } from './previewDocuments';
 import { commitPatchPreviewHtml } from './richPreview';
 
 function shellWords(command: string): string[] {
@@ -34,7 +34,13 @@ export function branchLogArgs(gitConfig: LazyGitGitRuntimeConfig, branchName: st
 export async function closeLazyGitVSPreviewTabsIfSingle() {
   const mode = vscode.workspace.getConfiguration('lazygitvs').get<'single' | 'multiple'>('previewTabs', 'single');
   if (mode !== 'single') return;
-  const tabs = vscode.window.tabGroups.all.flatMap(group => group.tabs).filter(tab => tab.label.startsWith('LazyGitVS:'));
+  const tabs = vscode.window.tabGroups.all.flatMap(group => group.tabs).filter(tab => {
+    const input = tab.input as { uri?: vscode.Uri; viewType?: string } | undefined;
+    if (input?.uri?.scheme === VIRTUAL_PREVIEW_SCHEME) return true;
+    if (input?.viewType === 'lazygitvs.preview') return true;
+    if (input instanceof vscode.TabInputWebview && tab.label.startsWith('LazyGitVS:')) return true;
+    return input instanceof vscode.TabInputTextDiff && tab.label.startsWith('LazyGitVS:');
+  });
   if (tabs.length) await vscode.window.tabGroups.close(tabs, true);
 }
 

@@ -25,6 +25,7 @@ const REPORT_JSON = path.join(OUT, `last-run-${REPORT_SLUG}.json`);
 const PORT = Number(process.env.LGVS_DOGFOOD_CDP_PORT || 9322);
 const STEP_DELAY = Number(process.env.LGVS_DOGFOOD_STEP_DELAY || 900);
 const THEME = process.env.LGVS_DOGFOOD_THEME || 'Default Light Modern';
+const VIRTUAL_PREVIEW_URI_PREFIX = 'lazygitvs-preview:';
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 function getJson(url) {
@@ -186,7 +187,11 @@ async function pageText(Runtime) {
   return r.result.value || '';
 }
 async function lazyGitPreviewTabLabels(Runtime) {
-  const r = await Runtime.evaluate({ expression: `Array.from(document.querySelectorAll('.tabs-container .tab, .tabs-and-actions-container .tab, .tab')).map(el => el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '').map(s => s.replace(/\s+/g, ' ').trim()).filter(s => /^LazyGitVS:/.test(s) || s.includes(' LazyGitVS:'))`, returnByValue: true });
+  const r = await Runtime.evaluate({ expression: `Array.from(document.querySelectorAll('.tabs-container .tab, .tabs-and-actions-container .tab, .tab')).map(el => el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '').map(s => s.replace(/\s+/g, ' ').trim()).filter(s => /^LazyGitVS\b/.test(s) || s.includes(' LazyGitVS'))`, returnByValue: true });
+  return Array.from(new Set(r.result.value || []));
+}
+async function editorTabLabels(Runtime) {
+  const r = await Runtime.evaluate({ expression: `Array.from(document.querySelectorAll('.tabs-container .tab, .tabs-and-actions-container .tab, .tab')).map(el => el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '').map(s => s.replace(/\s+/g, ' ').trim()).filter(Boolean)`, returnByValue: true });
   return Array.from(new Set(r.result.value || []));
 }
 async function quickInputState(Runtime) {
@@ -562,9 +567,12 @@ async function dispatchLgvsDomKey(Runtime, key) {
       if (panelKey === '8') checks.push({ name: 'Focus 8 reveals Remotes in the SCM sidebar', ok: jumpText.includes('8 REMOTES'), textSample: jumpText.slice(0, 1200) });
     }
 
-    const dynamicPreviewTabs = await lazyGitPreviewTabLabels(Runtime);
+    const allEditorTabs = await editorTabLabels(Runtime);
+    const dynamicPreviewTabs = allEditorTabs.filter(label => /^LazyGitVS\b/.test(label));
+    const untitledPreviewTabs = allEditorTabs.filter(label => /Untitled/i.test(label));
     evidence.push({ step: 'single-dynamic-preview-tab-after-navigation', screenshot: await screenshot(Page, '02-single-dynamic-preview-tab-after-navigation'), status: status(fixture), previewTabs: dynamicPreviewTabs });
     checks.push({ name: 'Default preview tab policy keeps only one dynamic LazyGitVS tab while navigating previews', ok: dynamicPreviewTabs.length <= 1, previewTabs: dynamicPreviewTabs });
+    checks.push({ name: `Generated previews use named ${VIRTUAL_PREVIEW_URI_PREFIX} virtual documents, not Untitled buffers`, ok: dynamicPreviewTabs.every(label => /^LazyGitVS\b/.test(label)) && untitledPreviewTabs.length === 0, previewTabs: dynamicPreviewTabs, allEditorTabs, untitledPreviewTabs });
     if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS) {
       finishDogfoodReport();
       return;
