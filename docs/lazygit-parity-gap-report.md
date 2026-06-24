@@ -155,8 +155,8 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 - [ ] `<ctrl+z>` suspend app is intentionally not meaningful in VS Code; document/ignore as VS Code-native exception.
 
 ### Operation state machine
-- [ ] Model merge/rebase/cherry-pick/bisect in-progress states.
-- [ ] Show state-specific rows/actions.
+- [x] Model merge/rebase/cherry-pick/bisect in-progress states in a tested Git detector with safe action metadata.
+- [ ] Show state-specific rows/actions in the SCM UI.
 - [ ] Continue / abort / skip workflows.
 - [ ] Conflict follow-up prompts matching lazygit.
 
