@@ -35,7 +35,7 @@ function makeFixture() {
     fs.writeFileSync(path.join(dir, 'BINARY.bin'), Buffer.from([0, 159, 146, 150, 0, 1, 2, 3]));
   }
   if (process.env.LGVS_DOGFOOD_LARGE_REPO) {
-    for (let i = 0; i < 140; i++) write(path.join(dir, `bulk/file-${String(i).padStart(3, '0')}.txt`), `base ${i}\n`);
+    for (let i = 0; i < 320; i++) write(path.join(dir, `bulk/file-${String(i).padStart(3, '0')}.txt`), `base ${i}\n`);
   }
   if (process.env.LGVS_DOGFOOD_DEEP_TREE) {
     write(path.join(dir, '.config/karabiner/assets/complex_modifications/misc_rules.json'), '{"rules":[]}\n');
@@ -77,7 +77,7 @@ function makeFixture() {
     fs.writeFileSync(path.join(dir, 'BINARY.bin'), Buffer.from([0, 159, 146, 150, 9, 8, 7, 6]));
   }
   if (process.env.LGVS_DOGFOOD_LARGE_REPO) {
-    for (let i = 0; i < 140; i++) append(path.join(dir, `bulk/file-${String(i).padStart(3, '0')}.txt`), `changed ${i}\n`);
+    for (let i = 0; i < 320; i++) append(path.join(dir, `bulk/file-${String(i).padStart(3, '0')}.txt`), `changed ${i}\n`);
   }
   if (process.env.LGVS_DOGFOOD_DEEP_TREE) {
     append(path.join(dir, 'AGENTS.md'), 'staged agent change\n');

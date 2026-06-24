@@ -109,6 +109,14 @@ test('deep SCM panel reveal limitation stays honest and guarded against fake fix
   assert(!/workbench\.action\.(increaseViewSize|decreaseViewSize)|list\.scrollDown|focusSideBar/.test(extension), 'extension source must not add fake SCM view resize/scroll/focus hacks for deep panel reveal');
 });
 
+test('large repo refresh contract coalesces refresh storms and preserves file selection by path', () => {
+  assert(/if \(this\.refreshTimer\) clearTimeout\(this\.refreshTimer\)/.test(extension), 'scheduled refreshes must debounce file watcher bursts');
+  assert(/if \(this\.refreshInFlight\) \{ this\.refreshPending = true; return; \}/.test(extension), 'in-flight refreshes must be coalesced into one pending pass');
+  assert(/previousPath = this\.currentFile\(\)\?\.path/.test(extension), 'refresh must snapshot the active file path before reloading Git state');
+  assert(/findIndex\(row => row\.kind === 'file' && row\.file\.path === previousPath\)/.test(extension), 'refresh must restore the active file row by path when the selection did not move');
+  assert(/virtualRows\(fileRows, this\.selected/.test(extension), 'large Files panels must render through the virtualized row window');
+});
+
 test('documented dogfood expected coverage is protected by this static contract', () => {
   const documentedBullets = [
     'Command Palette can run',

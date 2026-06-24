@@ -214,6 +214,72 @@ async function clickQuickPickRowEndingWith(Runtime, Input, suffix) {
   await sleep(STEP_DELAY);
   return point;
 }
+async function selectedLgvsRowInfo(Runtime) {
+  const r = await Runtime.evaluate({ expression: `(() => {
+    function collect(root, out = []) {
+      const rows = Array.from(root.querySelectorAll?.('.row') || []);
+      const containers = Array.from(root.querySelectorAll?.('.rows') || []);
+      const spacers = Array.from(root.querySelectorAll?.('.virtual-spacer') || []);
+      if (rows.length) out.push({ rows, containers, spacers });
+      for (const el of Array.from(root.querySelectorAll?.('*') || [])) {
+        if (el.shadowRoot) collect(el.shadowRoot, out);
+        if (el.tagName === 'IFRAME' && el.contentDocument) collect(el.contentDocument, out);
+      }
+      return out;
+    }
+    const groups = collect(document);
+    for (const group of groups) {
+      const selected = group.rows.find(row => row.classList.contains('sel') || row.getAttribute('aria-selected') === 'true');
+      if (!selected) continue;
+      const container = group.containers.find(c => c.contains(selected)) || selected.closest('.rows');
+      return {
+        text: (selected.textContent || '').replace(/\s+/g, ' ').trim(),
+        title: selected.getAttribute('title') || '',
+        index: selected.getAttribute('data-index') || '',
+        renderedRowCount: group.rows.length,
+        visibleRowCount: container ? Math.floor(container.clientHeight / 20) : undefined,
+        scrollTop: container?.scrollTop,
+        virtualOffsets: group.spacers.map(s => s.getAttribute('data-virtual-offset')).filter(Boolean),
+        selectedRowAvailable: true
+      };
+    }
+    const text = document.body.innerText || '';
+    const mode = (text.match(/-- FILES · LG --/) || text.match(/-- [A-Z]+ · LG --/) || [''])[0];
+    return mode ? { text: mode, title: mode, selectedRowAvailable: false } : undefined;
+  })()`, returnByValue: true });
+  return r.result.value;
+}
+
+async function clickLgvsRowWithTitle(Runtime, Input, titlePart) {
+  const r = await Runtime.evaluate({ expression: `(() => {
+    const titlePart = ${JSON.stringify(titlePart)};
+    function find(root, ox = 0, oy = 0) {
+      const rows = Array.from(root.querySelectorAll?.('.row[data-index]') || []);
+      const row = rows.find(el => (el.getAttribute('title') || '').includes(titlePart) || (el.textContent || '').includes(titlePart));
+      if (row) {
+        const rect = row.getBoundingClientRect();
+        return { x: ox + rect.left + Math.min(80, Math.max(8, rect.width / 2)), y: oy + rect.top + rect.height / 2, title: row.getAttribute('title') || '', text: row.textContent || '' };
+      }
+      for (const el of Array.from(root.querySelectorAll?.('*') || [])) {
+        if (el.shadowRoot) { const found = find(el.shadowRoot, ox, oy); if (found) return found; }
+        if (el.tagName === 'IFRAME' && el.contentDocument) {
+          const rect = el.getBoundingClientRect();
+          const found = find(el.contentDocument, ox + rect.left, oy + rect.top);
+          if (found) return found;
+        }
+      }
+      return undefined;
+    }
+    return find(document);
+  })()`, returnByValue: true });
+  const point = r.result.value;
+  if (!point) return undefined;
+  await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+  await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+  await sleep(STEP_DELAY);
+  return point;
+}
+
 async function clickLgvsRoot(Runtime, Input) {
   const r = await Runtime.evaluate({ expression: `(() => {
     function find(root, ox = 0, oy = 0) {
@@ -377,7 +443,14 @@ async function dispatchLgvsDomKey(Runtime, key) {
 
     await key(Input, '1');
     await sleep(STEP_DELAY);
-    const unselectedStatusText = (await pageText(Runtime)).slice(0, 3000);
+    let unselectedStatusText = (await pageText(Runtime)).slice(0, 3000);
+    if (!/1 STATUS/.test(unselectedStatusText)) {
+      await dispatchLgvsDomKey(Runtime, '1');
+      unselectedStatusText = await waitFor(async () => {
+        const text = (await pageText(Runtime)).slice(0, 3000);
+        return /1 STATUS/.test(text) ? text : undefined;
+      }, 10000, 250, 'Status panel after numeric 1');
+    }
     evidence.push({ step: 'status-requires-explicit-repo-selection', screenshot: await screenshot(Page, '02-status-requires-explicit-repo-selection'), status: status(fixture), textSample: unselectedStatusText });
     checks.push({ name: 'Multi-repo Status starts without visually marking the first repo current', ok: /1 STATUS/.test(unselectedStatusText) && !/current/i.test(unselectedStatusText), textSample: unselectedStatusText.slice(0, 1200) });
     await runCommandPalette(Input, 'LazyGitVS: Select Status Repository');
@@ -409,10 +482,39 @@ async function dispatchLgvsDomKey(Runtime, key) {
       await runCommandPalette(Input, 'LazyGitVS: Reset state');
       await waitForText(Runtime, /2 FILES/, 10000);
       const refreshLatencyMs = Date.now() - beforeRefresh;
+      await key(Input, '2');
+      await clickLgvsRoot(Runtime, Input);
+      await key(Input, 'End');
+      await sleep(STEP_DELAY);
+      const selectedBeforeStorm = await waitFor(async () => {
+        const info = await selectedLgvsRowInfo(Runtime);
+        return info?.title || info?.text ? info : undefined;
+      }, 10000, 250, 'large repo selected row before refresh storm');
+      const selectedTitleBeforeStorm = selectedBeforeStorm.title || selectedBeforeStorm.text || '';
+      const stormStarted = Date.now();
+      for (let i = 0; i < 12; i++) {
+        fs.appendFileSync(path.join(fixture, `bulk/file-${String(300 + i).padStart(3, '0')}.txt`), `storm ${i}\n`);
+      }
+      await sleep(800);
+      await waitFor(async () => {
+        const text = await pageText(Runtime);
+        const info = await selectedLgvsRowInfo(Runtime);
+        const selectedTitle = info?.title || info?.text || '';
+        return selectedTitle === selectedTitleBeforeStorm && /bulk\/file-311\.txt/.test(status(fixture)) && !/Extension host terminated|TypeError|Cannot read properties/i.test(text) ? info : undefined;
+      }, 15000, 300, 'large repo selected row after refresh storm');
+      const refreshStormElapsedMs = Date.now() - stormStarted;
+      const selectedAfterStorm = await selectedLgvsRowInfo(Runtime);
+      const selectedRowReadable = selectedBeforeStorm?.selectedRowAvailable === true && selectedAfterStorm?.selectedRowAvailable === true;
+      const selectedSignalStable = selectedRowReadable
+        ? (selectedAfterStorm?.title || selectedAfterStorm?.text || '') === selectedTitleBeforeStorm
+        : /-- FILES · LG --/.test(`${selectedBeforeStorm?.text || ''} ${selectedAfterStorm?.text || ''}`);
       const largeText = await pageText(Runtime);
       const largeStatus = status(fixture);
+      evidence.push({ step: 'large-repo-refresh-throttle', refreshLatencyMs, refreshStormElapsedMs, selectedRowReadable, selectedBeforeStorm, selectedAfterStorm, statusSample: largeStatus.slice(0, 1600), textSample: largeText.slice(0, 1200) });
       checks.push({ name: 'Large repo refresh stays inside budget', ok: refreshLatencyMs < 10000 && /bulk\/file-/.test(largeStatus), refreshLatencyMs, statusSample: largeStatus.slice(0, 1600), textSample: largeText.slice(0, 1200) });
-      finishDogfoodReport();
+      checks.push({ name: 'Large repo refresh preserves the active Files row when CDP can read it, otherwise keeps Files mode stable', ok: selectedSignalStable, selectedRowReadable, selectedBeforeStorm, selectedAfterStorm });
+      checks.push({ name: 'Large repo refresh storm is coalesced and remains responsive', ok: refreshStormElapsedMs < 15000 && !/Extension host terminated|TypeError|Cannot read properties/i.test(largeText), refreshStormElapsedMs, selectedAfterStorm });
+      finishDogfoodReport({ refreshLatencyMs, refreshStormElapsedMs });
       return;
     }
 
