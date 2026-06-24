@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { dangerousGitMenuItem, discardAllConfirmation, discardConfirmation, nukeWorkingTreeConfirmation, resetConfirmation } from './destructiveActions';
+import { dangerousGitMenuItem, destructiveGitActionReason, discardAllConfirmation, discardConfirmation, nukeWorkingTreeConfirmation, resetConfirmation } from './destructiveActions';
 import { applyHunk, discardUnstagedHunk } from './gitActions';
 import { git, type ChangedFile, type Commit } from './gitService';
 import { type Hunk } from './hunkPatch';
@@ -29,8 +29,9 @@ export async function runGitAction(title: string, args: string[]) {
 }
 
 export async function executeGitMenuItem(item: GitMenuItem) {
-  if (item.danger || item.confirm) {
-    const ok = await vscode.window.showWarningMessage(item.confirm ?? `Run ${item.label}?`, { modal: true }, 'Run');
+  const destructiveReason = destructiveGitActionReason(item.args);
+  if (item.danger || item.confirm || destructiveReason) {
+    const ok = await vscode.window.showWarningMessage(item.confirm ?? `Run destructive Git action (${destructiveReason}) for ${item.label}?`, { modal: true }, 'Run');
     if (ok !== 'Run') return false;
   }
   if (item.run) await item.run();
@@ -105,9 +106,9 @@ export async function showStashCreateMenu() { await pickGitAction('Stash options
 export async function showResetMenu(onNuke?: () => void | Promise<void>) {
   const upstream = await upstreamBranch();
   const items: GitMenuItem[] = [
-    { key: 's', label: '$(debug-restart) Soft reset to previous commit', description: 'keep index and working tree', args: ['reset', '--soft', 'HEAD~1'], danger: true },
-    { key: 'm', label: '$(debug-restart) Mixed reset to previous commit', description: 'keep working tree', args: ['reset', '--mixed', 'HEAD~1'], danger: true },
-    { key: 'h', label: '$(warning) Hard reset to HEAD', description: 'discard working tree and index', args: ['reset', '--hard', 'HEAD'], danger: true, confirm: 'Hard reset discards local changes. Do it?' },
+    dangerousGitMenuItem({ key: 's', label: '$(debug-restart) Soft reset to previous commit', description: 'keep index and working tree', args: ['reset', '--soft', 'HEAD~1'] }, resetConfirmation('HEAD~1', 'soft'), 'history-rewrite'),
+    dangerousGitMenuItem({ key: 'm', label: '$(debug-restart) Mixed reset to previous commit', description: 'keep working tree', args: ['reset', '--mixed', 'HEAD~1'] }, resetConfirmation('HEAD~1', 'mixed'), 'history-rewrite'),
+    dangerousGitMenuItem({ key: 'h', label: '$(warning) Hard reset to HEAD', description: 'discard working tree and index', args: ['reset', '--hard', 'HEAD'] }, resetConfirmation('HEAD', 'hard'), 'history-rewrite'),
   ];
   if (upstream) items.push(dangerousGitMenuItem({ key: 'u', label: '$(repo-pull) Reset to upstream', description: upstream, args: ['reset', '--hard', upstream] }, `Hard reset current branch to ${upstream}?`, 'history-rewrite'));
   items.push(dangerousGitMenuItem({ key: 'n', label: '💣 Nuke working tree', description: 'git reset --hard HEAD && git clean -fd', run: async () => { await onNuke?.(); await git(['reset', '--hard', 'HEAD']); await git(['clean', '-fd']); } }, nukeWorkingTreeConfirmation(), 'nuke'));

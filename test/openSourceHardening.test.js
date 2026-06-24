@@ -48,7 +48,8 @@ test('extension starts modularizing Git/workspace helpers out of src/extension.t
 });
 
 test('destructive Git actions are protected by explicit modal confirmation contracts', () => {
-  assert(extension.includes("showWarningMessage(item.confirm ?? `Run ${item.label}?`, { modal: true }, 'Run')"), 'menu danger path must use modal confirmation and Run gate');
+  assert(extension.includes('destructiveGitActionReason(item.args)'), 'menu danger path must classify destructive arg arrays centrally');
+  assert(extension.includes("showWarningMessage(item.confirm ?? `Run destructive Git action"), 'menu danger path must use modal confirmation and Run gate');
   const destructiveContracts = [
     ['hard reset to commit', /dangerousGitMenuItem\(\{ key: 'h'[^\n]+args: \['reset', '--hard', commit\.hash\]/],
     ['discard file', /dangerousGitMenuItem\(\{ key: 'u'[^\n]+args: \['restore', '--', file\.path\]/],
