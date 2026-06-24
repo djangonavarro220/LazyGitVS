@@ -604,17 +604,17 @@
       {
         "key": "enter",
         "command": "lazygitvs.statusEnter",
-        "when": "focusedView == lazygitvs.statusView"
+        "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
       },
       {
         "key": "tab",
         "command": "lazygitvs.focusPanel2",
-        "when": "focusedView == lazygitvs.statusView"
+        "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
       },
       {
         "key": "shift+tab",
         "command": "lazygitvs.focusPanel8",
-        "when": "focusedView == lazygitvs.statusView"
+        "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
       }
     ]
   },

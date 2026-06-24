@@ -33,7 +33,7 @@ assert(extension.includes('await Promise.all([\n      vscode.commands.executeCom
 assert(extension.includes('statusTreeItems(): vscode.TreeItem[]'), '1 Status must render the workspace repositories as native tree rows');
 assert(extension.includes("item.command = { command: 'lazygitvs.statusEnter', title: 'Select repository', arguments: [repo.path] };"), 'Status repo rows must be selectable with Enter');
 const keybindings = JSON.parse(pkg).contributes.keybindings;
-assert(keybindings.some(binding => binding.key === 'enter' && binding.command === 'lazygitvs.statusEnter' && binding.when === 'focusedView == lazygitvs.statusView'), 'Pressing 1 then Enter must select/open the focused Status repository row');
+assert(keybindings.some(binding => binding.key === 'enter' && binding.command === 'lazygitvs.statusEnter' && binding.when === 'focusedView == lazygitvs.statusView && !editorTextFocus'), 'Pressing 1 then Enter must select/open the focused Status repository row without stealing Enter from real editors');
 assert(extension.includes('repoDescription(repo, isCurrent)'), '1 Status must mark the active repository row as current while preserving branch and change count');
 assert(extension.includes('repoChangeDescription(repo)'), '1 Status rows must show pending-change counts next to each repository, like VS Code SCM badges');
 assert(extension.includes("repo.changeCount ? `${repo.changeCount} change${repo.changeCount === 1 ? '' : 's'}` : 'clean'"), 'Clean and dirty repositories must be distinguishable in the Status repository list');

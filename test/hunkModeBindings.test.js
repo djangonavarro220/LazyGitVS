@@ -56,6 +56,15 @@ for (const viewId of ['lazygitvs.filesView', 'lazygitvs.branchesView', 'lazygitv
 }
 assert(!keybindings.some(binding => binding.command === 'lazygitvs.enterSelected' && /editorTextFocus/.test(binding.when) && !/!editorTextFocus/.test(binding.when)), 'Enter selected must never bind inside real editor text focus');
 
+const editorOwnedKeys = new Set(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'tab', 'shift+tab', 'escape', 'o', 'e']);
+for (const binding of keybindings.filter(binding => editorOwnedKeys.has(binding.key))) {
+  if (binding.when === hunkWhen) continue;
+  assert(
+    String(binding.when).includes('!editorTextFocus'),
+    `${binding.command} / ${binding.key} must not be active during normal editor text focus; LGVS owns these keys only in explicit HUNK/LINE mode or non-editor panels`
+  );
+}
+
 assert(extension.includes("setContext', 'vim.active', active ? false : true"), 'HUNK/LINE must temporarily disable VSCodeVim so LGVS hunk keys win, then restore Vim on exit without brittle detection');
 assert(extension.includes("setContext', 'vim.active', true"), 'releaseEditorOwnership must restore Vim context so Esc leaves Insert after LGVS disappears');
 assert(extension.includes("private async releaseEditorOwnership()"), 'normal open/edit must have one hard release path that makes LGVS disappear from the editor');
