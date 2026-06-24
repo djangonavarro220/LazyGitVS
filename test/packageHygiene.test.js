@@ -6,6 +6,7 @@ const root = path.join(__dirname, '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const vscodeignore = fs.readFileSync(path.join(root, '.vscodeignore'), 'utf8').split(/\r?\n/).filter(Boolean);
 const packageVsix = fs.readFileSync(path.join(root, 'scripts', 'package-vsix.js'), 'utf8');
+const vsixInspectorPath = path.join(root, 'scripts', 'inspect-vsix-content.js');
 const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
 const building = fs.readFileSync(path.join(root, 'BUILDING.md'), 'utf8');
 
@@ -58,6 +59,17 @@ test('VSIX ignore rules exclude generated, test, dogfood and local artifacts', (
   ]) {
     hasIgnore(pattern);
   }
+});
+
+test('dist packaging runs a VSIX content allow/deny inspection', () => {
+  assert(fs.existsSync(vsixInspectorPath), 'scripts/inspect-vsix-content.js must exist');
+  const inspector = fs.readFileSync(vsixInspectorPath, 'utf8');
+  assert.match(packageVsix, /inspect-vsix-content\.js/);
+  assert.match(inspector, /extension\/package\.json/);
+  assert.match(inspector, /extension\/out\/extension\.js/);
+  assert.match(inspector, /dogfood-output/);
+  assert.match(inspector, /\.vscode-test/);
+  assert.match(inspector, /private absolute path/i);
 });
 
 test('VSIX keeps the README screenshot while excluding source-only assets', () => {

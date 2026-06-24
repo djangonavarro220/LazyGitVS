@@ -44,4 +44,14 @@ if (result.status !== 0) {
   process.exit(result.status || 1);
 }
 
+const inspection = spawnSync(process.execPath, [path.join(root, 'scripts', 'inspect-vsix-content.js'), outFile], {
+  cwd: root,
+  stdio: 'inherit',
+  env: process.env
+});
+
+if (inspection.status !== 0) {
+  process.exit(inspection.status || 1);
+}
+
 console.log(`VSIX: ${outFile}`);
