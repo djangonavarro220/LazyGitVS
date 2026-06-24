@@ -141,10 +141,10 @@ npm run dogfood:ui:cramped
 npm run dogfood:ui:edge-files
 ```
 
-Cramped sidebar check:
+Cramped sidebar check (focused no-Vim lane; writes forced screenshots for `7` and `8` state evidence, but does not assert VS Code visually scrolled native deep headers):
 
 ```bash
-LGVS_DOGFOOD_WINDOW_SIZE=900,260 npm run dogfood:ui
+npm run dogfood:ui:cramped
 ```
 
 Dark theme spot-check when a visual bug is theme-sensitive:

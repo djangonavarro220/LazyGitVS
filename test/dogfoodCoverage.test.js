@@ -4,9 +4,12 @@ const path = require('path');
 
 const root = path.join(__dirname, '..');
 const dogfood = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
+const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
 const dogfoodFixtures = fs.readFileSync(path.join(root, 'scripts', 'dogfood', 'fixtures.js'), 'utf8');
-const dogfoodSource = `${dogfood}\n${dogfoodFixtures}`;
+const dogfoodReporting = fs.readFileSync(path.join(root, 'scripts', 'dogfood', 'reporting.js'), 'utf8');
+const dogfoodSource = `${dogfood}\n${dogfoodFixtures}\n${dogfoodReporting}`;
 const testingDoc = fs.readFileSync(path.join(root, 'docs', 'testing-and-verification.md'), 'utf8');
+const knownBugsDoc = fs.readFileSync(path.join(root, 'docs', 'known-bugs.md'), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
 function test(name, fn) {
@@ -32,8 +35,10 @@ test('dogfood script keeps the full matrix and targeted lanes documented in the 
   requireDogfoodInvariant('vim-escape targeted lane', /LGVS_DOGFOOD_FAST_VIM_ESCAPE/);
   requireDogfoodInvariant('reset-state targeted lane', /LGVS_DOGFOOD_FAST_RESET_STATE/);
   requireDogfoodInvariant('deep-tree targeted lane', /LGVS_DOGFOOD_DEEP_TREE/);
+  requireDogfoodInvariant('cramped-sidebar honest targeted lane', /LGVS_DOGFOOD_CRAMPED_SIDEBAR/);
   assert(pkg.scripts['dogfood:ui:deep-tree'], 'package.json must expose a deep-tree dogfood lane');
   assert(pkg.scripts['dogfood:ui:cramped'], 'package.json must expose a cramped-sidebar dogfood lane');
+  assert(/LGVS_DOGFOOD_CRAMPED_SIDEBAR=1/.test(pkg.scripts['dogfood:ui:cramped']), 'cramped-sidebar dogfood lane must run the honest cramped guardrail, not only a full matrix with a small window');
   assert(pkg.scripts['dogfood:ui:edge-files'], 'package.json must expose a deleted/renamed/conflict dogfood lane');
   requireDogfoodInvariant('cramped-sidebar window override', /LGVS_DOGFOOD_WINDOW_SIZE/);
   requireDogfoodInvariant('edge-file targeted lane', /LGVS_DOGFOOD_EDGE_FILES/);
@@ -58,6 +63,9 @@ test('dogfood asserts the documented visible UI smoke path', () => {
   requireDogfoodInvariant('Status panel ownership assertion', /Focus 1 keeps LGVS ownership or reveals Status panel/);
   requireDogfoodInvariant('Tags reveal assertion', /Focus 7 reveals Tags/);
   requireDogfoodInvariant('Remotes reveal assertion', /Focus 8 reveals Remotes/);
+  requireDogfoodInvariant('cramped Tags honest state assertion', /Cramped sidebar numeric 7 updates LGVS Tags state without claiming native scroll reveal/);
+  requireDogfoodInvariant('cramped Remotes honest state assertion', /Cramped sidebar numeric 8 updates LGVS Remotes state without claiming native scroll reveal/);
+  requireDogfoodInvariant('cramped limitation evidence', /nativeScmDeepPanelRevealLimitation/);
   requireDogfoodInvariant('Escape stays on normal panels', /Escape on \$\{panelKey\} \$\{panelName\} keeps the current panel/);
   requireDogfoodInvariant('commit files detail is reachable', /Commit Enter shows changed files for the selected commit/);
   requireDogfoodInvariant('commit files detail returns to commit list', /Esc from commit files returns to the commit list/);
@@ -93,6 +101,12 @@ test('dogfood asserts focus, Vim ownership, modal, preview and failure-only scre
 test('dogfood playbook documents screenshots only for failures by default', () => {
   assert(testingDoc.includes('screenshots only for failures by default'), 'playbook must document failure-only screenshots');
   assert(testingDoc.includes('passing runs stay text/JSON-only'), 'playbook must document passing runs do not emit screenshot spam');
+});
+
+test('deep SCM panel reveal limitation stays honest and guarded against fake fixes', () => {
+  assert(knownBugsDoc.includes('VS Code does not expose a reliable public API to scroll a collapsed/deep contributed SCM view'), 'known-bugs must document the native deep-panel reveal API limitation');
+  assert(knownBugsDoc.includes('Do not claim visual deep-panel reveal is fixed unless the dogfood screenshot proves it'), 'known-bugs must warn future agents not to claim fake visual reveal fixes');
+  assert(!/workbench\.action\.(increaseViewSize|decreaseViewSize)|list\.scrollDown|focusSideBar/.test(extension), 'extension source must not add fake SCM view resize/scroll/focus hacks for deep panel reveal');
 });
 
 test('documented dogfood expected coverage is protected by this static contract', () => {

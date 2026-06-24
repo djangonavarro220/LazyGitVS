@@ -484,6 +484,42 @@ async function dispatchLgvsDomKey(Runtime, key) {
       return;
     }
 
+    if (process.env.LGVS_DOGFOOD_CRAMPED_SIDEBAR) {
+      await chord(Input, 'ctrl+alt+7');
+      await sleep(STEP_DELAY);
+      const crampedTagsText = (await pageText(Runtime)).slice(0, 4000);
+      evidence.push({
+        step: 'cramped-sidebar-panel-7-tags-state',
+        screenshot: await screenshot(Page, '02-cramped-sidebar-panel-7-tags-state', { force: true }),
+        status: status(fixture),
+        textSample: crampedTagsText,
+        nativeScmDeepPanelRevealLimitation: 'VS Code may not visually scroll collapsed/deep contributed SCM views in a cramped sidebar; this lane asserts honest LGVS state/focus only.'
+      });
+      checks.push({
+        name: 'Cramped sidebar numeric 7 updates LGVS Tags state without claiming native scroll reveal',
+        ok: /-- TAGS · LG --/.test(crampedTagsText) && !/TypeError|Extension host terminated/i.test(crampedTagsText),
+        textSample: crampedTagsText.slice(0, 1200)
+      });
+
+      await chord(Input, 'ctrl+alt+8');
+      await sleep(STEP_DELAY);
+      const crampedRemotesText = (await pageText(Runtime)).slice(0, 4000);
+      evidence.push({
+        step: 'cramped-sidebar-panel-8-remotes-state',
+        screenshot: await screenshot(Page, '02-cramped-sidebar-panel-8-remotes-state', { force: true }),
+        status: status(fixture),
+        textSample: crampedRemotesText,
+        nativeScmDeepPanelRevealLimitation: 'VS Code may not visually scroll collapsed/deep contributed SCM views in a cramped sidebar; this lane asserts honest LGVS state/focus only.'
+      });
+      checks.push({
+        name: 'Cramped sidebar numeric 8 updates LGVS Remotes state without claiming native scroll reveal',
+        ok: /-- REMOTES · LG --/.test(crampedRemotesText) && !/TypeError|Extension host terminated/i.test(crampedRemotesText),
+        textSample: crampedRemotesText.slice(0, 1200)
+      });
+      finishDogfoodReport({ nativeScmDeepPanelRevealLimitation: true });
+      return;
+    }
+
     if (process.env.LGVS_DOGFOOD_FAST_COMMAND_PALETTE) {
       await key(Input, 'F1');
       await sleep(450);

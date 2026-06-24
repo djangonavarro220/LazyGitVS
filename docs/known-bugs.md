@@ -21,5 +21,7 @@ Current release stance:
 Verification command for this bug:
 
 ```bash
-LGVS_DOGFOOD_WINDOW_SIZE=900,260 npm run dogfood:ui
+npm run dogfood:ui:cramped
 ```
+
+The lane should prove that numeric jumps update LGVS focus/state for `7 Tags` and `8 Remotes` in a cramped window. It must not be interpreted as proof that VS Code reliably scrolled the native deep panel headers unless the saved screenshots show that exact visual outcome.

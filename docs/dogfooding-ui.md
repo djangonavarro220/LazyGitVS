@@ -62,10 +62,10 @@ npm run dogfood:ui
 
 By default this runs a two-lane matrix: no Vim extension, then VSCodeVim installed/enabled.
 
-For cramped-sidebar scroll/reveal checks, force a small window:
+For cramped-sidebar scroll/reveal checks, run the focused lane. It forces a small window and captures screenshots for `7 Tags` / `8 Remotes` state evidence, but it intentionally does not assert that VS Code visually scrolled a deep native SCM view header into sight:
 
 ```bash
-LGVS_DOGFOOD_WINDOW_SIZE=900,260 npm run dogfood:ui
+npm run dogfood:ui:cramped
 ```
 
 Output:
