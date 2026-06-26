@@ -35,8 +35,7 @@ async function showChangedFilesQuickPick() {
 const virtualPreviewProvider = new VirtualPreviewProvider();
 
 class PanelViewProvider implements vscode.WebviewViewProvider {
-  constructor(private readonly app: LazyGitVSController, private readonly panel: ViewPanel) {}
-  resolveWebviewView(view: vscode.WebviewView) { this.app.attach(this.panel, view); }
+  constructor(private readonly app: LazyGitVSController, private readonly panel: ViewPanel) {} resolveWebviewView(view: vscode.WebviewView) { this.app.attach(this.panel, view); }
 }
 
 class StatusTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
@@ -102,6 +101,7 @@ class LazyGitVSController {
   private editorModeFilePath: string | undefined;
   private refreshTimer?: NodeJS.Timeout;
   private intervalTimer?: NodeJS.Timeout;
+  private pendingFilesPreviewTimer?: ReturnType<typeof setTimeout>; private filesPreviewEpoch = 0;
   private refreshInFlight = false;
   private refreshPending = false;
   private selectionEpoch = 0;
@@ -550,8 +550,8 @@ class LazyGitVSController {
     if (this.refreshTimer) clearTimeout(this.refreshTimer);
     this.refreshTimer = setTimeout(() => this.refresh(false).catch(err => vscode.window.showErrorMessage(err.message)), delayMs);
   }
-
-
+  private cancelFilesPreview() { if (this.pendingFilesPreviewTimer) clearTimeout(this.pendingFilesPreviewTimer); this.pendingFilesPreviewTimer = undefined; this.filesPreviewEpoch++; }
+  private scheduleFilesPreview(viewPanel: ViewPanel) { if (this.pendingFilesPreviewTimer) clearTimeout(this.pendingFilesPreviewTimer); const epoch = ++this.filesPreviewEpoch; const filePath = this.currentFile()?.path; this.pendingFilesPreviewTimer = setTimeout(() => { this.pendingFilesPreviewTimer = undefined; if (epoch !== this.filesPreviewEpoch) return; void this.openCurrent(viewPanel, true, true, { epoch, filePath }).catch(() => undefined); }, 180); }
   private async setEditorHunkMode(active: boolean) {
     if (active) this.webviewKeyboardOwner = false;
     this.setWebviewKeyboardEnabled(!active && this.ownsModeStatus && this.webviewKeyboardOwner);
@@ -836,7 +836,7 @@ class LazyGitVSController {
     this.persistNavigationState();
     this.updateModeStatusBar();
     this.renderAll();
-    await this.openCurrent(viewPanel, true, panel === 'files').catch(() => undefined);
+    if (panel === 'files') this.scheduleFilesPreview(viewPanel); else await this.openCurrent(viewPanel, true).catch(() => undefined);
   }
   private async move(viewPanel: ViewPanel, delta: number) {
     this.ownsModeStatus = true;
@@ -849,7 +849,7 @@ class LazyGitVSController {
     this.setActiveIndex(panel, Math.max(0, Math.min(len - 1, this.activeIndex(panel) + delta)));
     this.persistNavigationState();
     this.renderAll();
-    await this.openCurrent(viewPanel, true, panel === 'files').catch(() => undefined);
+    if (panel === 'files') this.scheduleFilesPreview(viewPanel); else await this.openCurrent(viewPanel, true).catch(() => undefined);
   }
   private async moveTo(viewPanel: ViewPanel, position: 'top' | 'bottom') {
     const panel = this.panelForView(viewPanel);
@@ -863,7 +863,7 @@ class LazyGitVSController {
     this.persistNavigationState();
     this.updateModeStatusBar();
     this.renderAll();
-    await this.openCurrent(viewPanel, true, panel === 'files').catch(() => undefined);
+    if (panel === 'files') this.scheduleFilesPreview(viewPanel); else await this.openCurrent(viewPanel, true).catch(() => undefined);
   }
   private selectFileRange(anchor: number, head: number) {
     this.fileRangeSelected.clear();
@@ -1467,7 +1467,8 @@ class LazyGitVSController {
   private showPendingLineMode() { if (this.activePanel !== 'hunks' && !this.editorHunkMode) return; this.hunkSelectionMode = this.hunkSelectionMode === 'hunk' ? 'line' : 'hunk'; this.hunkLineSelected = 0; this.statusLine = this.hunkSelectionMode === 'line' ? 'Line mode' : 'Hunk mode'; this.updateModeStatusBar(); this.updateEditorHunkDecorations(); this.renderAll(); }
   private async loadHunks(showMessage: boolean) { const f = this.currentFile(); this.allHunks = f ? await hunksForFile(f, this.lazygitGit) : []; this.filterHunks(); this.hunkSelected = clamp(this.hunkSelected, this.hunks.length); if (showMessage && f?.untracked) vscode.window.showInformationMessage('LazyGitVS: untracked file has no hunks yet; space stages whole file.'); }
   private filterHunks() { this.hunks = this.allHunks.filter(h => this.hunkSide === 'staged' ? h.staged : !h.staged); }
-  private async openCurrent(viewPanel: ViewPanel, preserveFocus: boolean, forceListPreview = false) {
+  private async openCurrent(viewPanel: ViewPanel, preserveFocus: boolean, forceListPreview = false, scheduledFilesPreview?: { epoch: number; filePath?: string }) {
+    if (!scheduledFilesPreview) this.cancelFilesPreview();
     if (!preserveFocus) { this.ownsModeStatus = false; this.setFocusArea('viewer'); this.renderAll(); }
     const panel = this.panelForView(viewPanel);
     if ((this.editorHunkMode || this.editorEditMode) && (panel === 'files' || panel === 'hunks')) {
@@ -1478,14 +1479,15 @@ class LazyGitVSController {
     }
     if (panel === 'files' || panel === 'hunks') {
       const f = this.currentFile();
-      if (f) {
-        const previewHunks = await hunksForFile(f, this.lazygitGit).catch(() => []);
+      if (f) { if (scheduledFilesPreview && (scheduledFilesPreview.epoch !== this.filesPreviewEpoch || f.path !== scheduledFilesPreview.filePath)) return;
+        const previewHunks = await hunksForFile(f, this.lazygitGit).catch(() => []); if (scheduledFilesPreview && (scheduledFilesPreview.epoch !== this.filesPreviewEpoch || this.currentFile()?.path !== scheduledFilesPreview.filePath)) return;
         this.allHunks = previewHunks;
         this.hunkSide = previewHunks.some(h => !h.staged) ? 'unstaged' : 'staged';
         this.filterHunks();
         this.hunkSelected = 0;
         this.hunkLineSelected = 0;
-        await previewDiff(f, preserveFocus);
+        const shown = await previewDiff(f, preserveFocus, () => !scheduledFilesPreview || (scheduledFilesPreview.epoch === this.filesPreviewEpoch && this.currentFile()?.path === scheduledFilesPreview.filePath));
+        if (!shown) return;
         const firstHunk = previewHunks[0];
         if (firstHunk) revealVisibleEditorLine(f.path, hunkStartLine(firstHunk));
         this.updateEditorHunkDecorations();
@@ -1502,7 +1504,6 @@ class LazyGitVSController {
         if (c) await showCommitPreview(c, this.lazygitGit, preserveFocus);
       }
     }
-   
     if (panel === 'stash') {
       if (this.stashFilesFor) {
         const f = this.stashFileItems[this.stashFileSelected];

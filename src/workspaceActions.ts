@@ -44,13 +44,15 @@ export async function closeLazyGitVSPreviewTabsIfSingle() {
   if (tabs.length) await vscode.window.tabGroups.close(tabs, true);
 }
 
-export async function previewDiff(file: ChangedFile | ConflictFile, preserveFocus = true) {
+export async function previewDiff(file: ChangedFile | ConflictFile, preserveFocus = true, shouldOpen = () => true) {
   await closeLazyGitVSPreviewTabsIfSingle();
+  if (!shouldOpen()) return false;
   const root = workspaceRoot();
   const right = vscode.Uri.file(path.join(root, file.path));
   const untracked = 'untracked' in file && file.untracked;
   const left = untracked ? vscode.Uri.parse(`${EMPTY_PREVIEW_SCHEME}:${encodeURIComponent(file.path)}`) : right.with({ scheme: 'git', query: JSON.stringify({ path: right.fsPath, ref: 'HEAD' }) });
   await vscode.commands.executeCommand('vscode.diff', left, right, `LazyGitVS: ${file.path}`, { preview: preserveFocus, preserveFocus, viewColumn: vscode.ViewColumn.Active });
+  return true;
 }
 
 export async function previewCommitFileDiff(commit: Commit, file: CommitFile, preserveFocus = true) {
