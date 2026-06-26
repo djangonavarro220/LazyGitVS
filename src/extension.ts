@@ -831,7 +831,7 @@ class LazyGitVSController {
     if (panel === 'files') { this.fileRangeAnchor = undefined; this.fileRangeSelected.clear(); }
     this.persistNavigationState();
     this.updateModeStatusBar();
-    this.renderAll();
+    this.renderActivePanel(viewPanel);
     if (panel === 'files') this.scheduleFilesPreview(viewPanel); else await this.openCurrent(viewPanel, true).catch(() => undefined);
   }
   private async move(viewPanel: ViewPanel, delta: number) {
@@ -844,7 +844,7 @@ class LazyGitVSController {
     this.selectionEpoch++;
     this.setActiveIndex(panel, Math.max(0, Math.min(len - 1, this.activeIndex(panel) + delta)));
     this.persistNavigationState();
-    this.renderAll();
+    this.renderActivePanel(viewPanel);
     if (panel === 'files') this.scheduleFilesPreview(viewPanel); else await this.openCurrent(viewPanel, true).catch(() => undefined);
   }
   private async moveTo(viewPanel: ViewPanel, position: 'top' | 'bottom') {
@@ -858,7 +858,7 @@ class LazyGitVSController {
     if (panel === 'files') { this.fileRangeAnchor = undefined; this.fileRangeSelected.clear(); }
     this.persistNavigationState();
     this.updateModeStatusBar();
-    this.renderAll();
+    this.renderActivePanel(viewPanel);
     if (panel === 'files') this.scheduleFilesPreview(viewPanel); else await this.openCurrent(viewPanel, true).catch(() => undefined);
   }
   private selectFileRange(anchor: number, head: number) {
@@ -1642,6 +1642,7 @@ class LazyGitVSController {
     this.explosion = false; this.statusLine = '💥 Nuked working tree'; this.renderAll();
   }
   private renderAll() { this.persistNavigationState(); this.statusTreeProvider?.refresh(); for (const panel of PANEL_ORDER) this.render(panel); }
+  private renderActivePanel(viewPanel: ViewPanel) { this.persistNavigationState(); if (viewPanel === 'status') this.statusTreeProvider?.refresh(); else this.render(viewPanel); }
   private render(viewPanel: ViewPanel) {
     const view = this.views.get(viewPanel);
     if (!view) return;
