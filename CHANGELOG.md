@@ -2,7 +2,7 @@
 
 All notable changes to LazyGitVS will be documented here.
 
-## Unreleased
+## 0.1.102 - Navigation performance
 
 - Files navigation now debounces preview/diff work so fast `j/k` movement updates selection immediately without recalculating every intermediate row.
 - Refresh now avoids a duplicate `git status` pass and runs independent Git queries in parallel after repository discovery.

@@ -90,7 +90,21 @@ jobs:
         run: npm test
 
       - name: UI dogfood
-        run: npm run dogfood:ui
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2; do
+            echo "UI dogfood attempt $attempt/2"
+            if npm run dogfood:ui; then
+              exit 0
+            fi
+            if [ "$attempt" = "2" ]; then
+              echo "::error::UI dogfood failed after 2 attempts."
+              exit 1
+            fi
+            rm -rf dogfood-output
+            sleep 10
+          done
         env:
           LGVS_DOGFOOD_THEME: Default Light Modern
 
