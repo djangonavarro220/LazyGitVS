@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import * as path from 'path';
 import { cloneGitConfig, cloneGuiConfig, cloneKeymap, readLazyGitConfig } from './lazygitConfig';
-import { branches, changedFiles, commitFiles, commits, conflictFiles, discoverWorkspaceRepositories, getActiveWorkspaceRoot, git, remotes, setActiveWorkspaceRoot, stashes, stashFiles, tags, workspaceRoot, type Branch, type ChangedFile, type Commit, type CommitFile, type ConflictFile, type Remote, type Stash, type StashFile, type Tag, type WorkspaceRepository } from './gitService';
+import { branches, changedFiles, commitFiles, commits, conflictsFromChangedFiles, discoverWorkspaceRepositories, getActiveWorkspaceRoot, git, remotes, setActiveWorkspaceRoot, stashes, stashFiles, tags, workspaceRoot, type Branch, type ChangedFile, type Commit, type CommitFile, type ConflictFile, type Remote, type Stash, type StashFile, type Tag, type WorkspaceRepository } from './gitService';
 import { applyHunk, applyLine, discardUnstagedLine, gitDiffConfigArgs, hunksForFile, toggleStage, toggleStageAll, toggleStageSelected } from './gitActions';
 import { normalizeWebviewMessage, scriptJson, webviewContentSecurityPolicy } from './webviewSecurity';
 import { hunkBodyLines, hunkChangedEditorLine, hunkSelectableLineIndexes, hunkStartLine, parseDiffHunks, type Hunk } from './hunkPatch';
@@ -666,13 +666,9 @@ class LazyGitVSController {
         this.statusLine = 'Select a repository in 1 Status'; this.clampSelections(); this.updateModeStatusBar(); this.renderAll();
         return;
       }
-      this.files = await changedFiles(this.lazygitGit);
-      this.branchItems = await branches().catch(() => []);
-      this.tagItems = await tags().catch(() => []);
-      this.remoteItems = await remotes().catch(() => []);
-      this.commitItems = await commits(this.commitListForBranch?.name).catch(() => []);
-      this.stashItems = await stashes().catch(() => []);
-      this.conflictItems = await conflictFiles().catch(() => []);
+      const [files, branchItems, tagItems, remoteItems, commitItems, stashItems] = await Promise.all([changedFiles(this.lazygitGit), branches().catch(() => []), tags().catch(() => []), remotes().catch(() => []), commits(this.commitListForBranch?.name).catch(() => []), stashes().catch(() => [])]);
+      this.files = files; this.branchItems = branchItems; this.tagItems = tagItems; this.remoteItems = remoteItems; this.commitItems = commitItems; this.stashItems = stashItems;
+      this.conflictItems = conflictsFromChangedFiles(files);
       if (previousPath && this.selectionEpoch === refreshSelectionEpoch) { const i = this.fileTreeRows().findIndex(row => row.kind === 'file' && row.file.path === previousPath); if (i >= 0) this.selected = i; }
       this.clampSelections();
       if (this.activePanel === 'hunks' || this.editorHunkMode) await this.loadHunks(false);

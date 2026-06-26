@@ -256,6 +256,10 @@ export async function stashFiles(ref: string): Promise<StashFile[]> {
   return out.split('\n').filter(Boolean).map(line => { const parts = line.split('\t'); return { status: parts[0], oldPath: parts.length > 2 ? parts[1] : undefined, path: parts[parts.length - 1] }; });
 }
 
+export function conflictsFromChangedFiles(files: ChangedFile[]): ConflictFile[] {
+  return files.filter(f => f.xy.includes('U') || ['AA', 'DD'].includes(f.xy)).map(f => ({ xy: f.xy, path: f.path }));
+}
+
 export async function conflictFiles(): Promise<ConflictFile[]> {
-  return (await changedFiles()).filter(f => f.xy.includes('U') || ['AA', 'DD'].includes(f.xy)).map(f => ({ xy: f.xy, path: f.path }));
+  return conflictsFromChangedFiles(await changedFiles());
 }

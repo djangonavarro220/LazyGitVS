@@ -67,7 +67,7 @@ assert(extension.includes('qp.activeItems = items.filter(item => item.repo.path 
 assert(extension.includes("qp.title = 'Recent repositories';"), 'Repository selector title should mirror lazygit original wording');
 assert(!gitService.includes("if (!activeWorkspaceRoot || !roots.has(activeWorkspaceRoot)) activeWorkspaceRoot = roots.keys().next().value"), 'Active repo must not silently fall back to the first discovered repository when multiple repos are open');
 assert(extension.includes('setActiveWorkspaceRoot(repo.path)'), 'Selecting a repository must switch the active Git root used by LGVS commands');
-assert(extension.indexOf('this.workspaceRepos = await discoverWorkspaceRepositories().catch(() => []);') < extension.indexOf('this.files = await changedFiles(this.lazygitGit);'), 'Refresh must discover workspace repos before Git status so nested/non-root repos can become the active root');
+assert(extension.indexOf('this.workspaceRepos = await discoverWorkspaceRepositories().catch(() => []);') < extension.indexOf('changedFiles(this.lazygitGit)'), 'Refresh must discover workspace repos before Git status so nested/non-root repos can become the active root');
 const dogfoodUi = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
 const dogfoodFixtures = fs.readFileSync(path.join(root, 'scripts', 'dogfood', 'fixtures.js'), 'utf8');
 const dogfoodSource = `${dogfoodUi}\n${dogfoodFixtures}`;
