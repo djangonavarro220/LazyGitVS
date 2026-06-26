@@ -1,6 +1,6 @@
 # TOP open source hardening 3/15/17
 
-> Compaction-safe task note requested by the user before implementation.
+> Compaction-safe implementation note captured before implementation.
 
 **Goal:** Implement the selected TOP open-source improvements from the project review without changing repo visibility or pushing anything.
 
@@ -39,7 +39,7 @@ Acceptance:
 - `npm test` becomes `npm run compile && node scripts/run-tests.js`.
 - Add a contract test so future agents do not revert to a monstrous shell chain.
 
-## Extra coverage the user explicitly added
+## Extra requested coverage
 
 Also close the remaining coverage gaps from the previous mini-commit instead of pretending they do not exist:
 

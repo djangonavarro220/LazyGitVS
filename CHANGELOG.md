@@ -2,6 +2,12 @@
 
 All notable changes to LazyGitVS will be documented here.
 
+## Unreleased
+
+- Files navigation now debounces preview/diff work so fast `j/k` movement updates selection immediately without recalculating every intermediate row.
+- Refresh now avoids a duplicate `git status` pass and runs independent Git queries in parallel after repository discovery.
+- Pure selection movement now rerenders only the active LGVS panel instead of rebuilding every panel/webview.
+
 ## 0.1.101 - Repository pending-change counts
 
 - `1 Status` repository rows now show each repository's pending file/change count, making dirty repos visible before switching.
