@@ -14,16 +14,22 @@ for (const view of views) {
   if (view.id === 'lazygitvs.statusView') {
     assert.strictEqual(view.visibility, 'hidden', 'Status should default hidden and materialize only when the user presses 1');
     assert.strictEqual(view.when, 'lazygitvs.statusViewVisible', 'Status should only stay visible while panel 1 owns focus');
+  } else if (view.id === 'lazygitvs.filesView') {
+    assert(!Object.prototype.hasOwnProperty.call(view, 'when'), 'Files should remain the always-available home panel');
+    assert.strictEqual(view.visibility, 'visible', 'Files should be the only LGVS webview materialized at dashboard startup');
   } else {
-    assert(!Object.prototype.hasOwnProperty.call(view, 'when'), `SCM view ${view.id} must not be hidden behind activeView context`);
-    const expectedVisibility = view.id === 'lazygitvs.filesView' ? 'visible' : 'hidden';
-    assert.strictEqual(view.visibility, expectedVisibility, `SCM view ${view.id} should not spawn an idle webview renderer until the user opens that panel`);
+    const panel = view.id.replace('lazygitvs.', '').replace('View', '');
+    assert.strictEqual(view.when, `lazygitvs.${panel}ViewVisible`, `SCM view ${view.id} should only materialize while its panel owns focus`);
+    assert.strictEqual(view.visibility, 'hidden', `SCM view ${view.id} should not spawn an idle webview renderer until the user opens that panel`);
   }
 }
 
 assert(!extension.includes('private defaultPanelsRevealed = false;'), 'LGVS must not reveal panels 2-8 on dashboard focus; each webview costs a Code Helper renderer');
 assert(!extension.includes('revealDefaultOpenPanels'), 'openDashboard should focus only the active panel instead of materializing every SCM webview');
 assert(!extension.includes('await this.revealDefaultOpenPanels();'), 'dashboard focus must not spawn hidden panel renderers just for screenshot convenience');
+for (const key of ['branches', 'commits', 'stash', 'conflicts', 'tags', 'remotes']) {
+  assert(extension.includes(`setContext', 'lazygitvs.${key}ViewVisible'`), `${key} visibility must be driven by focus so previous webview renderers are torn down`);
+}
 assert(!extension.includes('private async makeRoomForLazyGitViews'), 'do not ship fake room-making helpers for native SCM scrolling');
 assert(!extension.includes("executeCommand('workbench.action.decreaseViewSize')"), 'panel jumps must not resize VS Code views');
 assert(!extension.includes("executeCommand('list.scrollDown')"), 'panel jumps must not blindly scroll whichever list has focus');

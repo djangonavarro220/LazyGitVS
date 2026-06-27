@@ -192,36 +192,42 @@
           "id": "lazygitvs.branchesView",
           "name": "3 Branches",
           "type": "webview",
+          "when": "lazygitvs.branchesViewVisible",
           "visibility": "hidden"
         },
         {
           "id": "lazygitvs.commitsView",
           "name": "4 Commits",
           "type": "webview",
+          "when": "lazygitvs.commitsViewVisible",
           "visibility": "hidden"
         },
         {
           "id": "lazygitvs.stashView",
           "name": "5 Stash",
           "type": "webview",
+          "when": "lazygitvs.stashViewVisible",
           "visibility": "hidden"
         },
         {
           "id": "lazygitvs.conflictsView",
           "name": "6 Conflicts",
           "type": "webview",
+          "when": "lazygitvs.conflictsViewVisible",
           "visibility": "hidden"
         },
         {
           "id": "lazygitvs.tagsView",
           "name": "7 Tags",
           "type": "webview",
+          "when": "lazygitvs.tagsViewVisible",
           "visibility": "hidden"
         },
         {
           "id": "lazygitvs.remotesView",
           "name": "8 Remotes",
           "type": "webview",
+          "when": "lazygitvs.remotesViewVisible",
           "visibility": "hidden"
         }
       ]

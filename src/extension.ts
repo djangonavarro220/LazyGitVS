@@ -156,7 +156,13 @@ class LazyGitVSController {
     const viewPanel = this.activeViewPanel();
     await Promise.all([
       vscode.commands.executeCommand('setContext', 'lazygitvs.activeView', viewPanel),
-      vscode.commands.executeCommand('setContext', 'lazygitvs.statusViewVisible', viewPanel === 'status')
+      vscode.commands.executeCommand('setContext', 'lazygitvs.statusViewVisible', viewPanel === 'status'),
+      vscode.commands.executeCommand('setContext', 'lazygitvs.branchesViewVisible', viewPanel === 'branches'),
+      vscode.commands.executeCommand('setContext', 'lazygitvs.commitsViewVisible', viewPanel === 'commits'),
+      vscode.commands.executeCommand('setContext', 'lazygitvs.stashViewVisible', viewPanel === 'stash'),
+      vscode.commands.executeCommand('setContext', 'lazygitvs.conflictsViewVisible', viewPanel === 'conflicts'),
+      vscode.commands.executeCommand('setContext', 'lazygitvs.tagsViewVisible', viewPanel === 'tags'),
+      vscode.commands.executeCommand('setContext', 'lazygitvs.remotesViewVisible', viewPanel === 'remotes')
     ]);
   }
 

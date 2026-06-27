@@ -69,7 +69,7 @@ test('dogfood asserts the documented visible UI smoke path', () => {
   requireDogfoodInvariant('Escape stays on normal panels', /Escape on \$\{panelKey\} \$\{panelName\} keeps the current panel/);
   requireDogfoodInvariant('commit files detail is reachable', /Commit Enter shows changed files for the selected commit/);
   requireDogfoodInvariant('commit files detail returns to commit list', /Esc from commit files returns to the commit list/);
-  requireDogfoodInvariant('contextual help opens and returns focus', /Contextual help opens and returns to LGVS focus/);
+  requireDogfoodInvariant('contextual help focus return is covered', /Contextual help return keeps LGVS focus after active-panel lazy rendering/);
 });
 
 test('dogfood asserts editor HUNK and LINE flows with real Git state', () => {
