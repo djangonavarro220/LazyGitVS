@@ -4,10 +4,9 @@ All notable changes to LazyGitVS will be documented here.
 
 ## Unreleased
 
-- Dashboard focus now materializes only `2 Files` instead of opening panels `3-8` immediately, avoiding a pile of idle VS Code webview renderer processes.
-- Numeric panel jumps still reveal `3 Branches` through `8 Remotes` on demand, and leaving a panel hides its previous webview so it cannot keep an idle renderer alive.
+- Restored default visibility for LGVS panels `2 Files` through `8 Remotes`; they stay visible instead of being hidden/materialized one at a time.
 - Paused the 10-second LGVS refresh ticker and file-watcher refresh scheduling while the VS Code window is unfocused/minimized, then run one catch-up refresh when focus returns.
-- Stopped idle refresh timers when all LGVS views are hidden and routed webview attach refreshes through the same background-aware scheduler.
+- Stopped idle refresh timers when the LGVS sidebar is closed and routed webview attach refreshes through the same background-aware scheduler.
 
 ## 0.1.102 - Navigation performance
 

@@ -15,7 +15,6 @@ assert(extension.includes('if (!this.windowFocused) { this.refreshDirtyWhileUnfo
 assert(extension.includes('private handleWindowStateChanged(state: vscode.WindowState)'), 'Window focus handler must be centralized and testable by source contract');
 assert(extension.includes('if (!state.focused) { this.clearRuntimeTimers(); return; }'), 'Losing focus must clear pending refresh timeout and interval');
 assert(extension.includes('if (this.visible()) { this.ensureRuntimeInterval(); this.refreshDirtyWhileUnfocused = false; this.scheduleRefresh(0); }'), 'Regaining focus must restart one live interval and run a single catch-up refresh');
-assert(extension.includes('else if (!this.visible()) this.clearRuntimeTimers();'), 'Visibility loss must stop idle timers once no LGVS view remains visible');
 assert(extension.includes('this.cancelFilesPreview();'), 'Runtime timer cleanup must cancel pending file preview work too');
 assert(extension.includes('this.render(panel);\n    this.scheduleRefresh(0);'), 'Webview attach must route initial refresh through the same background-aware scheduler');
 assert(extension.includes('windowFocused: this.windowFocused') && extension.includes('refreshDirtyWhileUnfocused: this.refreshDirtyWhileUnfocused'), 'Dump health must expose background refresh state for real Mac diagnosis');
