@@ -123,7 +123,6 @@ class LazyGitVSController {
   private lazygitConfigFiles: string[] = [];
   private suppressWebviewAutoFocusUntil = 0;
   private pendingWebviewAutoFocus = false;
-  private defaultPanelsRevealed = false;
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.unstagedHunkDecoration = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: 'rgba(210, 153, 34, 0.13)', borderWidth: '0 0 0 2px', borderStyle: 'solid', borderColor: '#d29922' });
@@ -335,15 +334,7 @@ class LazyGitVSController {
 
   async focus() {
     this.loadLazyGitConfig();
-    await this.revealDefaultOpenPanels();
     return this.focusPanel(this.activeViewPanel());
-  }
-  private async revealDefaultOpenPanels() {
-    if (this.defaultPanelsRevealed) return;
-    this.defaultPanelsRevealed = true;
-    for (const panel of PANEL_ORDER.filter((panel): panel is ViewPanel => panel !== 'status')) {
-      await this.revealPanelView(panel).catch(() => undefined);
-    }
   }
   async focusNumberPanel(index: number) {
     const panel = PANEL_ORDER[index - 1];

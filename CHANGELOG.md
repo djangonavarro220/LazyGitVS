@@ -2,6 +2,11 @@
 
 All notable changes to LazyGitVS will be documented here.
 
+## Unreleased
+
+- Dashboard focus now materializes only `2 Files` instead of opening panels `3-8` immediately, avoiding a pile of idle VS Code webview renderer processes.
+- Numeric panel jumps still reveal `3 Branches` through `8 Remotes` on demand.
+
 ## 0.1.102 - Navigation performance
 
 - Files navigation now debounces preview/diff work so fast `j/k` movement updates selection immediately without recalculating every intermediate row.

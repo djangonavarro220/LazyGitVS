@@ -16,13 +16,14 @@ for (const view of views) {
     assert.strictEqual(view.when, 'lazygitvs.statusViewVisible', 'Status should only stay visible while panel 1 owns focus');
   } else {
     assert(!Object.prototype.hasOwnProperty.call(view, 'when'), `SCM view ${view.id} must not be hidden behind activeView context`);
-    assert.strictEqual(view.visibility, 'visible', `SCM view ${view.id} should default open for README/product screenshots`);
+    const expectedVisibility = view.id === 'lazygitvs.filesView' ? 'visible' : 'hidden';
+    assert.strictEqual(view.visibility, expectedVisibility, `SCM view ${view.id} should not spawn an idle webview renderer until the user opens that panel`);
   }
 }
 
-assert(extension.includes('private defaultPanelsRevealed = false;'), 'LGVS should reveal the default-open non-status panels only once on dashboard focus');
-assert(extension.includes("PANEL_ORDER.filter((panel): panel is ViewPanel => panel !== 'status')"), 'default focus should open panels 2-8 while leaving 1 Status hidden until numeric jump');
-assert(extension.includes('await this.revealDefaultOpenPanels();'), 'openDashboard should reveal default-open panels before focusing Files');
+assert(!extension.includes('private defaultPanelsRevealed = false;'), 'LGVS must not reveal panels 2-8 on dashboard focus; each webview costs a Code Helper renderer');
+assert(!extension.includes('revealDefaultOpenPanels'), 'openDashboard should focus only the active panel instead of materializing every SCM webview');
+assert(!extension.includes('await this.revealDefaultOpenPanels();'), 'dashboard focus must not spawn hidden panel renderers just for screenshot convenience');
 assert(!extension.includes('private async makeRoomForLazyGitViews'), 'do not ship fake room-making helpers for native SCM scrolling');
 assert(!extension.includes("executeCommand('workbench.action.decreaseViewSize')"), 'panel jumps must not resize VS Code views');
 assert(!extension.includes("executeCommand('list.scrollDown')"), 'panel jumps must not blindly scroll whichever list has focus');

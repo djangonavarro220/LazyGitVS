@@ -437,7 +437,7 @@ async function dispatchLgvsDomKey(Runtime, key) {
     evidence.push({ step: 'open-lgvs-scm-sidebar', screenshot: await screenshot(Page, '02-open-lgvs-scm-sidebar'), status: status(fixture), textSample: sidebarText });
     addCheck(checks, { name: 'Light theme dogfood profile is active', ok: !!process.env.LGVS_DOGFOOD_FAST_THEME || THEME.toLowerCase().includes('light'), theme: THEME });
     addCheck(checks, { name: `${useVim ? 'VSCodeVim' : 'No Vim'} dogfood variant is active`, ok: true, variant: VARIANT, vimExtension: useVim, vimVersion: vimExtension?.version });
-    checks.push({ name: 'SCM sidebar exposes default LazyGitVS panels while Status stays hidden until 1', ok: !sidebarText.includes('1 STATUS') && ['2 FILES', '3 BRANCHES', '4 COMMITS', '5 STASH', '6 CONFLICTS', '7 TAGS', '8 REMOTES'].every(label => sidebarText.includes(label)), textSample: sidebarText.slice(0, 1200) });
+    checks.push({ name: 'SCM sidebar starts with only Files materialized to avoid idle webview renderers', ok: !sidebarText.includes('1 STATUS') && sidebarText.includes('2 FILES') && !['3 BRANCHES', '4 COMMITS', '5 STASH', '6 CONFLICTS', '7 TAGS', '8 REMOTES'].some(label => sidebarText.includes(label)), textSample: sidebarText.slice(0, 1200) });
     checks.push({ name: 'No noisy focus footer in LGVS panels', ok: !/Focus:\s+LG panel/i.test(sidebarText), textSample: sidebarText.slice(-800) });
     checks.push({ name: 'Right chat / secondary side bar stays closed in screenshots', ok: !/CHAT\s+Build with Agent/i.test(sidebarText), textSample: sidebarText.slice(-800) });
 
@@ -463,7 +463,7 @@ async function dispatchLgvsDomKey(Runtime, key) {
 
     if (process.env.LGVS_DOGFOOD_FAST_THEME) {
       const themeLabel = process.env.LGVS_DOGFOOD_FAST_THEME === 'high-contrast' ? 'High contrast smoke: LGVS stays readable' : 'Dark theme smoke: LGVS stays readable';
-      checks.push({ name: themeLabel, ok: sidebarText.includes('2 FILES') && sidebarText.includes('8 REMOTES') && !/CHAT\s+Build with Agent/i.test(sidebarText), theme: THEME, textSample: sidebarText.slice(0, 1200) });
+      checks.push({ name: themeLabel, ok: sidebarText.includes('2 FILES') && !/CHAT\s+Build with Agent/i.test(sidebarText), theme: THEME, textSample: sidebarText.slice(0, 1200) });
       finishDogfoodReport();
       return;
     }
