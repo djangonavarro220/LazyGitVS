@@ -102,8 +102,8 @@ class LazyGitVSController {
   private refreshTimer?: NodeJS.Timeout;
   private intervalTimer?: NodeJS.Timeout;
   private pendingFilesPreviewTimer?: ReturnType<typeof setTimeout>; private filesPreviewEpoch = 0;
-  private refreshInFlight = false;
-  private refreshPending = false;
+  private refreshInFlight = false; private refreshPending = false;
+  private windowFocused = vscode.window.state.focused; private refreshDirtyWhileUnfocused = false;
   private selectionEpoch = 0;
   private explosion = false;
   private statusLine = '';
@@ -150,6 +150,7 @@ class LazyGitVSController {
       if (event.affectsConfiguration('lazygitvs.showStatusBarMode')) this.updateModeStatusBar();
     }));
     context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => this.handleActiveTextEditorChanged(editor)));
+    context.subscriptions.push(vscode.window.onDidChangeWindowState(state => this.handleWindowStateChanged(state)));
   }
 
   private async updateActiveViewContext() {
@@ -422,8 +423,8 @@ class LazyGitVSController {
       timers: {
         refreshTimerActive: Boolean(this.refreshTimer),
         intervalTimerActive: Boolean(this.intervalTimer),
-        refreshInFlight: this.refreshInFlight,
-        refreshPending: this.refreshPending
+        refreshInFlight: this.refreshInFlight, refreshPending: this.refreshPending,
+        windowFocused: this.windowFocused, refreshDirtyWhileUnfocused: this.refreshDirtyWhileUnfocused
       },
       webviewAutofocus: {
         pending: this.pendingWebviewAutoFocus,
@@ -531,22 +532,22 @@ class LazyGitVSController {
   private visible() { return Array.from(this.views.values()).some(view => view.visible) || !!this.statusTree?.visible; }
 
   private ensureRuntimeInterval() {
+    if (!this.windowFocused) return;
     if (this.intervalTimer) return;
     this.intervalTimer = setInterval(() => this.scheduleRefresh(0), REFRESH_INTERVAL_MS);
     this.context.subscriptions.push({ dispose: () => { if (this.intervalTimer) clearInterval(this.intervalTimer); } });
   }
 
-  private clearRuntimeTimers() {
-    if (this.refreshTimer) { clearTimeout(this.refreshTimer); this.refreshTimer = undefined; }
-    if (this.intervalTimer) { clearInterval(this.intervalTimer); this.intervalTimer = undefined; }
+  private clearRuntimeTimers() { if (this.refreshTimer) { clearTimeout(this.refreshTimer); this.refreshTimer = undefined; } if (this.intervalTimer) { clearInterval(this.intervalTimer); this.intervalTimer = undefined; } }
+
+  private scheduleRefresh(delayMs = 250) { this.updateModeStatusBar(); if (!this.visible()) return; if (!this.windowFocused) { this.refreshDirtyWhileUnfocused = true; return; } if (this.refreshTimer) clearTimeout(this.refreshTimer); this.refreshTimer = setTimeout(() => this.refresh(false).catch(err => vscode.window.showErrorMessage(err.message)), delayMs); }
+
+  private handleWindowStateChanged(state: vscode.WindowState) {
+    this.windowFocused = state.focused;
+    if (!state.focused) { this.clearRuntimeTimers(); return; }
+    if (this.visible()) { this.ensureRuntimeInterval(); this.refreshDirtyWhileUnfocused = false; this.scheduleRefresh(0); }
   }
 
-  private scheduleRefresh(delayMs = 250) {
-    this.updateModeStatusBar();
-    if (!this.visible()) return;
-    if (this.refreshTimer) clearTimeout(this.refreshTimer);
-    this.refreshTimer = setTimeout(() => this.refresh(false).catch(err => vscode.window.showErrorMessage(err.message)), delayMs);
-  }
   private cancelFilesPreview() { if (this.pendingFilesPreviewTimer) clearTimeout(this.pendingFilesPreviewTimer); this.pendingFilesPreviewTimer = undefined; this.filesPreviewEpoch++; }
   private scheduleFilesPreview(viewPanel: ViewPanel) { if (this.pendingFilesPreviewTimer) clearTimeout(this.pendingFilesPreviewTimer); const epoch = ++this.filesPreviewEpoch; const filePath = this.currentFile()?.path; this.pendingFilesPreviewTimer = setTimeout(() => { this.pendingFilesPreviewTimer = undefined; if (epoch !== this.filesPreviewEpoch) return; void this.openCurrent(viewPanel, true, true, { epoch, filePath }).catch(() => undefined); }, 180); }
   private async setEditorHunkMode(active: boolean) {
