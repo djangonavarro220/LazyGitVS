@@ -170,7 +170,7 @@ class LazyGitVSController {
   attach(panel: ViewPanel, view: vscode.WebviewView) {
     this.views.set(panel, view);
     view.webview.options = { enableScripts: true };
-    view.onDidChangeVisibility(() => { if (view.visible) this.scheduleRefresh(0); }, null, this.context.subscriptions);
+    view.onDidChangeVisibility(() => { if (view.visible) this.scheduleRefresh(0); else if (!this.visible()) this.clearRuntimeTimers(); }, null, this.context.subscriptions);
     view.webview.onDidReceiveMessage(async rawMessage => {
       try {
         const message = normalizeWebviewMessage(rawMessage);
@@ -228,13 +228,13 @@ class LazyGitVSController {
       this.ensureRuntimeInterval();
     }
     this.render(panel);
-    this.refresh(false).catch(err => vscode.window.showErrorMessage(err.message));
+    this.scheduleRefresh(0);
   }
 
   attachStatusTree(provider: StatusTreeProvider, tree: vscode.TreeView<vscode.TreeItem>) {
     this.statusTreeProvider = provider;
     this.statusTree = tree;
-    tree.onDidChangeVisibility(() => { if (tree.visible) this.scheduleRefresh(0); }, null, this.context.subscriptions);
+    tree.onDidChangeVisibility(() => { if (tree.visible) this.scheduleRefresh(0); else if (!this.visible()) this.clearRuntimeTimers(); }, null, this.context.subscriptions);
     provider.refresh();
   }
 
@@ -532,15 +532,15 @@ class LazyGitVSController {
   private visible() { return Array.from(this.views.values()).some(view => view.visible) || !!this.statusTree?.visible; }
 
   private ensureRuntimeInterval() {
-    if (!this.windowFocused) return;
+    if (!this.windowFocused || !this.visible()) return;
     if (this.intervalTimer) return;
     this.intervalTimer = setInterval(() => this.scheduleRefresh(0), REFRESH_INTERVAL_MS);
     this.context.subscriptions.push({ dispose: () => { if (this.intervalTimer) clearInterval(this.intervalTimer); } });
   }
 
-  private clearRuntimeTimers() { if (this.refreshTimer) { clearTimeout(this.refreshTimer); this.refreshTimer = undefined; } if (this.intervalTimer) { clearInterval(this.intervalTimer); this.intervalTimer = undefined; } }
+  private clearRuntimeTimers() { if (this.refreshTimer) { clearTimeout(this.refreshTimer); this.refreshTimer = undefined; } if (this.intervalTimer) { clearInterval(this.intervalTimer); this.intervalTimer = undefined; } this.cancelFilesPreview(); }
 
-  private scheduleRefresh(delayMs = 250) { this.updateModeStatusBar(); if (!this.visible()) return; if (!this.windowFocused) { this.refreshDirtyWhileUnfocused = true; return; } if (this.refreshTimer) clearTimeout(this.refreshTimer); this.refreshTimer = setTimeout(() => this.refresh(false).catch(err => vscode.window.showErrorMessage(err.message)), delayMs); }
+  private scheduleRefresh(delayMs = 250) { if (!this.visible()) { this.clearRuntimeTimers(); return; } this.updateModeStatusBar(); if (!this.windowFocused) { this.refreshDirtyWhileUnfocused = true; return; } if (this.refreshTimer) clearTimeout(this.refreshTimer); this.refreshTimer = setTimeout(() => this.refresh(false).catch(err => vscode.window.showErrorMessage(err.message)), delayMs); }
 
   private handleWindowStateChanged(state: vscode.WindowState) {
     this.windowFocused = state.focused;

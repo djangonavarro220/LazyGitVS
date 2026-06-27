@@ -15,7 +15,7 @@ assert(extension.includes('private pendingWebviewAutoFocus = false;'), 'webview 
 assert(extension.includes('const shouldFocus = this.consumeWebviewAutoFocus(viewPanel);'), 'rendering active panels must not steal Command Palette/QuickPick focus during later refreshes');
 assert(extension.includes("type === 'commandPalette'"), 'LGVS webviews must explicitly hand Ctrl/Cmd+Shift+P and F1 to VS Code Command Palette');
 assert(extension.includes("workbench.action.showCommands") || extension.includes("workbench.action.quickOpen', '>'"), 'Command Palette handoff must use VS Code native command picker, not a custom LGVS picker');
-assert(extension.includes("this.refresh(false).catch(err => vscode.window.showErrorMessage(err.message));"), 'webview attach/visibility refresh must not auto-open previews that steal Command Palette focus');
+assert(extension.includes('this.render(panel);\n    this.scheduleRefresh(0);'), 'webview attach must refresh through the background-aware scheduler without auto-opening previews that steal Command Palette focus');
 assert(dogfood.includes("LGVS_DOGFOOD_FAST_COMMAND_PALETTE"), 'UI dogfood must cover Command Palette staying open from LGVS sidebar focus');
 assert(dogfood.includes("Command Palette stays open when invoked from LGVS sidebar focus"), 'UI dogfood must assert command palette survives webview refresh/autofocus races');
 assert(dogfood.includes("step: 'files-discard-modal-focus-restore'"), 'UI dogfood must exercise d-discard modal focus restoration from the Files panel');
