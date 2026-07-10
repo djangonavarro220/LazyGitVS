@@ -6,6 +6,9 @@ This repo builds **LazyGitVS / LGVS**, a VS Code extension that adapts real lazy
 
 - Upstream lazygit is the product spec. Prefer lazygit semantics, config names, keybindings, menus, and wording before inventing LGVS-only behavior.
 - LGVS is a VS Code-native adaptation, not a terminal-in-a-webview cosplay.
+- LGVS must feel immediate. Speed, low latency, efficient refresh/rendering, and zero avoidable input lag are product requirements, not optional polish.
+- Preserve responsiveness under large repositories, multi-repo workspaces, background refreshes, and repeated keyboard navigation. Prefer measured/coalesced work and active-panel-only rendering over wasteful polling or full rerenders.
+- Any feature that matches lazygit functionally but introduces noticeable lag is not accepted until performance is measured and fixed.
 - Core UX: keyboard-first, SCM sidebar, real VS Code editors/diffs/previews, no visible terminal.
 - Do not shift lazygit muscle-memory numbers:
   - `1` Status
