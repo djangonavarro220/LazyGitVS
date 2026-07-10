@@ -99,6 +99,7 @@ Enter       Main action
 ?           Contextual command menu
 /           Search/filter
 r           Refresh
+z / Z       Undo / redo commit and branch actions via reflog
 Esc         Clear filter / back
 q           Close sidebar
 ```
@@ -166,6 +167,7 @@ Hunk/line selection is shown in the editor with highlights and gutter markers. S
 - hunk and line stage/unstage
 - branch, commit, stash, conflict, tag, and remote panels
 - push, pull/fetch, stash, discard, reset, branch, commit, and conflict QuickPick menus
+- confirmed `z` / `Z` undo/redo for commit and branch actions via Git reflog
 - lazygit config/keybinding reading where implemented
 - `LazyGitVS: Reset state`, `LazyGitVS: Dump health`, and `LazyGitVS: Enter current file HUNK mode` recovery/debug commands
 - UI dogfood tests in GitHub Actions
@@ -181,6 +183,7 @@ These actions require confirmation:
 - discard file / hunk / line
 - reset hard
 - reset to commit
+- reflog undo/redo resets and checkouts
 - drop stash
 - `💣 Nuke working tree`
 

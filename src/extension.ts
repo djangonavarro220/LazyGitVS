@@ -17,6 +17,7 @@ import { dangerousGitMenuItem } from './destructiveActions';
 import { showGitOperationOptions } from './statusGitOperation';
 import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, openPath, previewCommitFileDiff, previewDiff, previewStashFileDiff, revealVisibleEditorLine, showCommitPreview, showStashPreview } from './workspaceActions';
 import { deletedGhostDecorations, editorLineRange, excludeRangeLines, hunkChangedEditorRanges, rangeLineSet } from './hunkEditorDecorations';
+import { planAndPerformReflogAction, type ReflogDirection } from './undoRedo';
 function gutterBadge(letter: 'S' | 'U', fill: string) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="12" rx="3" fill="${fill}"/><text x="8" y="11.5" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="10" font-weight="700" fill="#ffffff">${letter}</text></svg>`;
   return vscode.Uri.parse(`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
@@ -197,6 +198,8 @@ class LazyGitVSController {
         if (type === 'repoMenu') await this.recentReposMenu();
         if (type === 'operationOptions') await this.openOperationOptions();
         if (type === 'helpMenu') await this.helpMenu(panel);
+        if (type === 'reflogUndo') await this.reflogUndo();
+        if (type === 'reflogRedo') await this.reflogRedo();
         if (type === 'commitAction') await this.runCommitCommand(String(message.key ?? ''));
         if (type === 'panelAction') await this.runPanelCommand(panel, String(message.key ?? ''));
         if (type === 'moveBlock') await this.moveBlock(panel, message.delta);
@@ -1008,6 +1011,13 @@ class LazyGitVSController {
     await pickGitAction('Status options', this.statusCommandCatalog());
   }
   private keyLabel(value: string | string[] | undefined): string { return Array.isArray(value) ? String(value[0] ?? '') : String(value ?? ''); }
+  private reflogCommandCatalog(): GitMenuItem[] {
+    const key = (value: string | string[] | undefined) => this.keyLabel(value);
+    return [
+      { key: key(this.lazygitKeymap.universal.undo) || 'z', label: '$(discard) Undo', description: 'The reflog will be used to determine what git command to run to undo the last git command. This does not include changes to the working tree; only commits are taken into consideration.', run: async () => this.reflogUndo() },
+      { key: key(this.lazygitKeymap.universal.redo) || 'Z', label: '$(redo) Redo', description: 'The reflog will be used to determine what git command to run to redo the last git command. This does not include changes to the working tree; only commits are taken into consideration.', run: async () => this.reflogRedo() }
+    ];
+  }
   private filesCommandCatalog(viewPanel: ViewPanel): GitMenuItem[] {
     const u = this.lazygitKeymap.universal, f = this.lazygitKeymap.files;
     const key = (value: string | string[] | undefined) => this.keyLabel(value);
@@ -1154,16 +1164,17 @@ class LazyGitVSController {
   }
   private commandRegistry(viewPanel: ViewPanel): GitMenuItem[] {
     const panel = this.panelForView(viewPanel);
-    if (panel === 'status') return this.statusCommandCatalog();
-    if (panel === 'files') return this.filesCommandCatalog(viewPanel);
-    if (panel === 'hunks') return this.hunkCommandCatalog(viewPanel);
-    if (panel === 'branches') return this.branchCommandCatalog();
-    if (panel === 'tags') return this.tagCommandCatalog();
-    if (panel === 'remotes') return this.remoteCommandCatalog();
-    if (panel === 'commits') return this.commitCommandCatalog();
-    if (panel === 'stash') return this.stashCommandCatalog();
-    if (panel === 'conflicts') return this.conflictCommandCatalog();
-    return [];
+    let contextual: GitMenuItem[] = [];
+    if (panel === 'status') contextual = this.statusCommandCatalog();
+    else if (panel === 'files') contextual = this.filesCommandCatalog(viewPanel);
+    else if (panel === 'hunks') contextual = this.hunkCommandCatalog(viewPanel);
+    else if (panel === 'branches') contextual = this.branchCommandCatalog();
+    else if (panel === 'tags') contextual = this.tagCommandCatalog();
+    else if (panel === 'remotes') contextual = this.remoteCommandCatalog();
+    else if (panel === 'commits') contextual = this.commitCommandCatalog();
+    else if (panel === 'stash') contextual = this.stashCommandCatalog();
+    else if (panel === 'conflicts') return this.conflictCommandCatalog();
+    return [...this.reflogCommandCatalog(), ...contextual];
   }
 
 
@@ -1185,6 +1196,16 @@ class LazyGitVSController {
   private async push() { await runGitAction('Push', ['push']); await this.refresh(true); }
   private async pull() { await runGitAction('Pull', ['pull']); await this.refresh(true); }
   private async fetch() { await runGitAction('Fetch', ['fetch']); await this.refresh(true); }
+  async reflogUndo() { if (!this.reflogActionBlockedOnCurrentSurface()) return this.runReflogAction('undo'); }
+  async reflogRedo() { if (!this.reflogActionBlockedOnCurrentSurface()) return this.runReflogAction('redo'); }
+  private reflogActionBlockedOnCurrentSurface(): boolean { return this.editorHunkMode || this.editorEditMode || this.panelForView(this.activeViewPanel()) === 'conflicts'; }
+  private async runReflogAction(direction: ReflogDirection) {
+    this.loadLazyGitConfig();
+    try {
+      const changed = await planAndPerformReflogAction(workspaceRoot(), direction, async (prompt, title) => { const accepted = await vscode.window.showWarningMessage(prompt, { modal: true }, title) === title; if (accepted) { this.statusLine = direction === 'undo' ? 'Undoing' : 'Redoing'; this.renderAll(); } return accepted; });
+      if (changed) await this.refresh(true);
+    } finally { this.statusLine = ''; this.renderAll(); }
+  }
   private async runCommitCommand(typed: string) {
     const item = findMenuItemByKey(this.commitCommandCatalog(), typed);
     if (!item) return;
@@ -1664,7 +1685,7 @@ class LazyGitVSController {
       document.querySelector('.rows')?.addEventListener('click',e=>{ const row=e.target.closest('.row[data-index]'); if(!row)return; document.body.focus(); vscode.postMessage({type:'select',index:Number(row.dataset.index)}); });
       document.querySelector('.rows')?.addEventListener('dblclick',e=>{ const row=e.target.closest('.row[data-index]'); if(!row)return; document.body.focus(); vscode.postMessage({type:'select',index:Number(row.dataset.index)}); vscode.postMessage({type:'enter'}); });
       window.addEventListener('keydown',e=>{ if(!keyboardEnabled)return; if((e.ctrlKey||e.metaKey)&&e.shiftKey&&String(e.key).toLowerCase()==='p'){e.preventDefault();vscode.postMessage({type:'commandPalette'});return;} if(e.key==='F1'){e.preventDefault();vscode.postMessage({type:'commandPalette'});return;} const u=keymap.universal, f=keymap.files, m=keymap.main; const jump=Array.isArray(u.jumpToBlock)?u.jumpToBlock:[]; const jumpIndex=jump.indexOf(e.key); const jumpPanel = jumpIndex>=0 ? panels[String(jumpIndex+1)] : panels[e.key]; if(jumpPanel){e.preventDefault();vscode.postMessage({type:'switchPanel',panel:jumpPanel});return;}
-        if(e.key==='?'){e.preventDefault();vscode.postMessage({type:'helpMenu'});return;} if(hit(e,u.focusMainView)){e.preventDefault();vscode.postMessage({type:'focusMainView'});return;} if(e.shiftKey&&e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:1});return;} if(e.shiftKey&&e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:-1});return;} if(e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;} if(hit(e,u.prevPage)){e.preventDefault();vscode.postMessage({type:'move',delta:-10});return;} if(hit(e,u.nextPage)){e.preventDefault();vscode.postMessage({type:'move',delta:10});return;} if(hit(e,u.gotoTop,u.gotoTopAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'top'});return;} if(hit(e,u.gotoBottom,u.gotoBottomAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'bottom'});return;} if(hit(e,u.toggleRangeSelect)){e.preventDefault();vscode.postMessage({type:'rangeToggle'});return;} if(hit(e,u.startSearch)){e.preventDefault();vscode.postMessage({type:'search'});return;} if(panel==='files'&&hit(e,f.openStatusFilter)){e.preventDefault();vscode.postMessage({type:'statusFilter'});return;} if(panel==='files'&&hit(e,f.toggleTreeView)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='files'&&hit(e,f.collapseAll)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='files'&&hit(e,f.expandAll)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(hit(e,u.nextItem,u.nextItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(hit(e,u.prevItem,u.prevItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;}
+        if(e.key==='?'){e.preventDefault();vscode.postMessage({type:'helpMenu'});return;} if(panel!=='conflicts'&&hit(e,u.undo)){e.preventDefault();vscode.postMessage({type:'reflogUndo'});return;} if(panel!=='conflicts'&&hit(e,u.redo)){e.preventDefault();vscode.postMessage({type:'reflogRedo'});return;} if(hit(e,u.focusMainView)){e.preventDefault();vscode.postMessage({type:'focusMainView'});return;} if(e.shiftKey&&e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:1});return;} if(e.shiftKey&&e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:-1});return;} if(e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;} if(hit(e,u.prevPage)){e.preventDefault();vscode.postMessage({type:'move',delta:-10});return;} if(hit(e,u.nextPage)){e.preventDefault();vscode.postMessage({type:'move',delta:10});return;} if(hit(e,u.gotoTop,u.gotoTopAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'top'});return;} if(hit(e,u.gotoBottom,u.gotoBottomAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'bottom'});return;} if(hit(e,u.toggleRangeSelect)){e.preventDefault();vscode.postMessage({type:'rangeToggle'});return;} if(hit(e,u.startSearch)){e.preventDefault();vscode.postMessage({type:'search'});return;} if(panel==='files'&&hit(e,f.openStatusFilter)){e.preventDefault();vscode.postMessage({type:'statusFilter'});return;} if(panel==='files'&&hit(e,f.toggleTreeView)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='files'&&hit(e,f.collapseAll)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='files'&&hit(e,f.expandAll)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(hit(e,u.nextItem,u.nextItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(hit(e,u.prevItem,u.prevItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;}
         if(hit(e,u.createRebaseOptionsMenu)){e.preventDefault();vscode.postMessage({type:'operationOptions'});return;} if(hit(e,u.diffingMenu,u.diffingMenuAlt)){e.preventDefault();vscode.postMessage({type:'diffingMenu'});return;} if(hit(e,u.nextBlock,u.nextBlockAlt,u.nextBlockAlt2)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:1});return;} if(hit(e,u.prevBlock,u.prevBlockAlt,u.prevBlockAlt2)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:-1});return;}
         const c=keymap.commits; if(panel==='commits'&&hit(e,c.checkoutCommit,c.copyCommitAttributeToClipboard,c.newBranch,c.renameCommit,c.amendToCommit,c.createFixupCommit,c.markCommitAsFixup,c.cherryPickCopy,c.pasteCommits,c.revertCommit,c.createTag,c.tagCommit,c.viewResetOptions,c.openInBrowser,c.openLogMenu)){e.preventDefault();vscode.postMessage({type:'commitAction',key:norm(e)});return;}
         const b=keymap.branches, st=keymap.stash; if(panel==='status'&&['o','e','a','A','u','<enter>'].includes(norm(e))){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='hunks'&&hit(e,u.select,u.togglePanel,u.remove,m.toggleSelectHunk)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='branches'&&hit(e,u.select,u.new,u.remove,b.checkoutBranchByName,b.checkoutPreviousBranch,b.renameBranch,b.mergeIntoCurrentBranch,b.rebaseBranch,b.forceCheckoutBranch,b.setUpstream,b.fastForward,b.createTag,b.sortOrder)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='stash'&&hit(e,u.goInto,st.apply,st.popStash,st.newBranch,st.renameStash,u.remove)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='tags'&&hit(e,u.select,u.new,u.remove,b.createTag,b.pushTag)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='remotes'&&hit(e,u.new,u.edit,u.remove,b.fetchRemote,b.addForkRemote)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='conflicts'&&(hit(e,u.goInto,u.openFile)||['1','2','b','m'].includes(norm(e)))){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;}
@@ -1775,6 +1796,8 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.resetState', () => app.resetState()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.dumpHealth', () => app.dumpHealth()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.helpCurrentPanel', () => app.helpCurrentPanel()));
+  context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.undoReflog', () => app.reflogUndo()));
+  context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.redoReflog', () => app.reflogRedo()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.enterCurrentFileHunkMode', () => app.enterCurrentFileHunkMode()));
   PANEL_ORDER.forEach((panel, index) => {
     context.subscriptions.push(vscode.commands.registerCommand(`lazygitvs.focusPanel${index + 1}`, () => app.focusNumberPanel(index + 1)));

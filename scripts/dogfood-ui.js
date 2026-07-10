@@ -616,6 +616,27 @@ async function clickWorkbenchTreeRow(Runtime, Input, textPart) {
     evidence.push({ step: 'status-select-primary-repo-before-main-flow', screenshot: await screenshot(Page, '02-status-select-primary-repo-before-main-flow'), status: status(fixture), pickedPrimary, textSample: primarySelectedText });
     checks.push({ name: 'Dogfood explicitly selects the primary repo before file actions', ok: !!pickedPrimary && /2 FILES/.test(primarySelectedText) && /README\.md|settings\.json|src\/app\.ts/.test(primarySelectedText), pickedPrimary, textSample: primarySelectedText.slice(0, 1200) });
 
+    if (process.env.LGVS_DOGFOOD_UNDO_REDO) {
+      git(fixture, 'add', '-A');
+      git(fixture, 'commit', '-m', 'undo redo baseline');
+      write(path.join(fixture, 'UNDO_REDO.md'), 'reflog dogfood\n');
+      git(fixture, 'add', 'UNDO_REDO.md');
+      git(fixture, 'commit', '-m', 'undo redo target');
+      const targetHead = git(fixture, 'rev-parse', 'HEAD');
+      const targetReflog = git(fixture, 'reflog', '--format=%H %gs');
+      const secondaryHead = secondaryRepo ? git(secondaryRepo, 'rev-parse', 'HEAD') : '';
+
+      await runCommandPalette(Input, 'LazyGitVS: Undo');
+      await sleep(STEP_DELAY);
+      const cancelPrompt = await pageText(Runtime);
+      evidence.push({ step: 'undo-confirmation-cancel', screenshot: await screenshot(Page, '02-undo-confirmation-cancel', { force: true }), head: git(fixture, 'rev-parse', 'HEAD'), textSample: cancelPrompt.slice(-1200) });
+      await key(Input, 'Escape');
+      await sleep(STEP_DELAY);
+      checks.push({ name: 'Undo cancellation leaves HEAD, reflog, and the non-selected repository unchanged', ok: git(fixture, 'rev-parse', 'HEAD') === targetHead && git(fixture, 'reflog', '--format=%H %gs') === targetReflog && (!secondaryRepo || git(secondaryRepo, 'rev-parse', 'HEAD') === secondaryHead) });
+      finishDogfoodReport();
+      return;
+    }
+
     if (process.env.LGVS_DOGFOOD_FAST_COMMIT_FILE_TREE) {
       checks.push({ name: 'Commit-file lane selects the fixture from a real multi-repository workspace', ok: !!pickedPrimary && !!secondaryRepo && !!deepRepo, fixture });
       await exerciseCommitFileTree();

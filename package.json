@@ -34,6 +34,8 @@
     "onCommand:lazygitvs.resetState",
     "onCommand:lazygitvs.dumpHealth",
     "onCommand:lazygitvs.helpCurrentPanel",
+    "onCommand:lazygitvs.undoReflog",
+    "onCommand:lazygitvs.redoReflog",
     "onCommand:lazygitvs.enterCurrentFileHunkMode",
     "onCommand:lazygitvs.changedFiles",
     "onCommand:lazygitvs.enterSelected",
@@ -89,6 +91,16 @@
       {
         "command": "lazygitvs.helpCurrentPanel",
         "title": "LazyGitVS: Help current panel"
+      },
+      {
+        "command": "lazygitvs.undoReflog",
+        "title": "LazyGitVS: Undo",
+        "enablement": "lazygitvs.keyboardMode && !lazygitvs.editorHunkMode && lazygitvs.activeView != conflicts"
+      },
+      {
+        "command": "lazygitvs.redoReflog",
+        "title": "LazyGitVS: Redo",
+        "enablement": "lazygitvs.keyboardMode && !lazygitvs.editorHunkMode && lazygitvs.activeView != conflicts"
       },
       {
         "command": "lazygitvs.enterCurrentFileHunkMode",
@@ -251,6 +263,16 @@
       }
     },
     "keybindings": [
+      {
+        "key": "z",
+        "command": "lazygitvs.undoReflog",
+        "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
+      },
+      {
+        "key": "shift+z",
+        "command": "lazygitvs.redoReflog",
+        "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
+      },
       {
         "key": "down",
         "command": "lazygitvs.editorHunkNext",
@@ -659,7 +681,8 @@
     "dogfood:ui:high-contrast": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_THEME=high-contrast LGVS_DOGFOOD_THEME=\"Default High Contrast\" node scripts/dogfood-ui.js",
     "dogfood:ui:git-failure": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_GIT_FAILURE=1 node scripts/dogfood-ui.js",
     "dogfood:ui:destructive-cancel": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_DESTRUCTIVE_CANCEL=1 node scripts/dogfood-ui.js",
-    "dogfood:ui:operation-status": "node scripts/run-operation-dogfood.js"
+    "dogfood:ui:operation-status": "node scripts/run-operation-dogfood.js",
+    "dogfood:ui:undo-redo": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_UNDO_REDO=1 LGVS_DOGFOOD_CDP_PORT=9347 node scripts/dogfood-ui.js"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

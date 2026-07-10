@@ -14,6 +14,7 @@ Last reviewed after commit `e432187 feat: close next lazygit parity gaps`.
 - [x] Typed QuickPick key execution.
 - [x] Shared command registry for contextual help, QuickPick entries, and typed panel actions.
 - [x] CSP + script nonce for webviews.
+- [x] Global `z` / `Z` reflog undo/redo on upstream-equivalent LGVS sidebar surfaces, with lazygit markers, confirmations, operation-state guards, autostash behavior, and selected-repository isolation. Conflicts and editor HUNK/LINE retain their own/non-reflog scope.
 
 ### Navigation / panels
 - [x] LazyGit-style numbered panels: Status, Files, Branches, Commits, Stash, Conflicts, Tags, Remotes.
@@ -145,7 +146,6 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 ## Remaining gaps
 
 ### Global workflows
-- [ ] `z` / `Z` undo/redo via reflog.
 - [ ] `@` command log options and command log focus.
 - [ ] `:` execute shell command prompt.
 - [ ] `<ctrl+p>` custom patch options.
@@ -272,10 +272,9 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 ## Recommended next order
 
 1. Operation-state follow-up for revert, plus bisect options in Commits.
-2. Undo/redo via reflog.
-3. Commit workflows: squash/drop/edit/rebase/move/autosquash.
-4. Files missing keys: `g`, `<ctrl+f>`, `<ctrl+t>`, `M`.
-5. Worktrees/Reflog/Submodules panels.
-6. Custom commands/custom pagers, late and sandboxed. This is useful but sharp.
-7. i18n/options-map label cleanup.
-8. VS Code command surface expansion.
+2. Commit workflows: squash/drop/edit/rebase/move/autosquash.
+3. Files missing keys: `g`, `<ctrl+f>`, `<ctrl+t>`, `M`.
+4. Worktrees/Reflog/Submodules panels.
+5. Custom commands/custom pagers, late and sandboxed. This is useful but sharp.
+6. i18n/options-map label cleanup.
+7. VS Code command surface expansion.
