@@ -155,9 +155,11 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 - [ ] `<ctrl+z>` suspend app is intentionally not meaningful in VS Code; document/ignore as VS Code-native exception.
 
 ### Operation state machine
-- [x] Model merge/rebase/cherry-pick/bisect in-progress states in a tested Git detector with safe action metadata.
-- [ ] Show state-specific rows/actions in the SCM UI.
-- [ ] Continue / abort / skip workflows.
+- [x] Model merge/rebase/cherry-pick in-progress states in a tested Git detector with safe action metadata.
+- [x] Show merge/rebase/cherry-pick state in Status as `(operation) repo → branch`.
+- [x] Open operation options with `m`: `c` continue, `a` abort, and `s` skip where applicable.
+- [ ] Revert operation status/options remain missing from upstream's `WorkingTreeState` parity.
+- [ ] Bisect remains a Commits-panel gap (`b` / bisect controller); it is intentionally not a Status operation.
 - [ ] Conflict follow-up prompts matching lazygit.
 
 ### Files gaps
@@ -269,7 +271,7 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 
 ## Recommended next order
 
-1. Operation state machine for merge/rebase/cherry-pick/bisect.
+1. Operation-state follow-up for revert, plus bisect options in Commits.
 2. Undo/redo via reflog.
 3. Commit workflows: squash/drop/edit/rebase/move/autosquash.
 4. Files missing keys: `g`, `<ctrl+f>`, `<ctrl+t>`, `M`.

@@ -16,6 +16,7 @@ function targetLane(env = process.env) {
     env.LGVS_DOGFOOD_LARGE_REPO && 'large-repo',
     env.LGVS_DOGFOOD_GIT_FAILURE && 'git-failure',
     env.LGVS_DOGFOOD_DESTRUCTIVE_CANCEL && 'destructive-cancel',
+    env.LGVS_DOGFOOD_OPERATION_STATUS && 'operation-status',
     env.LGVS_DOGFOOD_FAST_THEME && `${env.LGVS_DOGFOOD_FAST_THEME}-theme`
   ].filter(Boolean).join('-') || 'full';
 }

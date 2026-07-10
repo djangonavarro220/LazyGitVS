@@ -57,6 +57,7 @@
     "onView:lazygitvs.conflictsView",
     "onCommand:lazygitvs.statusRecentRepos",
     "onCommand:lazygitvs.statusEnter",
+    "onCommand:lazygitvs.openOperationOptions",
     "onCommand:lazygitvs.focusPanel1",
     "onCommand:lazygitvs.focusPanel2",
     "onCommand:lazygitvs.focusPanel3",
@@ -140,6 +141,10 @@
       {
         "command": "lazygitvs.statusEnter",
         "title": "LazyGitVS: Select Status Repository"
+      },
+      {
+        "command": "lazygitvs.openOperationOptions",
+        "title": "LazyGitVS: Open Operation Options"
       },
       {
         "command": "lazygitvs.focusPanel1",
@@ -607,6 +612,11 @@
         "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
       },
       {
+        "key": "m",
+        "command": "lazygitvs.openOperationOptions",
+        "when": "focusedView == lazygitvs.statusView && lazygitvs.statusViewVisible && !editorTextFocus"
+      },
+      {
         "key": "tab",
         "command": "lazygitvs.focusPanel2",
         "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
@@ -647,7 +657,8 @@
     "dogfood:ui:dark-theme": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_THEME=dark LGVS_DOGFOOD_THEME=\"Default Dark Modern\" node scripts/dogfood-ui.js",
     "dogfood:ui:high-contrast": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_THEME=high-contrast LGVS_DOGFOOD_THEME=\"Default High Contrast\" node scripts/dogfood-ui.js",
     "dogfood:ui:git-failure": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_GIT_FAILURE=1 node scripts/dogfood-ui.js",
-    "dogfood:ui:destructive-cancel": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_DESTRUCTIVE_CANCEL=1 node scripts/dogfood-ui.js"
+    "dogfood:ui:destructive-cancel": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_DESTRUCTIVE_CANCEL=1 node scripts/dogfood-ui.js",
+    "dogfood:ui:operation-status": "node scripts/run-operation-dogfood.js"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

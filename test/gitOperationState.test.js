@@ -1,4 +1,5 @@
 const assert = require('assert');
+const cp = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { cleanupFixture, git, initRepo } = require('./helpers/gitFixtures');
@@ -26,10 +27,7 @@ function test(name, fn) {
   }
 }
 
-function stateActions(state) {
-  return state ? state.actions.map(action => action.command) : [];
-}
-
+function stateActions(state) { return state ? state.actions.map(action => action.command) : []; }
 function createConflictBranches(dir) {
   git(dir, 'checkout', '-b', 'other');
   write(path.join(dir, 'file.txt'), 'other\n');
@@ -38,49 +36,90 @@ function createConflictBranches(dir) {
   write(path.join(dir, 'file.txt'), 'master\n');
   git(dir, 'commit', '-am', 'master');
 }
+function resolveAndStage(dir) { write(path.join(dir, 'file.txt'), 'resolved\n'); git(dir, 'add', 'file.txt'); }
+function runOperationAction(dir, action) {
+  return cp.execFileSync('git', action.args, {
+    cwd: dir,
+    encoding: 'utf8',
+    env: { ...process.env, GIT_EDITOR: 'true' },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+}
 
+// Real Git conflict fixtures, not marker files: these prove the detector sees
+// the same sequencer state that git itself exposes to lazygit.
 test('detects no in-progress Git operation in a normal repo', dir => {
   assert.equal(detectGitOperationState(dir), undefined);
 });
 
-test('detects merge state and exposes continue/abort actions with confirmation on abort', dir => {
+test('merge Status state uses lazygit lowercase label, exact menu, c/a order, and can continue for real', dir => {
   createConflictBranches(dir);
   try { git(dir, 'merge', 'other'); } catch (_) {}
   const state = detectGitOperationState(dir);
   assert.equal(state.kind, 'merge');
-  assert.equal(state.label, 'Merge in progress');
-  assert.deepEqual(stateActions(state), ['continue', 'abort']);
-  assert.equal(state.actions.find(action => action.command === 'abort').requiresConfirmation, true);
+  assert.equal(state.label, 'merging');
+  assert.equal(state.menuTitle, 'Merge options');
+  assert.deepEqual(state.actions.map(action => [action.key, action.label]), [['c', 'continue'], ['a', 'abort']]);
+  assert.throws(() => runOperationAction(dir, state.actions[0]), /unmerged|conflict|resolved/i, 'continue must not stage conflict resolutions implicitly');
+  assert.equal(detectGitOperationState(dir).kind, 'merge', 'a rejected unstaged continue must leave the operation intact');
+  resolveAndStage(dir);
+  runOperationAction(dir, state.actions[0]);
+  assert.equal(detectGitOperationState(dir), undefined, 'merge continue must finish only after explicit staging');
 });
 
-test('detects rebase state and exposes continue/abort/skip actions', dir => {
+test('rebase Status state exposes c/a/s in upstream order and abort is confirmed by the UI layer', dir => {
   createConflictBranches(dir);
   try { git(dir, 'rebase', 'other'); } catch (_) {}
   const state = detectGitOperationState(dir);
   assert.equal(state.kind, 'rebase');
-  assert.equal(state.label, 'Rebase in progress');
-  assert.deepEqual(stateActions(state), ['continue', 'abort', 'skip']);
-  assert.equal(state.actions.find(action => action.command === 'abort').requiresConfirmation, true);
+  assert.equal(state.label, 'rebasing');
+  assert.equal(state.menuTitle, 'Rebase options');
+  assert.deepEqual(state.actions.map(action => [action.key, action.label]), [['c', 'continue'], ['a', 'abort'], ['s', 'skip']]);
+  assert.equal(state.actions[1].requiresConfirmation, true);
+  git(dir, ...state.actions[1].args);
+  assert.equal(detectGitOperationState(dir), undefined, 'rebase abort must perform the real Git abort');
 });
 
-test('detects cherry-pick state and exposes continue/abort/skip actions', dir => {
+test('cherry-pick Status state exposes c/a/s and keeps bisect out of Status', dir => {
   createConflictBranches(dir);
-  git(dir, 'checkout', 'master');
   try { git(dir, 'cherry-pick', 'other'); } catch (_) {}
   const state = detectGitOperationState(dir);
   assert.equal(state.kind, 'cherry-pick');
-  assert.equal(state.label, 'Cherry-pick in progress');
-  assert.deepEqual(stateActions(state), ['continue', 'abort', 'skip']);
-  assert.equal(state.actions.find(action => action.command === 'abort').requiresConfirmation, true);
-});
-
-test('detects bisect state and exposes good/bad/reset actions with confirmation on reset', dir => {
+  assert.equal(state.label, 'cherry-picking');
+  assert.equal(state.menuTitle, 'Cherry-pick options');
+  assert.deepEqual(state.actions.map(action => [action.key, action.label]), [['c', 'continue'], ['a', 'abort'], ['s', 'skip']]);
+  git(dir, ...state.actions[1].args);
   write(path.join(dir, 'file.txt'), 'second\n');
   git(dir, 'commit', '-am', 'second');
   git(dir, 'bisect', 'start');
+  assert.equal(detectGitOperationState(dir), undefined, 'bisect belongs to lazygit Commits/BisectController, never Status WorkingTreeState');
+  git(dir, 'bisect', 'reset');
+});
+
+test('rebase state wins over its matching internal CHERRY_PICK_HEAD', dir => {
+  createConflictBranches(dir);
+  try { git(dir, 'rebase', 'other'); } catch (_) {}
+  const gitDir = git(dir, 'rev-parse', '--git-dir').trim();
+  const stoppedShaPath = path.join(dir, gitDir, 'rebase-merge', 'stopped-sha');
+  const stoppedSha = fs.readFileSync(stoppedShaPath, 'utf8').trim();
+  write(path.join(dir, gitDir, 'CHERRY_PICK_HEAD'), `${stoppedSha}\n`);
+  assert.equal(detectGitOperationState(dir).kind, 'rebase', 'Git rebase internals must not be misreported as a user cherry-pick');
+});
+
+test('rebase skip action advances the real sequencer and clears the operation', dir => {
+  createConflictBranches(dir);
+  try { git(dir, 'rebase', 'other'); } catch (_) {}
   const state = detectGitOperationState(dir);
-  assert.equal(state.kind, 'bisect');
-  assert.equal(state.label, 'Bisect in progress');
-  assert.deepEqual(stateActions(state), ['good', 'bad', 'reset']);
-  assert.equal(state.actions.find(action => action.command === 'reset').requiresConfirmation, true);
+  assert.equal(state.kind, 'rebase');
+  runOperationAction(dir, state.actions.find(action => action.command === 'skip'));
+  assert.equal(detectGitOperationState(dir), undefined);
+});
+
+test('cherry-pick skip action advances the real sequencer and clears the operation', dir => {
+  createConflictBranches(dir);
+  try { git(dir, 'cherry-pick', 'other'); } catch (_) {}
+  const state = detectGitOperationState(dir);
+  assert.equal(state.kind, 'cherry-pick');
+  runOperationAction(dir, state.actions.find(action => action.command === 'skip'));
+  assert.equal(detectGitOperationState(dir), undefined);
 });

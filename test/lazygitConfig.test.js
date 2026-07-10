@@ -45,6 +45,7 @@ test('readLazyGitKeymap merges LG_CONFIG_FILE over defaults read-only', () => {
 keybinding:
   universal:
     push: X
+    createRebaseOptionsMenu: x
   files:
     stashAllChanges: Z
 `);
@@ -55,6 +56,7 @@ keybinding:
     const result = readLazyGitKeymap();
     assert.deepEqual(result.files, [config]);
     assert.equal(result.keymap.universal.push, 'X');
+    assert.equal(result.keymap.universal.createRebaseOptionsMenu, 'x');
     assert.equal(result.keymap.files.stashAllChanges, 'Z');
     assert.equal(result.keymap.universal.pull, DEFAULT_LAZYGIT_KEYMAP.universal.pull);
     assert.equal(fs.readFileSync(config, 'utf8').includes('push: X'), true);

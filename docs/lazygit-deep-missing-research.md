@@ -90,9 +90,9 @@ LGVS currently covers the core spine only: Status, Files, Hunk/Main, Branches, C
 - Needed for batch branch/stash/commit/file operations.
 
 ### 8. Operation state machine
-- Status: Missing/partial.
-- Lazygit models merge, rebase, cherry-pick, bisect and patch-building states.
-- LGVS has conflict actions, but not a full state machine with continue, abort, skip and status rows.
+- Status: merge/rebase/cherry-pick complete for labels and continue/abort/skip options.
+- Lazygit also models revert in its working-tree state; LGVS still lacks that flow.
+- Bisect is owned by the Commits controller, not the Status working-tree state, and remains a separate gap.
 
 ### 9. Undo/redo via reflog
 - Status: Missing.
@@ -237,7 +237,7 @@ LGVS currently covers the core spine only: Status, Files, Hunk/Main, Branches, C
 
 1. Command catalog/options map.
 2. Apply more config: `gui.*`, `git.*`, `os.*` basics.
-3. Operation state machine: merge/rebase/cherry-pick/bisect continue/abort/skip.
+3. Operation state follow-up: revert parity and Commits-panel bisect options.
 4. Range select and multi-select.
 5. Missing panels one by one: Tags, Remotes, Reflog, Submodules, Worktrees.
 6. Commit workflow depth: squash, drop, autosquash, move commits, copy/paste cherry-pick.

@@ -139,7 +139,10 @@ npm run dogfood:ui:hunk-escape
 npm run dogfood:ui:deep-tree
 npm run dogfood:ui:cramped
 npm run dogfood:ui:edge-files
+npm run dogfood:ui:operation-status
 ```
+
+The operation-status lane allocates a free CDP port, creates merge conflicts in two real repositories, and captures the Status row, options menu, and native abort confirmation. It proves cancel is mutation-free and a confirmed abort only clears the selected repository.
 
 Cramped sidebar check (focused no-Vim lane; writes forced screenshots for `7` and `8` state evidence, but does not assert VS Code visually scrolled native deep headers):
 

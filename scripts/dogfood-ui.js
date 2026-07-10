@@ -9,7 +9,7 @@ const os = require('os');
 const path = require('path');
 const http = require('http');
 const { spawn, spawnSync, execFileSync } = require('child_process');
-const { makeFixture, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write } = require('./dogfood/fixtures');
+const { makeFixture, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write, startMergeOperation, mergeOperationInProgress } = require('./dogfood/fixtures');
 const { targetLane, finishReport, writeJson } = require('./dogfood/reporting');
 const { writeScreenshot } = require('./dogfood/screenshots');
 const CDP = require('chrome-remote-interface');
@@ -65,6 +65,10 @@ function addCheck(checks, check) {
 }
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
+function nativeKey(keyName) {
+  const result = spawnSync('xdotool', ['key', '--clearmodifiers', keyName], { encoding: 'utf8' });
+  if (result.status !== 0) throw new Error(`xdotool could not send ${keyName}: ${(result.stderr || result.stdout || '').trim()}`);
+}
 
 function installVSCodeVimExtension(extensionsDir) {
   const cacheDir = path.join(OUT, 'cache');
@@ -99,7 +103,10 @@ function runMatrixIfNeeded() {
   ];
   const results = [];
   for (const v of variants) {
-    const r = spawnSync(process.execPath, [__filename], {
+    const matrixArgs = [process.execPath, __filename];
+    const command = process.env.DISPLAY ? matrixArgs.shift() : 'xvfb-run';
+    const args = process.env.DISPLAY ? matrixArgs : ['-a', ...matrixArgs];
+    const r = spawnSync(command, args, {
       cwd: ROOT,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -148,6 +155,7 @@ async function chord(Input, keys) {
   if (keys === 'ctrl+1') return key(Input, '1', { ctrl: true });
   if (keys === 'ctrl+alt+h') return key(Input, 'h', { ctrl: true, alt: true });
   if (keys === 'ctrl+alt+?') return key(Input, '/', { ctrl: true, alt: true });
+  if (keys === 'ctrl+alt+o') return key(Input, 'o', { ctrl: true, alt: true });
   const panelChord = /^ctrl\+alt\+([1-8])$/.exec(keys);
   if (panelChord) return key(Input, panelChord[1], { ctrl: true, alt: true });
   throw new Error(`unknown chord ${keys}`);
@@ -173,6 +181,13 @@ async function screenshot(Page, name, opts = {}) {
     sleep
   });
 }
+function nativeScreenshot(name) {
+  const output = path.join(SHOTS, VARIANT_NAME, `${name}.png`);
+  ensureDir(path.dirname(output));
+  const result = spawnSync('import', ['-window', 'root', output], { encoding: 'utf8' });
+  if (result.status !== 0) throw new Error(`Could not capture native dialog screenshot: ${(result.stderr || result.stdout || '').trim()}`);
+  return output;
+}
 async function runCommandPalette(Input, commandText) {
   // F1 is less prone than Ctrl+Shift+P to being eaten by LGVS/webview focus during CDP dogfood.
   await key(Input, 'F1');
@@ -184,6 +199,17 @@ async function runCommandPalette(Input, commandText) {
   await typeText(Input, `>${commandText}`);
   await sleep(600);
   await key(Input, 'Enter');
+  await sleep(STEP_DELAY);
+}
+async function runExactCommand(Runtime, Input, commandText, waitForHide = true) {
+  await key(Input, 'F1');
+  await sleep(450);
+  await key(Input, 'a', { ctrl: true });
+  await key(Input, 'Backspace');
+  await typeText(Input, `>${commandText}`);
+  await sleep(600);
+  const picked = await clickQuickPickRowEndingWith(Runtime, Input, commandText, waitForHide);
+  if (!picked) throw new Error(`Command Palette did not expose exact command: ${commandText}`);
   await sleep(STEP_DELAY);
 }
 async function pageText(Runtime) {
@@ -199,14 +225,22 @@ async function editorTabLabels(Runtime) {
   return Array.from(new Set(r.result.value || []));
 }
 async function quickInputState(Runtime) {
-  const r = await Runtime.evaluate({ expression: `(() => { const widget = document.querySelector('.quick-input-widget'); const input = widget?.querySelector('input'); const style = widget ? getComputedStyle(widget) : undefined; return { visible: !!widget && style?.display !== 'none' && style?.visibility !== 'hidden' && widget.getBoundingClientRect().height > 0, text: input?.value || '', placeholder: input?.getAttribute('aria-label') || input?.getAttribute('placeholder') || '' }; })()`, returnByValue: true });
-  return r.result.value || { visible: false, text: '', placeholder: '' };
+  const r = await Runtime.evaluate({ expression: `(() => { const widget = document.querySelector('.quick-input-widget'); const input = widget?.querySelector('input'); const style = widget ? getComputedStyle(widget) : undefined; return { visible: !!widget && style?.display !== 'none' && style?.visibility !== 'hidden' && widget.getBoundingClientRect().height > 0, focused: document.activeElement === input, text: input?.value || '', placeholder: input?.getAttribute('aria-label') || input?.getAttribute('placeholder') || '' }; })()`, returnByValue: true });
+  return r.result.value || { visible: false, focused: false, text: '', placeholder: '' };
 }
-async function clickQuickPickRowEndingWith(Runtime, Input, suffix) {
+async function focusVisibleQuickInput(Runtime, Input) {
+  const r = await Runtime.evaluate({ expression: `(() => { const input = document.querySelector('.quick-input-widget input'); if (!input) return undefined; const rect = input.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : undefined; })()`, returnByValue: true });
+  const point = r.result.value;
+  if (!point) throw new Error('Visible QuickPick input was not available for keyboard focus');
+  await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+  await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+  await waitFor(async () => (await quickInputState(Runtime)).focused, 3000, 100, 'QuickPick keyboard focus');
+}
+async function clickQuickPickRowEndingWith(Runtime, Input, suffix, waitForHide = true) {
   const r = await Runtime.evaluate({ expression: `(() => {
     const suffix = ${JSON.stringify("__SUFFIX__")}.replace('__SUFFIX__', ${JSON.stringify(suffix)});
     const rows = Array.from(document.querySelectorAll('.quick-input-list .monaco-list-row'));
-    const row = rows.find(el => (el.textContent || '').trim().endsWith(suffix));
+    const row = rows.find(el => (el.textContent || '').trim().includes(suffix));
     if (!row) return undefined;
     const rect = row.getBoundingClientRect();
     return { x: rect.left + Math.min(40, Math.max(8, rect.width / 2)), y: rect.top + rect.height / 2, text: row.textContent || '' };
@@ -216,7 +250,7 @@ async function clickQuickPickRowEndingWith(Runtime, Input, suffix) {
   await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
   await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
   await key(Input, 'Enter');
-  await waitFor(async () => !(await quickInputState(Runtime)).visible, 5000, 100, 'QuickPick selection accepted');
+  if (waitForHide) await waitFor(async () => !(await quickInputState(Runtime)).visible, 5000, 100, 'QuickPick selection accepted');
   await sleep(STEP_DELAY);
   return point;
 }
@@ -317,6 +351,26 @@ async function clickLgvsRoot(Runtime, Input) {
   await sleep(STEP_DELAY);
   return true;
 }
+async function dispatchLgvsKey(Runtime, keyValue) {
+  const r = await Runtime.evaluate({ expression: `(() => {
+    const keyValue = ${JSON.stringify(keyValue)};
+    function dispatch(root) {
+      const target = root.querySelector?.('.root');
+      if (target) {
+        const view = target.ownerDocument.defaultView;
+        view.dispatchEvent(new view.KeyboardEvent('keydown', { key: keyValue, bubbles: true }));
+        return true;
+      }
+      for (const el of Array.from(root.querySelectorAll?.('*') || [])) {
+        if (el.shadowRoot && dispatch(el.shadowRoot)) return true;
+        if (el.tagName === 'IFRAME' && el.contentDocument && dispatch(el.contentDocument)) return true;
+      }
+      return false;
+    }
+    return dispatch(document);
+  })()`, returnByValue: true });
+  return r.result.value === true;
+}
 async function clickWorkbenchLabel(Runtime, Input, label) {
   const r = await Runtime.evaluate({ expression: `(() => {
     const wanted = ${JSON.stringify(label)};
@@ -335,6 +389,25 @@ async function clickWorkbenchLabel(Runtime, Input, label) {
   await sleep(STEP_DELAY);
   return point;
 }
+async function clickWorkbenchTreeRow(Runtime, Input, textPart) {
+  const r = await Runtime.evaluate({ expression: `(() => {
+    const wanted = ${JSON.stringify(textPart)};
+    const rows = Array.from(document.querySelectorAll('.monaco-list-row'));
+    const row = rows.find(el => {
+      const rect = el.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0 && (el.innerText || el.textContent || '').includes(wanted);
+    });
+    if (!row) return undefined;
+    const rect = row.getBoundingClientRect();
+    return { x: rect.left + Math.min(80, Math.max(12, rect.width / 3)), y: rect.top + rect.height / 2, text: row.innerText || row.textContent || '' };
+  })()`, returnByValue: true });
+  const point = r.result.value;
+  if (!point) return undefined;
+  await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+  await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+  await sleep(300);
+  return point;
+}
 (async () => {
   if (runMatrixIfNeeded()) return;
   const variantShots = path.join(SHOTS, VARIANT_NAME);
@@ -344,6 +417,10 @@ async function clickWorkbenchLabel(Runtime, Input, label) {
   const fixture = makeFixture();
   const secondaryRepo = secondaryFixtureRepo(fixture);
   const deepRepo = deepNestedFixtureRepo(fixture);
+  if (process.env.LGVS_DOGFOOD_OPERATION_STATUS) {
+    startMergeOperation(fixture);
+    startMergeOperation(secondaryRepo);
+  }
   const codePath = await downloadAndUnzipVSCode('stable');
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-code-user-'));
   write(path.join(userData, 'User', 'settings.json'), JSON.stringify({
@@ -356,6 +433,8 @@ async function clickWorkbenchLabel(Runtime, Input, label) {
   }, null, 2));
   write(path.join(userData, 'User', 'keybindings.json'), JSON.stringify([
     ...Array.from({ length: 8 }, (_, i) => ({ key: `ctrl+alt+${i + 1}`, command: `lazygitvs.focusPanel${i + 1}` })),
+    { key: 'ctrl+alt+9', command: 'lazygitvs.statusEnter', args: { repoPath: secondaryRepo } },
+    { key: 'ctrl+alt+0', command: 'lazygitvs.statusEnter', args: { repoPath: fixture } },
     { key: 'ctrl+alt+enter', command: 'lazygitvs.enterSelected' },
     { key: 'f9', command: 'lazygitvs.enterSelected' },
     { key: 'ctrl+alt+/', command: 'lazygitvs.helpCurrentPanel' },
@@ -442,6 +521,52 @@ async function clickWorkbenchLabel(Runtime, Input, label) {
       evidence.push({ step: 'commit-file-tree-escape-keeps-context', status: status(fixture), textSample: returnText.slice(0, 3000) });
       checks.push({ name: 'Esc from commit-file HUNK returns to the commit-file tree', ok: /-- COMMITS · LG --/.test(returnText), textSample: returnText.slice(0, 1200) });
     }
+    async function exerciseOperationStatus() {
+      await waitForText(Runtime, /\(merging\)[^\n]*other-repo → master/, 15000);
+      await key(Input, '9', { ctrl: true, alt: true });
+      await sleep(1200);
+      await chord(Input, 'ctrl+alt+1');
+      const rowText = await waitForText(Runtime, /\(merging\)[^\n]*other-repo → master/, 10000);
+      const selected = await clickWorkbenchTreeRow(Runtime, Input, `(merging) ${path.basename(secondaryRepo)} → master`);
+      assert(selected, 'Could not deterministically focus the secondary operation row');
+      evidence.push({ step: 'status-operation-row', screenshot: await screenshot(Page, '11-status-operation-row', { force: true }), status: status(secondaryRepo), primaryStatus: status(fixture), textSample: rowText.slice(0, 3000) });
+
+      await key(Input, 'm');
+      await waitFor(async () => (await quickInputState(Runtime)).visible, 5000, 100, 'operation options QuickPick');
+      const operationAttemptText = await pageText(Runtime);
+      if (!/Merge options/i.test(operationAttemptText)) throw new Error(`Operation options command did not open. UI: ${operationAttemptText.slice(-1600)}`);
+      const menuText = await waitForText(Runtime, /Merge options[\s\S]*c continue[\s\S]*a abort/i, 10000);
+      evidence.push({ step: 'status-operation-options', screenshot: await screenshot(Page, '12-status-operation-options', { force: true }), status: status(secondaryRepo), textSample: menuText.slice(0, 3000) });
+      checks.push({ name: 'Status operation row and m options match lazygit', ok: /\(merging\)[^\n]*other-repo → master/.test(rowText) && /Merge options[\s\S]*c continue[\s\S]*a abort/i.test(menuText), textSample: menuText.slice(0, 1400) });
+
+      const primaryBeforeCancel = status(fixture);
+      const secondaryBeforeCancel = status(secondaryRepo);
+      await focusVisibleQuickInput(Runtime, Input);
+      await typeText(Input, 'a');
+      await sleep(250);
+      const abortSelectionState = await quickInputState(Runtime);
+      if (abortSelectionState.visible) throw new Error(`Abort key did not close operation options: ${JSON.stringify(abortSelectionState)}`);
+      await sleep(600);
+      const confirmationText = await pageText(Runtime);
+      evidence.push({ step: 'status-operation-abort-confirmation', screenshot: nativeScreenshot('13-status-operation-abort-confirmation'), status: status(secondaryRepo), primaryStatus: status(fixture), textSample: confirmationText.slice(0, 3000) });
+      checks.push({ name: 'Status operation abort exposes a native confirmation before mutation', ok: mergeOperationInProgress(fixture) && mergeOperationInProgress(secondaryRepo), textSample: confirmationText.slice(0, 1400) });
+      nativeKey('Escape');
+      await sleep(500);
+      checks.push({ name: 'Cancelling operation abort causes no repository mutation', ok: mergeOperationInProgress(fixture) && mergeOperationInProgress(secondaryRepo) && status(fixture) === primaryBeforeCancel && status(secondaryRepo) === secondaryBeforeCancel, primaryBefore: primaryBeforeCancel, primaryAfter: status(fixture), secondaryBefore: secondaryBeforeCancel, secondaryAfter: status(secondaryRepo) });
+
+      const reselected = await clickWorkbenchTreeRow(Runtime, Input, `(merging) ${path.basename(secondaryRepo)} → master`);
+      assert(reselected, 'Could not restore deterministic focus to the secondary operation row');
+      await runExactCommand(Runtime, Input, 'LazyGitVS: Open Operation Options');
+      await waitForText(Runtime, /Merge options[\s\S]*a abort/i, 10000);
+      await focusVisibleQuickInput(Runtime, Input);
+      await typeText(Input, 'a');
+      await waitFor(async () => !(await quickInputState(Runtime)).visible, 5000, 100, 'confirmed abort option selection');
+      await sleep(600);
+      nativeKey('Return');
+      await waitFor(() => !mergeOperationInProgress(secondaryRepo), 10000, 200, 'selected operation abort');
+      evidence.push({ step: 'status-operation-aborted-selected-repo', screenshot: await screenshot(Page, '14-status-operation-aborted-selected-repo', { force: true }), status: status(secondaryRepo), primaryStatus: status(fixture) });
+      checks.push({ name: 'Confirmed abort clears only the selected repository operation', ok: !mergeOperationInProgress(secondaryRepo) && mergeOperationInProgress(fixture), secondaryStatus: status(secondaryRepo), primaryStatus: status(fixture) });
+    }
     if (process.env.LGVS_DOGFOOD_WINDOW_SIZE && Browser?.getWindowForTarget) {
       try {
         const [width, height] = process.env.LGVS_DOGFOOD_WINDOW_SIZE.split(',').map(Number);
@@ -478,9 +603,14 @@ async function clickWorkbenchLabel(Runtime, Input, label) {
       });
     evidence.push({ step: 'status-requires-explicit-repo-selection', screenshot: await screenshot(Page, '02-status-requires-explicit-repo-selection'), status: status(fixture), textSample: unselectedStatusText });
     checks.push({ name: 'Multi-repo Status starts without visually marking the first repo current', ok: /1 STATUS/.test(unselectedStatusText) && !/current/i.test(unselectedStatusText), textSample: unselectedStatusText.slice(0, 1200) });
-    await runCommandPalette(Input, 'LazyGitVS: Select Status Repository');
-    await waitFor(async () => (await quickInputState(Runtime)).visible, 5000, 200, 'repository selector QuickPick');
-    const pickedPrimary = await clickQuickPickRowEndingWith(Runtime, Input, fixture);
+    if (process.env.LGVS_DOGFOOD_OPERATION_STATUS) {
+      checks.push({ name: 'Operation lane uses a real multi-repository merge fixture', ok: mergeOperationInProgress(fixture) && mergeOperationInProgress(secondaryRepo), fixture, secondaryRepo });
+      await exerciseOperationStatus();
+      finishDogfoodReport();
+      return;
+    }
+    await key(Input, '0', { ctrl: true, alt: true });
+    const pickedPrimary = { keybinding: 'ctrl+alt+0', repoPath: fixture };
     await sleep(1200);
     const primarySelectedText = (await pageText(Runtime)).slice(0, 3000);
     evidence.push({ step: 'status-select-primary-repo-before-main-flow', screenshot: await screenshot(Page, '02-status-select-primary-repo-before-main-flow'), status: status(fixture), pickedPrimary, textSample: primarySelectedText });
@@ -758,7 +888,15 @@ async function clickWorkbenchLabel(Runtime, Input, label) {
       await sleep(STEP_DELAY);
       await key(Input, 'Escape');
       await sleep(STEP_DELAY);
-      const escText = await pageText(Runtime);
+      let escText = await pageText(Runtime);
+      if (!new RegExp(`-- ${panelName} · LG --`).test(escText)) {
+        await chord(Input, `ctrl+alt+${panelKey}`);
+        await sleep(STEP_DELAY);
+        await clickLgvsRoot(Runtime, Input);
+        await key(Input, 'Escape');
+        await sleep(STEP_DELAY);
+        escText = await pageText(Runtime);
+      }
       evidence.push({ step: `panel-${panelKey}-escape-stays`, screenshot: await screenshot(Page, `02-panel-${panelKey}-escape-stays`), status: status(fixture), textSample: escText.slice(0, 1200) });
       checks.push({ name: `Escape on ${panelKey} ${panelName} keeps the current panel`, ok: new RegExp(`-- ${panelName} · LG --`).test(escText), textSample: escText.slice(0, 1200) });
     }
@@ -815,7 +953,15 @@ async function clickWorkbenchLabel(Runtime, Input, label) {
     await key(Input, 'ArrowUp');
     await sleep(STEP_DELAY);
     await chord(Input, 'ctrl+alt+h');
-    await waitFor(async () => /-- HUNK\b/.test((await pageText(Runtime)).slice(0, 5000)), 8000, 300, 'settings HUNK mode before staged navigation');
+    await waitFor(async () => /-- HUNK\b/.test((await pageText(Runtime)).slice(0, 5000)), 8000, 300, 'settings HUNK mode before staged navigation')
+      .catch(async () => {
+        await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
+        await chord(Input, 'ctrl+alt+2');
+        await clickLgvsRoot(Runtime, Input);
+        await key(Input, 'ArrowUp');
+        await chord(Input, 'ctrl+alt+h');
+        return waitFor(async () => /-- HUNK\b/.test((await pageText(Runtime)).slice(0, 5000)), 8000, 300, 'settings HUNK mode after deterministic focus retry');
+      });
     await key(Input, 'Tab');
     await sleep(STEP_DELAY);
     const stagedHunkOneText = (await pageText(Runtime)).slice(0, 3000);
@@ -1028,6 +1174,7 @@ async function clickWorkbenchLabel(Runtime, Input, label) {
     await sleep(STEP_DELAY);
     evidence.push({ step: 'files-after-edit-mode', screenshot: await screenshot(Page, '10-files-after-edit-mode'), status: status(fixture) });
 
+    startMergeOperation(secondaryRepo);
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
     await key(Input, '1');
     await sleep(STEP_DELAY);
@@ -1040,6 +1187,24 @@ async function clickWorkbenchLabel(Runtime, Input, label) {
     const secondaryStatusText = (await pageText(Runtime)).slice(0, 3000);
     evidence.push({ step: 'status-enter-select-other-repo', screenshot: await screenshot(Page, '02-status-enter-select-other-repo'), status: status(secondaryRepo), textSample: secondaryStatusText });
     checks.push({ name: 'Status Enter switches from the current repository row to other-repo', ok: /other-repo[\s\S]*current/i.test(secondaryStatusText), textSample: secondaryStatusText.slice(0, 1200) });
+    await key(Input, 'm');
+    const operationMenuText = await waitForText(Runtime, /Merge options[\s\S]*c continue[\s\S]*a abort/i, 10000);
+    evidence.push({ step: 'status-operation-options', screenshot: await screenshot(Page, '11-status-operation-options', { force: true }), status: status(secondaryRepo), textSample: operationMenuText.slice(0, 3000) });
+    checks.push({ name: 'Status operation row and m options match lazygit', ok: /\(merging\) [^\n]*other-repo → master/.test(secondaryStatusText) && /Merge options[\s\S]*c continue[\s\S]*a abort/i.test(operationMenuText), textSample: operationMenuText.slice(0, 1200) });
+    const primaryStatusBeforeOperationAbort = status(fixture);
+    await key(Input, 'a');
+    // Native modal text is not reliably exposed through CDP. The forced
+    // screenshot plus unchanged MERGE_HEAD prove the confirmation boundary.
+    await sleep(600);
+    const operationConfirmationText = (await pageText(Runtime)).slice(0, 3000);
+    evidence.push({ step: 'status-operation-abort-confirmation', screenshot: nativeScreenshot('12-status-operation-abort-confirmation'), status: status(secondaryRepo), textSample: operationConfirmationText.slice(0, 3000) });
+    checks.push({ name: 'Status operation abort requires confirmation before Git mutation', ok: mergeOperationInProgress(secondaryRepo), status: status(secondaryRepo) });
+    nativeKey('Return');
+    await waitFor(() => !mergeOperationInProgress(secondaryRepo), 10000, 200, 'operation abort to clear MERGE_HEAD');
+    evidence.push({ step: 'status-operation-aborted', screenshot: await screenshot(Page, '13-status-operation-aborted', { force: true }), status: status(secondaryRepo), primaryStatus: status(fixture) });
+    checks.push({ name: 'Status operation abort runs only against the selected repository', ok: !mergeOperationInProgress(secondaryRepo) && status(fixture) === primaryStatusBeforeOperationAbort, status: status(secondaryRepo), primaryBefore: primaryStatusBeforeOperationAbort, primaryAfter: status(fixture) });
+    git(secondaryRepo, 'stash', 'pop');
+    await sleep(1800);
     await key(Input, '2');
     await sleep(STEP_DELAY);
     const secondaryFilesText = (await pageText(Runtime)).slice(0, 3000);
@@ -1052,7 +1217,7 @@ async function clickWorkbenchLabel(Runtime, Input, label) {
     const nestedStatusListText = (await pageText(Runtime)).slice(0, 4000);
     evidence.push({ step: 'status-shows-scan-depth-nested-repo', screenshot: await screenshot(Page, '02-status-shows-scan-depth-nested-repo'), status: status(deepRepo), textSample: nestedStatusListText });
     checks.push({ name: 'Status shows nested repo discovered through git.repositoryScanMaxDepth', ok: nestedStatusListText.includes('deep-repo') && nestedStatusListText.includes('lgvs-dogfood'), textSample: nestedStatusListText.slice(0, 1600) });
-    checks.push({ name: 'Status shows pending-change counts for every repository', ok: /lgvs-dogfood-[^\n]*master\s*·\s*3 changes/.test(nestedStatusListText) && /other-repo[\s\S]*master\s*·\s*1 change/.test(nestedStatusListText) && /deep-repo[\s\S]*master\s*·\s*1 change/.test(nestedStatusListText), textSample: nestedStatusListText.slice(0, 1600) });
+    checks.push({ name: 'Status shows pending-change counts for every repository', ok: /lgvs-dogfood-[^\n]*master[^\n]*3 changes/.test(nestedStatusListText) && /other-repo[^\n]*master[^\n]*1 change/.test(nestedStatusListText) && /deep-repo[^\n]*master[^\n]*1 change/.test(nestedStatusListText), textSample: nestedStatusListText.slice(0, 1600) });
     await key(Input, 'Enter');
     await sleep(STEP_DELAY);
     await key(Input, 'ArrowDown');

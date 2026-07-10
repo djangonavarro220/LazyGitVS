@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import * as path from 'path';
 import { cloneGitConfig } from './lazygitConfig';
+import { detectGitOperationState, type GitOperationState } from './gitOperationState';
 
 export type ChangedFile = { xy: string; path: string; staged: boolean; untracked: boolean };
 export type LazyGitGitRuntimeConfig = ReturnType<typeof cloneGitConfig>;
@@ -13,7 +14,7 @@ export type CommitFile = { status: string; path: string; oldPath?: string };
 export type Stash = { ref: string; message: string };
 export type StashFile = { status: string; path: string; oldPath?: string };
 export type ConflictFile = { xy: string; path: string };
-export type WorkspaceRepository = { path: string; name: string; branch: string; workspaceFolder: string; changeCount: number };
+export type WorkspaceRepository = { path: string; name: string; branch: string; workspaceFolder: string; changeCount: number; operation?: GitOperationState };
 
 type VsCodeGitRepository = { rootUri?: vscode.Uri; state?: { HEAD?: { name?: string } } };
 type VsCodeGitApi = { repositories?: VsCodeGitRepository[] };
@@ -41,9 +42,9 @@ export function workspaceRoot(): string {
   return folder.uri.fsPath;
 }
 
-export function git(args: string[], cwd = workspaceRoot()): Promise<string> {
+export function git(args: string[], cwd = workspaceRoot(), envOverrides: NodeJS.ProcessEnv = {}): Promise<string> {
   return new Promise((resolve, reject) => {
-    cp.execFile('git', args, { cwd, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+    cp.execFile('git', args, { cwd, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, env: { ...process.env, ...envOverrides } }, (err, stdout, stderr) => {
       if (err) reject(new Error((stderr || stdout || err.message).trim())); else resolve(stdout);
     });
   });
@@ -163,7 +164,8 @@ export async function discoverWorkspaceRepositories(): Promise<WorkspaceReposito
     name: path.basename(repoPath),
     branch: branchHints.get(repoPath) ?? await currentBranchForRepo(repoPath),
     workspaceFolder,
-    changeCount: await pendingChangeCountForRepo(repoPath)
+    changeCount: await pendingChangeCountForRepo(repoPath),
+    operation: detectGitOperationState(repoPath)
   })));
   return repos.sort((a, b) => a.name.localeCompare(b.name) || a.path.localeCompare(b.path));
 }

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import * as path from 'path';
+import * as fs from 'fs';
 import { cloneGitConfig, cloneGuiConfig, cloneKeymap, readLazyGitConfig } from './lazygitConfig';
 import { branches, changedFiles, commitFiles, commits, conflictsFromChangedFiles, discoverWorkspaceRepositories, getActiveWorkspaceRoot, git, remotes, setActiveWorkspaceRoot, stashes, stashFiles, tags, workspaceRoot, type Branch, type ChangedFile, type Commit, type CommitFile, type ConflictFile, type Remote, type Stash, type StashFile, type Tag, type WorkspaceRepository } from './gitService';
 import { applyHunk, applyLine, discardUnstagedLine, gitDiffConfigArgs, hunksForFile, toggleStage, toggleStageAll, toggleStageSelected } from './gitActions';
@@ -13,6 +14,7 @@ import { branchRow, commitRow, dirRow, escapeHtml, fileRow, fileStateLabel, file
 import { originCommitUrl, pickGitAction, runGitAction, executeGitMenuItem, showCommitCopyMenu, showCommitResetMenu, showDiscardFileMenu, showDiscardHunkMenu, showPullMenu, showPushMenu, showResetMenu, showStashCreateMenu, type GitMenuItem } from './gitMenus';
 import { findMenuItemByKey } from './lazygitMenu';
 import { dangerousGitMenuItem } from './destructiveActions';
+import { showGitOperationOptions } from './statusGitOperation';
 import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, openPath, previewCommitFileDiff, previewDiff, previewStashFileDiff, revealVisibleEditorLine, showCommitPreview, showStashPreview } from './workspaceActions';
 import { deletedGhostDecorations, editorLineRange, excludeRangeLines, hunkChangedEditorRanges, rangeLineSet } from './hunkEditorDecorations';
 function gutterBadge(letter: 'S' | 'U', fill: string) {
@@ -22,7 +24,8 @@ function gutterBadge(letter: 'S' | 'U', fill: string) {
 function statusIcon(f: ChangedFile | ConflictFile): string { return f.xy; }
 function statusClass(f: ChangedFile): string { if (f.untracked) return 'untracked'; if (f.staged && f.xy[1] !== ' ') return 'mixed'; if (f.staged) return 'staged'; return 'unstaged'; }
 function repoChangeDescription(repo: WorkspaceRepository): string { return repo.changeCount ? `${repo.changeCount} change${repo.changeCount === 1 ? '' : 's'}` : 'clean'; }
-function repoDescription(repo: WorkspaceRepository, isCurrent: boolean): string { return [repo.branch, repoChangeDescription(repo), isCurrent ? 'current' : ''].filter(Boolean).join(' · '); }
+function repoDescription(repo: WorkspaceRepository, isCurrent: boolean): string { return [repoChangeDescription(repo), isCurrent ? 'current' : ''].filter(Boolean).join(' · '); }
+function statusRepositoryLabel(repo: WorkspaceRepository): string { return `${repo.operation ? `(${repo.operation.label}) ` : ''}${repo.name} → ${repo.branch}`; }
 async function showChangedFilesQuickPick() {
   const files = await changedFiles();
   if (!files.length) return vscode.window.showInformationMessage('LazyGitVS: clean working tree.');
@@ -192,6 +195,7 @@ class LazyGitVSController {
         if (type === 'fetch') await this.fetch();
         if (type === 'statusMenu') await this.statusMenu();
         if (type === 'repoMenu') await this.recentReposMenu();
+        if (type === 'operationOptions') await this.openOperationOptions();
         if (type === 'helpMenu') await this.helpMenu(panel);
         if (type === 'commitAction') await this.runCommitCommand(String(message.key ?? ''));
         if (type === 'panelAction') await this.runPanelCommand(panel, String(message.key ?? ''));
@@ -247,7 +251,7 @@ class LazyGitVSController {
     const current = getActiveWorkspaceRoot();
     return repos.map(repo => {
       const isCurrent = repo.path === current;
-      const item = new vscode.TreeItem(repo.name, vscode.TreeItemCollapsibleState.None);
+      const item = new vscode.TreeItem(statusRepositoryLabel(repo), vscode.TreeItemCollapsibleState.None);
       item.id = repo.path;
       item.description = repoDescription(repo, isCurrent);
       item.tooltip = repo.path;
@@ -260,11 +264,27 @@ class LazyGitVSController {
 
   openRecentRepos() { return this.recentReposMenu(); }
 
-  async statusEnter(repoPath?: string) {
+  async statusEnter(target?: string | { repoPath?: string; operationOptions?: boolean }) {
+    if (typeof target === 'object' && target.operationOptions) return this.openOperationOptions(target);
+    const repoPath = typeof target === 'string' ? target : target?.repoPath;
     const selected = this.statusTree?.selection?.[0];
     const selectedRepoPath = repoPath ?? (typeof selected?.id === 'string' ? selected.id : undefined);
+    const selectedRepo = this.workspaceRepos.find(repo => repo.path === selectedRepoPath);
+    if (selectedRepoPath && selectedRepoPath === getActiveWorkspaceRoot() && selectedRepo?.operation) return this.openOperationOptions(selectedRepoPath);
     if (selectedRepoPath) return this.selectRepository(selectedRepoPath);
     return this.recentReposMenu();
+  }
+
+  async openOperationOptions(target?: string | { repoPath?: string }) {
+    // Status acts on its highlighted repository. Other panels act only on the
+    // explicitly active repository, never the first folder in a multi-repo UI.
+    const selected = this.activeViewPanel() === 'status' ? this.statusTree?.selection?.[0] : undefined;
+    const explicitRepoPath = typeof target === 'string' ? target : target?.repoPath;
+    const repoPath = explicitRepoPath ?? (typeof selected?.id === 'string' ? selected.id : getActiveWorkspaceRoot());
+    if (!repoPath) return;
+    const isAvailable = () => fs.existsSync(repoPath);
+    if (!isAvailable()) return;
+    await showGitOperationOptions(repoPath, isAvailable, () => this.refresh(true));
   }
 
   async enterSelected() {
@@ -1645,7 +1665,7 @@ class LazyGitVSController {
       document.querySelector('.rows')?.addEventListener('dblclick',e=>{ const row=e.target.closest('.row[data-index]'); if(!row)return; document.body.focus(); vscode.postMessage({type:'select',index:Number(row.dataset.index)}); vscode.postMessage({type:'enter'}); });
       window.addEventListener('keydown',e=>{ if(!keyboardEnabled)return; if((e.ctrlKey||e.metaKey)&&e.shiftKey&&String(e.key).toLowerCase()==='p'){e.preventDefault();vscode.postMessage({type:'commandPalette'});return;} if(e.key==='F1'){e.preventDefault();vscode.postMessage({type:'commandPalette'});return;} const u=keymap.universal, f=keymap.files, m=keymap.main; const jump=Array.isArray(u.jumpToBlock)?u.jumpToBlock:[]; const jumpIndex=jump.indexOf(e.key); const jumpPanel = jumpIndex>=0 ? panels[String(jumpIndex+1)] : panels[e.key]; if(jumpPanel){e.preventDefault();vscode.postMessage({type:'switchPanel',panel:jumpPanel});return;}
         if(e.key==='?'){e.preventDefault();vscode.postMessage({type:'helpMenu'});return;} if(hit(e,u.focusMainView)){e.preventDefault();vscode.postMessage({type:'focusMainView'});return;} if(e.shiftKey&&e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:1});return;} if(e.shiftKey&&e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:-1});return;} if(e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;} if(hit(e,u.prevPage)){e.preventDefault();vscode.postMessage({type:'move',delta:-10});return;} if(hit(e,u.nextPage)){e.preventDefault();vscode.postMessage({type:'move',delta:10});return;} if(hit(e,u.gotoTop,u.gotoTopAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'top'});return;} if(hit(e,u.gotoBottom,u.gotoBottomAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'bottom'});return;} if(hit(e,u.toggleRangeSelect)){e.preventDefault();vscode.postMessage({type:'rangeToggle'});return;} if(hit(e,u.startSearch)){e.preventDefault();vscode.postMessage({type:'search'});return;} if(panel==='files'&&hit(e,f.openStatusFilter)){e.preventDefault();vscode.postMessage({type:'statusFilter'});return;} if(panel==='files'&&hit(e,f.toggleTreeView)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='files'&&hit(e,f.collapseAll)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='files'&&hit(e,f.expandAll)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(hit(e,u.nextItem,u.nextItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(hit(e,u.prevItem,u.prevItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;}
-        if(hit(e,u.diffingMenu,u.diffingMenuAlt)){e.preventDefault();vscode.postMessage({type:'diffingMenu'});return;} if(hit(e,u.nextBlock,u.nextBlockAlt,u.nextBlockAlt2)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:1});return;} if(hit(e,u.prevBlock,u.prevBlockAlt,u.prevBlockAlt2)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:-1});return;}
+        if(hit(e,u.createRebaseOptionsMenu)){e.preventDefault();vscode.postMessage({type:'operationOptions'});return;} if(hit(e,u.diffingMenu,u.diffingMenuAlt)){e.preventDefault();vscode.postMessage({type:'diffingMenu'});return;} if(hit(e,u.nextBlock,u.nextBlockAlt,u.nextBlockAlt2)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:1});return;} if(hit(e,u.prevBlock,u.prevBlockAlt,u.prevBlockAlt2)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:-1});return;}
         const c=keymap.commits; if(panel==='commits'&&hit(e,c.checkoutCommit,c.copyCommitAttributeToClipboard,c.newBranch,c.renameCommit,c.amendToCommit,c.createFixupCommit,c.markCommitAsFixup,c.cherryPickCopy,c.pasteCommits,c.revertCommit,c.createTag,c.tagCommit,c.viewResetOptions,c.openInBrowser,c.openLogMenu)){e.preventDefault();vscode.postMessage({type:'commitAction',key:norm(e)});return;}
         const b=keymap.branches, st=keymap.stash; if(panel==='status'&&['o','e','a','A','u','<enter>'].includes(norm(e))){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='hunks'&&hit(e,u.select,u.togglePanel,u.remove,m.toggleSelectHunk)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='branches'&&hit(e,u.select,u.new,u.remove,b.checkoutBranchByName,b.checkoutPreviousBranch,b.renameBranch,b.mergeIntoCurrentBranch,b.rebaseBranch,b.forceCheckoutBranch,b.setUpstream,b.fastForward,b.createTag,b.sortOrder)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='stash'&&hit(e,u.goInto,st.apply,st.popStash,st.newBranch,st.renameStash,u.remove)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='tags'&&hit(e,u.select,u.new,u.remove,b.createTag,b.pushTag)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='remotes'&&hit(e,u.new,u.edit,u.remove,b.fetchRemote,b.addForkRemote)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='conflicts'&&(hit(e,u.goInto,u.openFile)||['1','2','b','m'].includes(norm(e)))){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;}
         if(hit(e,u.select)){e.preventDefault();vscode.postMessage({type:'toggle'});return;} if(panel==='status'&&hit(e,u.goInto)){e.preventDefault();vscode.postMessage({type:'repoMenu'});return;} if(hit(e,u.goInto)){e.preventDefault();vscode.postMessage({type:'enter'});return;} if(hit(e,u.openFile)){e.preventDefault();vscode.postMessage({type:'openFile'});return;} if(hit(e,u.edit)){e.preventDefault();vscode.postMessage({type:'editFile'});return;} if(panel==='files'&&hit(e,f.copyFileInfoToClipboard)){e.preventDefault();vscode.postMessage({type:'copyInfo'});return;} if(panel==='files'&&hit(e,f.copyPath,u.copyToClipboard)){e.preventDefault();vscode.postMessage({type:'copyPath'});return;} if(panel!=='files'&&hit(e,u.copyToClipboard)){e.preventDefault();vscode.postMessage({type:'copyInfo'});return;} if(panel==='files'&&hit(e,f.ignoreFile)){e.preventDefault();vscode.postMessage({type:'ignoreMenu'});return;} if(panel==='files'&&hit(e,f.fetch)){e.preventDefault();vscode.postMessage({type:'fetch'});return;}
@@ -1748,7 +1768,8 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.changedFiles', showChangedFilesQuickPick));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.enterSelected', () => app.enterSelected()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.statusRecentRepos', () => app.openRecentRepos()));
-  context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.statusEnter', (repoPath?: string) => app.statusEnter(repoPath)));
+  context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.statusEnter', (target?: string | { repoPath?: string; operationOptions?: boolean }) => app.statusEnter(target)));
+  context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.openOperationOptions', (target?: string | { repoPath?: string }) => app.openOperationOptions(target)));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.openDashboard', () => app.focus()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.closeDashboard', () => app.close()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.resetState', () => app.resetState()));

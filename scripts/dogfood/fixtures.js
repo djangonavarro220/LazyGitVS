@@ -118,5 +118,19 @@ function deepNestedFixtureRepo(fixture) { return path.join(fixture, 'workspace',
 function status(cwd) { return git(cwd, 'status', '--short'); }
 function diffCachedNames(cwd) { return git(cwd, 'diff', '--cached', '--name-only'); }
 function diffNames(cwd) { return git(cwd, 'diff', '--name-only'); }
+function startMergeOperation(cwd) {
+  git(cwd, 'stash', 'push', '-m', 'dogfood operation fixture');
+  git(cwd, 'checkout', '-b', 'lgvs-operation-other');
+  write(path.join(cwd, 'OPERATION_CONFLICT.md'), 'other\n');
+  git(cwd, 'add', 'OPERATION_CONFLICT.md');
+  git(cwd, 'commit', '-m', 'operation other side');
+  git(cwd, 'checkout', 'master');
+  write(path.join(cwd, 'OPERATION_CONFLICT.md'), 'master\n');
+  git(cwd, 'add', 'OPERATION_CONFLICT.md');
+  git(cwd, 'commit', '-m', 'operation master side');
+  spawnSync('git', ['merge', 'lgvs-operation-other'], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  if (!fs.existsSync(path.join(cwd, '.git', 'MERGE_HEAD'))) throw new Error('Dogfood merge fixture did not enter merge state');
+}
+function mergeOperationInProgress(cwd) { return fs.existsSync(path.join(cwd, '.git', 'MERGE_HEAD')); }
 
-module.exports = { makeFixture, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write };
+module.exports = { makeFixture, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write, startMergeOperation, mergeOperationInProgress };
