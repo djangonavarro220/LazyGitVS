@@ -15,9 +15,22 @@ That means:
 - Implement the minimal fix.
 - Run the focused test again and verify it passes.
 - Run the wider suite before commit.
+- Run the automated performance gate after every feature, not only after performance-focused work.
 - For UI/focus/keybinding/editor changes, run real VS Code dogfood too.
 
 If a behavior cannot be fully automated, document the gap and add the nearest deterministic guard. Do not leave “manually checked” as the only proof unless there is genuinely no better hook.
+
+## Automatic feature performance gate
+
+Every completed feature must run:
+
+```bash
+npm run verify:feature
+```
+
+This command runs the full deterministic suite, the real `dogfood:ui:large-repo` responsiveness lane, and packaging. It protects refresh latency, refresh-storm coalescing, selection stability, active-panel rendering, background-idle behavior, and keyboard responsiveness under a large repository fixture.
+
+Passing functional tests is not enough when the large-repository lane regresses or the feature introduces noticeable input/refresh lag. Fix the regression before accepting or committing the feature.
 
 ## Test layers
 

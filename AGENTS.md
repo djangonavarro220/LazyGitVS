@@ -34,15 +34,16 @@ This repo builds **LazyGitVS / LGVS**, a VS Code extension that adapts real lazy
 ## Hard rules
 
 1. **Test every feature and bug fix.** For any user-requested feature or reported bug, add automated coverage for the touched behavior with a 100% target where practical. Use `docs/testing-and-verification.md` as the playbook. If full automation is not practical, document the gap and add the nearest deterministic guard.
-2. **Do not overwrite release versions.** If a release/versioned VSIX is explicitly requested, bump `package.json`/`package-lock.json` and create a new VSIX version; otherwise normal source/test commits do not imply a release bump.
-3. **Do not commit generated artifacts.** Keep `node_modules/`, `out/`, `dist/`, `.vscode-test/`, `dogfood-output/`, screenshots, logs, and VSIX files out of Git.
-4. **Do not ship local/debug artifacts.** No debug logs, no local absolute debug paths, no test output in the VSIX.
-5. **Never store secrets.** Tokens/PATs/API keys/passwords/connection strings must be `[REDACTED]` if ever referenced.
-6. **Prefer Git arg arrays.** Use `execFile`/argument arrays, not shell-interpolated Git commands.
-7. **Confirm destructive Git actions.** Reset/clean/discard/rebase-abort style operations need explicit confirmation.
-8. **Commit discipline:** local commits are OK when requested as part of the work; amend/rewrite existing commits only when explicitly asked, and never push rewritten history without a fresh explicit ask.
-9. **Release discipline:** no release, tag, Marketplace publish, version bump, or public/private repo visibility change unless the human explicitly asks for that release/visibility action. Published extension != permission to make the repo public. GitHub release flow is: bump version + changelog, validate, create source commit, then tag/publish only on explicit request.
-10. **Keep host-specific workflow notes out of this repo.** Public docs must be portable; local delivery paths and operator notes belong in ignored local files, not in Git.
+2. **Performance is an automatic acceptance gate.** After every feature, run `npm run verify:feature`. It must exercise the fast suite, the real large-repository responsiveness dogfood lane, and packaging. A feature is not accepted when the performance lane regresses or adds noticeable input/refresh lag.
+3. **Do not overwrite release versions.** If a release/versioned VSIX is explicitly requested, bump `package.json`/`package-lock.json` and create a new VSIX version; otherwise normal source/test commits do not imply a release bump.
+4. **Do not commit generated artifacts.** Keep `node_modules/`, `out/`, `dist/`, `.vscode-test/`, `dogfood-output/`, screenshots, logs, and VSIX files out of Git.
+5. **Do not ship local/debug artifacts.** No debug logs, no local absolute debug paths, no test output in the VSIX.
+6. **Never store secrets.** Tokens/PATs/API keys/passwords/connection strings must be `[REDACTED]` if ever referenced.
+7. **Prefer Git arg arrays.** Use `execFile`/argument arrays, not shell-interpolated Git commands.
+8. **Confirm destructive Git actions.** Reset/clean/discard/rebase-abort style operations need explicit confirmation.
+9. **Commit discipline:** local commits are OK when requested as part of the work; amend/rewrite existing commits only when explicitly asked, and never push rewritten history without a fresh explicit ask.
+10. **Release discipline:** no release, tag, Marketplace publish, version bump, or public/private repo visibility change unless the human explicitly asks for that release/visibility action. Published extension != permission to make the repo public. GitHub release flow is: bump version + changelog, validate, create source commit, then tag/publish only on explicit request.
+11. **Keep host-specific workflow notes out of this repo.** Public docs must be portable; local delivery paths and operator notes belong in ignored local files, not in Git.
 
 ## Pre-commit dependency checks
 
@@ -97,8 +98,7 @@ Update these files when their trigger applies:
 For any functional change:
 
 ```bash
-npm test
-npm run package
+npm run verify:feature
 ```
 
 For any UI/focus/keybinding/sidebar/editor/HUNK/LINE/preview/status-bar change:
@@ -106,6 +106,7 @@ For any UI/focus/keybinding/sidebar/editor/HUNK/LINE/preview/status-bar change:
 ```bash
 npm test
 npm run dogfood:ui
+npm run dogfood:ui:large-repo
 npm run package
 ```
 

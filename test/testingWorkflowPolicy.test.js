@@ -37,6 +37,14 @@ test('testing policy is a hard agent rule and not just a forgotten doc', () => {
   assert.match(testingDoc, /If a behavior cannot be fully automated, document the gap/);
 });
 
+test('every feature has an automated performance acceptance gate', () => {
+  assert.strictEqual(pkg.scripts['verify:feature'], 'npm test && npm run dogfood:ui:large-repo && npm run package');
+  assert.match(agents, /Performance is an automatic acceptance gate/);
+  assert.match(agents, /npm run verify:feature/);
+  assert.match(testingDoc, /Automatic feature performance gate/);
+  assert.match(testingDoc, /keyboard responsiveness under a large repository fixture/);
+});
+
 test('public developer docs point future agents to the testing playbook', () => {
   for (const [name, text] of Object.entries({ BUILDING: building, README: readme, dogfooding })) {
     assert(text.includes('docs/testing-and-verification.md'), `${name} must link docs/testing-and-verification.md`);
