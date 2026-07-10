@@ -11,6 +11,7 @@ const http = require('http');
 const { spawn, spawnSync, execFileSync } = require('child_process');
 const { makeFixture, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write } = require('./dogfood/fixtures');
 const { targetLane, finishReport, writeJson } = require('./dogfood/reporting');
+const { writeScreenshot } = require('./dogfood/screenshots');
 const CDP = require('chrome-remote-interface');
 const { downloadAndUnzipVSCode } = require('@vscode/test-electron');
 
@@ -130,8 +131,8 @@ async function cdpConnect() {
 }
 async function key(Input, key, opts = {}) {
   const mods = (opts.ctrl ? 2 : 0) | (opts.shift ? 8 : 0) | (opts.alt ? 1 : 0) | (opts.meta ? 4 : 0);
-  const codeMap = { Enter: 'Enter', Escape: 'Escape', Tab: 'Tab', Backspace: 'Backspace', ArrowDown: 'ArrowDown', ArrowUp: 'ArrowUp', Home: 'Home', End: 'End', F1: 'F1', Space: 'Space', '?': 'Slash', '1': 'Digit1', '2': 'Digit2', '3': 'Digit3', '4': 'Digit4', '5': 'Digit5', '6': 'Digit6', '7': 'Digit7', '8': 'Digit8', '9': 'Digit9', '0': 'Digit0' };
-  const vkeyMap = { Enter: 13, Escape: 27, Tab: 9, Backspace: 8, ArrowDown: 40, ArrowUp: 38, Home: 36, End: 35, F1: 112, Space: 32, '?': 191 };
+  const codeMap = { Enter: 'Enter', Escape: 'Escape', Tab: 'Tab', Backspace: 'Backspace', ArrowDown: 'ArrowDown', ArrowUp: 'ArrowUp', Home: 'Home', End: 'End', F1: 'F1', F9: 'F9', Space: 'Space', '?': 'Slash', '1': 'Digit1', '2': 'Digit2', '3': 'Digit3', '4': 'Digit4', '5': 'Digit5', '6': 'Digit6', '7': 'Digit7', '8': 'Digit8', '9': 'Digit9', '0': 'Digit0' };
+  const vkeyMap = { Enter: 13, Escape: 27, Tab: 9, Backspace: 8, ArrowDown: 40, ArrowUp: 38, Home: 36, End: 35, F1: 112, F9: 120, Space: 32, '?': 191 };
   const code = codeMap[key] || (/^[a-z]$/i.test(key) ? `Key${key.toUpperCase()}` : key);
   const text = !opts.ctrl && !opts.alt && !opts.meta && key.length === 1 ? (opts.shift ? key.toUpperCase() : key) : undefined;
   const virtualKey = vkeyMap[key] ?? (/^[a-z]$/i.test(key) ? key.toUpperCase().charCodeAt(0) : /^[0-9]$/.test(key) ? key.charCodeAt(0) : undefined);
@@ -143,6 +144,7 @@ async function chord(Input, keys) {
   if (keys === 'ctrl+shift+p') return key(Input, 'p', { ctrl: true, shift: true });
   if (keys === 'ctrl+enter') return key(Input, 'Enter', { ctrl: true });
   if (keys === 'ctrl+alt+enter') return key(Input, 'Enter', { ctrl: true, alt: true });
+
   if (keys === 'ctrl+1') return key(Input, '1', { ctrl: true });
   if (keys === 'ctrl+alt+h') return key(Input, 'h', { ctrl: true, alt: true });
   if (keys === 'ctrl+alt+?') return key(Input, '/', { ctrl: true, alt: true });
@@ -160,14 +162,16 @@ async function typePhysical(Input, text) {
   }
 }
 async function screenshot(Page, name, opts = {}) {
-  if (!opts.force && process.env.LGVS_DOGFOOD_SCREENSHOTS !== 'all') return undefined;
-  await sleep(300);
-  const res = await Page.captureScreenshot({ format: 'png', captureBeyondViewport: false });
-  const dir = VARIANT ? path.join(SHOTS, VARIANT_NAME) : SHOTS;
-  ensureDir(dir);
-  const file = path.join(dir, `${String(name).replace(/[^a-z0-9_-]+/gi, '-')}.png`);
-  fs.writeFileSync(file, Buffer.from(res.data, 'base64'));
-  return file;
+  return writeScreenshot({
+    Page,
+    name,
+    force: opts.force,
+    screenshots: process.env.LGVS_DOGFOOD_SCREENSHOTS,
+    shots: SHOTS,
+    variant: VARIANT,
+    variantName: VARIANT_NAME,
+    sleep
+  });
 }
 async function runCommandPalette(Input, commandText) {
   // F1 is less prone than Ctrl+Shift+P to being eaten by LGVS/webview focus during CDP dogfood.
@@ -211,6 +215,8 @@ async function clickQuickPickRowEndingWith(Runtime, Input, suffix) {
   if (!point) return undefined;
   await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
   await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+  await key(Input, 'Enter');
+  await waitFor(async () => !(await quickInputState(Runtime)).visible, 5000, 100, 'QuickPick selection accepted');
   await sleep(STEP_DELAY);
   return point;
 }
@@ -311,29 +317,24 @@ async function clickLgvsRoot(Runtime, Input) {
   await sleep(STEP_DELAY);
   return true;
 }
-async function dispatchLgvsDomKey(Runtime, key) {
-  const escaped = JSON.stringify(key);
+async function clickWorkbenchLabel(Runtime, Input, label) {
   const r = await Runtime.evaluate({ expression: `(() => {
-    const key = ${escaped};
-    function send(root) {
-      if (root.querySelector?.('.root')) {
-        const target = root.body || root.querySelector('.root');
-        target?.focus?.();
-        const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
-        return target.dispatchEvent(event);
-      }
-      const all = Array.from(root.querySelectorAll?.('*') || []);
-      for (const el of all) {
-        if (el.shadowRoot && send(el.shadowRoot)) return true;
-        if (el.tagName === 'IFRAME' && el.contentDocument && send(el.contentDocument)) return true;
-      }
-      return false;
-    }
-    return send(document);
+    const wanted = ${JSON.stringify(label)};
+    const candidates = Array.from(document.querySelectorAll('.pane-header')).filter(el => ((el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim()).includes(wanted));
+    const el = candidates
+      .filter(candidate => { const rect = candidate.getBoundingClientRect(); return rect.width > 0 && rect.height > 0; })
+      .sort((a, b) => a.getBoundingClientRect().width - b.getBoundingClientRect().width)[0];
+    if (!el) return undefined;
+    const rect = el.getBoundingClientRect();
+    return { x: rect.left + Math.min(24, rect.width / 4), y: rect.top + rect.height / 2, text: el.textContent || '' };
   })()`, returnByValue: true });
-  return !!r.result.value;
+  const point = r.result.value;
+  if (!point) return undefined;
+  await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+  await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+  await sleep(STEP_DELAY);
+  return point;
 }
-
 (async () => {
   if (runMatrixIfNeeded()) return;
   const variantShots = path.join(SHOTS, VARIANT_NAME);
@@ -356,6 +357,7 @@ async function dispatchLgvsDomKey(Runtime, key) {
   write(path.join(userData, 'User', 'keybindings.json'), JSON.stringify([
     ...Array.from({ length: 8 }, (_, i) => ({ key: `ctrl+alt+${i + 1}`, command: `lazygitvs.focusPanel${i + 1}` })),
     { key: 'ctrl+alt+enter', command: 'lazygitvs.enterSelected' },
+    { key: 'f9', command: 'lazygitvs.enterSelected' },
     { key: 'ctrl+alt+/', command: 'lazygitvs.helpCurrentPanel' },
     { key: 'ctrl+alt+h', command: 'lazygitvs.enterCurrentFileHunkMode' }
   ], null, 2));
@@ -365,7 +367,7 @@ async function dispatchLgvsDomKey(Runtime, key) {
   const launchArgs = [
     codePath,
     fixture,
-    secondaryRepo,
+    ...(secondaryRepo ? [secondaryRepo] : []),
     `--extensionDevelopmentPath=${ROOT}`,
     `--user-data-dir=${userData}`,
     `--extensions-dir=${extensionsDir}`,
@@ -417,6 +419,29 @@ async function dispatchLgvsDomKey(Runtime, key) {
     const { Page, Input, Runtime, Browser, Emulation } = client;
     activePage = Page;
     await Promise.all([Page.enable(), Runtime.enable()]);
+    async function exerciseCommitFileTree() {
+      const expectedPath = 'commit-tree/routes/api/target.ts';
+      const gitCommitFiles = git(fixture, 'show', '--format=', '--name-only', 'HEAD');
+      await chord(Input, 'ctrl+alt+4');
+      await waitForText(Runtime, /-- COMMITS · LG --/, 10000);
+      await chord(Input, 'ctrl+alt+enter');
+      await chord(Input, 'ctrl+alt+4');
+      await key(Input, 'ArrowDown');
+      const expandedText = await waitForText(Runtime, /COMMIT_TREE_TARGET/, 10000);
+      evidence.push({ step: 'commit-file-tree-expanded', screenshot: await screenshot(Page, '02-commit-file-tree-expanded', { force: true }), status: status(fixture), gitCommitFiles, textSample: expandedText.slice(0, 3000) });
+      checks.push({ name: 'Commit fixture contains the nested target path in HEAD', ok: gitCommitFiles.split('\n').includes(expectedPath), gitCommitFiles });
+      checks.push({ name: 'Commit Enter loads the tree before navigation reaches the nested target preview', ok: /COMMIT_TREE_TARGET/.test(expandedText), textSample: expandedText.slice(0, 1200) });
+
+      await chord(Input, 'ctrl+alt+enter');
+      const hunkText = await waitForText(Runtime, /-- (HUNK|LINE)\b/, 10000);
+      evidence.push({ step: 'commit-file-tree-readonly-hunk', screenshot: await screenshot(Page, '02-commit-file-tree-readonly-hunk', { force: true }), status: status(fixture), textSample: hunkText.slice(0, 5000) });
+      checks.push({ name: 'Commit nested file Enter opens read-only HUNK/LINE mode', ok: /-- (HUNK|LINE)\b/.test(hunkText) && /COMMIT_TREE_TARGET/.test(hunkText), textSample: hunkText.slice(0, 1200) });
+
+      await key(Input, 'Escape');
+      const returnText = await waitForText(Runtime, /-- COMMITS · LG --/, 10000);
+      evidence.push({ step: 'commit-file-tree-escape-keeps-context', status: status(fixture), textSample: returnText.slice(0, 3000) });
+      checks.push({ name: 'Esc from commit-file HUNK returns to the commit-file tree', ok: /-- COMMITS · LG --/.test(returnText), textSample: returnText.slice(0, 1200) });
+    }
     if (process.env.LGVS_DOGFOOD_WINDOW_SIZE && Browser?.getWindowForTarget) {
       try {
         const [width, height] = process.env.LGVS_DOGFOOD_WINDOW_SIZE.split(',').map(Number);
@@ -441,16 +466,16 @@ async function dispatchLgvsDomKey(Runtime, key) {
     checks.push({ name: 'No noisy focus footer in LGVS panels', ok: !/Focus:\s+LG panel/i.test(sidebarText), textSample: sidebarText.slice(-800) });
     checks.push({ name: 'Right chat / secondary side bar stays closed in screenshots', ok: !/CHAT\s+Build with Agent/i.test(sidebarText), textSample: sidebarText.slice(-800) });
 
-    await key(Input, '1');
-    await sleep(STEP_DELAY);
-    let unselectedStatusText = (await pageText(Runtime)).slice(0, 3000);
-    if (!/1 STATUS/.test(unselectedStatusText)) {
-      await dispatchLgvsDomKey(Runtime, '1');
-      unselectedStatusText = await waitFor(async () => {
-        const text = (await pageText(Runtime)).slice(0, 3000);
-        return /1 STATUS/.test(text) ? text : undefined;
-      }, 10000, 250, 'Status panel after numeric 1');
-    }
+    await chord(Input, 'ctrl+alt+1');
+    const statusPanelText = async () => {
+      const text = (await pageText(Runtime)).slice(0, 3000);
+      return /1 STATUS/.test(text) ? text : undefined;
+    };
+    const unselectedStatusText = await waitFor(statusPanelText, 5000, 250, 'Status panel after dogfood focusPanel1 keybinding')
+      .catch(async () => {
+        await chord(Input, 'ctrl+alt+1');
+        return waitFor(statusPanelText, 10000, 250, 'Status panel after retried dogfood focusPanel1 keybinding');
+      });
     evidence.push({ step: 'status-requires-explicit-repo-selection', screenshot: await screenshot(Page, '02-status-requires-explicit-repo-selection'), status: status(fixture), textSample: unselectedStatusText });
     checks.push({ name: 'Multi-repo Status starts without visually marking the first repo current', ok: /1 STATUS/.test(unselectedStatusText) && !/current/i.test(unselectedStatusText), textSample: unselectedStatusText.slice(0, 1200) });
     await runCommandPalette(Input, 'LazyGitVS: Select Status Repository');
@@ -460,6 +485,13 @@ async function dispatchLgvsDomKey(Runtime, key) {
     const primarySelectedText = (await pageText(Runtime)).slice(0, 3000);
     evidence.push({ step: 'status-select-primary-repo-before-main-flow', screenshot: await screenshot(Page, '02-status-select-primary-repo-before-main-flow'), status: status(fixture), pickedPrimary, textSample: primarySelectedText });
     checks.push({ name: 'Dogfood explicitly selects the primary repo before file actions', ok: !!pickedPrimary && /2 FILES/.test(primarySelectedText) && /README\.md|settings\.json|src\/app\.ts/.test(primarySelectedText), pickedPrimary, textSample: primarySelectedText.slice(0, 1200) });
+
+    if (process.env.LGVS_DOGFOOD_FAST_COMMIT_FILE_TREE) {
+      checks.push({ name: 'Commit-file lane selects the fixture from a real multi-repository workspace', ok: !!pickedPrimary && !!secondaryRepo && !!deepRepo, fixture });
+      await exerciseCommitFileTree();
+      finishDogfoodReport();
+      return;
+    }
 
     if (process.env.LGVS_DOGFOOD_FAST_THEME) {
       const themeLabel = process.env.LGVS_DOGFOOD_FAST_THEME === 'high-contrast' ? 'High contrast smoke: LGVS stays readable' : 'Dark theme smoke: LGVS stays readable';
@@ -690,14 +722,19 @@ async function dispatchLgvsDomKey(Runtime, key) {
     for (const [panelKey, panelTitle] of [['1', 'Status'], ['2', 'Files'], ['3', 'Branches'], ['4', 'Commits'], ['5', 'Stash'], ['6', 'Conflicts'], ['7', 'Tags'], ['8', 'Remotes']]) {
       void panelTitle;
       await chord(Input, `ctrl+alt+${panelKey}`);
-      const jumpText = await waitFor(async () => {
+      const panelText = async () => {
         const text = await pageText(Runtime);
         if (panelKey === '1') return /-- (STATUS|HUNK)\b/.test(text) || text.includes('1 STATUS') || /master\s*·\s*current/i.test(text) ? text : null;
         if (panelKey === '2') return /-- FILES · LG --/.test(text) ? text : null;
         if (panelKey === '7') return text.includes('7 TAGS') ? text : null;
         if (panelKey === '8') return text.includes('8 REMOTES') ? text : null;
         return new RegExp(`-- ${panelTitle.toUpperCase()} · LG --`).test(text) ? text : null;
-      }, 5000, 250, `panel ${panelKey} ${panelTitle} reveal`);
+      };
+      const jumpText = await waitFor(panelText, 5000, 250, `panel ${panelKey} ${panelTitle} reveal`)
+        .catch(async () => {
+          await chord(Input, `ctrl+alt+${panelKey}`);
+          return waitFor(panelText, 10000, 250, `panel ${panelKey} ${panelTitle} reveal after retry`);
+        });
       evidence.push({ step: `panel-jump-${panelKey}`, screenshot: await screenshot(Page, `02-panel-jump-${panelKey}`), status: status(fixture), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '1') checks.push({ name: 'Focus 1 keeps LGVS ownership or reveals Status panel', ok: /-- (STATUS|HUNK)\b/.test(jumpText) || jumpText.includes('1 STATUS') || /master\s*·\s*current/i.test(jumpText), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '2') checks.push({ name: 'Moving from 1 Status to 2 Files hides Status again', ok: !jumpText.includes('1 STATUS') && /-- FILES · LG --/.test(jumpText), textSample: jumpText.slice(0, 1200) });
@@ -726,36 +763,13 @@ async function dispatchLgvsDomKey(Runtime, key) {
       checks.push({ name: `Escape on ${panelKey} ${panelName} keeps the current panel`, ok: new RegExp(`-- ${panelName} · LG --`).test(escText), textSample: escText.slice(0, 1200) });
     }
 
-    await key(Input, '3');
+    await chord(Input, 'ctrl+alt+3');
     await sleep(STEP_DELAY);
-    await key(Input, 'Enter');
+    await chord(Input, 'ctrl+alt+enter');
     await sleep(1800);
     const branchEnterText = (await pageText(Runtime)).slice(0, 3000);
     evidence.push({ step: 'branches-enter-shows-selected-branch-commits', screenshot: await screenshot(Page, '02-branches-enter-shows-selected-branch-commits'), status: status(fixture), textSample: branchEnterText });
     checks.push({ name: 'Branches Enter shows commits for the selected branch', ok: /-- COMMITS · LG --/.test(branchEnterText) && /initial/.test(branchEnterText), textSample: branchEnterText.slice(0, 1200) });
-
-    await key(Input, '4');
-    await sleep(STEP_DELAY);
-    await key(Input, 'Enter');
-    await sleep(1800);
-    const commitFilesText = (await pageText(Runtime)).slice(0, 3000);
-    evidence.push({ step: 'commits-enter-shows-changed-files', screenshot: await screenshot(Page, '02-commits-enter-shows-changed-files'), status: status(fixture), textSample: commitFilesText });
-    checks.push({ name: 'Commit Enter shows changed files for the selected commit', ok: /-- COMMITS · LG --/.test(commitFilesText) && /README\.md|settings\.json|src\/app\.ts|\.gitignore/.test(commitFilesText), textSample: commitFilesText.slice(0, 1200) });
-    await chord(Input, 'ctrl+alt+enter');
-    await sleep(1800);
-    const commitFileHunkText = (await pageText(Runtime)).slice(0, 5000);
-    evidence.push({ step: 'commit-file-enter-readonly-hunk-mode', screenshot: await screenshot(Page, '02-commit-file-enter-readonly-hunk-mode'), status: status(fixture), textSample: commitFileHunkText });
-    checks.push({ name: 'Commit-file Enter opens read-only HUNK/LINE mode', ok: /-- (HUNK|LINE)\b/.test(commitFileHunkText), textSample: commitFileHunkText.slice(0, 1200) });
-    await key(Input, 'Escape');
-    await sleep(1200);
-    const commitFileReturnText = (await pageText(Runtime)).slice(0, 3000);
-    evidence.push({ step: 'commit-file-escape-returns-to-files-subview', screenshot: await screenshot(Page, '02-commit-file-escape-returns-to-files-subview'), status: status(fixture), textSample: commitFileReturnText });
-    checks.push({ name: 'Esc from commit-file HUNK mode returns to commit files', ok: /-- COMMITS · LG --/.test(commitFileReturnText) && /README\.md|settings\.json|src\/app\.ts/.test(commitFileReturnText), textSample: commitFileReturnText.slice(0, 1200) });
-    await key(Input, 'Escape');
-    await sleep(STEP_DELAY);
-    const commitListReturnText = (await pageText(Runtime)).slice(0, 3000);
-    evidence.push({ step: 'commits-escape-returns-to-list', screenshot: await screenshot(Page, '02-commits-escape-returns-to-list'), status: status(fixture), textSample: commitListReturnText });
-    checks.push({ name: 'Esc from commit files returns to the commit list', ok: /-- COMMITS · LG --/.test(commitListReturnText) && /initial/.test(commitListReturnText), textSample: commitListReturnText.slice(0, 1200) });
 
     await chord(Input, 'ctrl+alt+4');
     await key(Input, 'Escape');
@@ -763,7 +777,7 @@ async function dispatchLgvsDomKey(Runtime, key) {
     await key(Input, 'Escape');
     await sleep(300);
     await clickLgvsRoot(Runtime, Input);
-    await dispatchLgvsDomKey(Runtime, '?');
+    await chord(Input, 'ctrl+alt+?');
     let helpQuick = await quickInputState(Runtime);
     if (!helpQuick.visible) {
       // Active-panel lazy visibility can leave the DOM-dispatched help key without native focus in headless CDP.

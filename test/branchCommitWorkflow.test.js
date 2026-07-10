@@ -27,6 +27,10 @@ assert(extension.includes("else if (panel === 'commits') {\n      if (this.commi
 assert(extension.includes('if (c) await showCommitPreview(c, this.lazygitGit, preserveFocus);'), 'Commit navigation must render a rich semantic stat+patch preview for the selected commit, not a raw git show text buffer');
 assert(extension.includes("await this.openCurrent('commits', true);"), 'Commit Enter must push into commit files and immediately preview the first file diff');
 assert(extension.includes('previewCommitFileDiff(this.commitFilesFor, f, preserveFocus)'), 'Moving through files inside a commit must use the same VS Code diff-editor preview UX as Files panel, not a passive text patch');
+assert(extension.includes('private commitFileTreeRows()'), 'Commit-file drilldown must reuse the Files tree-row pipeline instead of rendering a flat raw list');
+assert(extension.includes("const commitFileRows = this.commitFileTreeRows();"), 'Commits subview should render commit files through the same tree/row renderer as 2 Files');
+assert(extension.includes('treeFileRow(active && i===this.commitFileSelected'), 'Commit-file rows should reuse the same treeFileRow colors/status badges as 2 Files');
+assert(extension.includes('if (await this.toggleCurrentCommitFileTreeNode()) return;'), 'Enter on a commit-file directory should expand/collapse like 2 Files before opening a file');
 assert(extension.includes('previewStashFileDiff(this.stashFilesFor, f, preserveFocus)'), 'Moving through files inside a stash must use the same VS Code diff-editor preview UX as Files panel, not a stale preview or text patch');
 assert(extension.includes("if (f && this.stashFilesFor) await previewStashFileDiff(this.stashFilesFor, f, false);"), 'Enter on a stash file must focus the VS Code diff editor instead of opening a passive text patch');
 assert(extension.includes("await this.openCurrent('stash', true);"), 'Entering stash files must immediately preview the first file diff, like commit-files');
@@ -45,8 +49,8 @@ assert(extension.includes("if (viewPanel === 'commits' && this.commitFilesFor) {
 assert(extension.includes("if(e.key==='Backspace'){e.preventDefault();vscode.postMessage({type:'clearFilter'});return;}"), 'Backspace must clear filters or return from commit files');
 assert(extension.includes("if(hit(e,u.return)){e.preventDefault();vscode.postMessage({type:'back'});return;}"), 'Esc must honor lazygit universal.return and return from commit files to the commit list when the LGVS webview owns focus');
 assert(dogfoodUi.includes("branches-enter-shows-selected-branch-commits"), 'Dogfood must exercise Branches Enter -> branch-scoped commits');
-assert(dogfoodUi.includes("commit-file-enter-readonly-hunk-mode"), 'Dogfood must exercise commit-file Enter -> read-only HUNK/LINE mode');
-assert(dogfoodUi.includes("commit-file-escape-returns-to-files-subview"), 'Dogfood must exercise Esc from read-only commit-file HUNK/LINE mode back to commit-files subview');
+assert(dogfoodUi.includes("commit-file-tree-readonly-hunk"), 'Dogfood must exercise commit-file Enter -> read-only HUNK/LINE mode');
+assert(dogfoodUi.includes("commit-file-tree-escape-keeps-context"), 'Dogfood must exercise Esc from read-only commit-file HUNK/LINE mode back to the expanded commit-files tree');
 assert(parityAudit.includes('Story 5 Enter re-audit'), 'Parity audit must record the Story 5 upstream lazygit Enter re-audit source notes');
 assert(parityGapReport.includes('Branches `<enter>` views commits for the selected branch; re-audited against lazygit keybinding docs/source extract') && !parityGapReport.includes('Branches` `<enter>` semantics are suspect') && !parityGapReport.includes('commit-file `<enter>` should feel like'), 'Parity gap report must clear the stale Enter suspect notes and document the VS Code-native commit-file difference');
 

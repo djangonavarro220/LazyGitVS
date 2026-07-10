@@ -45,6 +45,9 @@ function makeFixture() {
   }
   git(dir, 'add', '.');
   git(dir, 'commit', '-m', 'initial');
+  write(path.join(dir, 'commit-tree/routes/api/target.ts'), 'export const COMMIT_TREE_TARGET = "nested commit fixture";\n');
+  git(dir, 'add', 'commit-tree/routes/api/target.ts');
+  git(dir, 'commit', '-m', 'dogfood commit file tree');
   git(dir, 'branch', 'feature/dogfood');
   git(dir, 'tag', 'v0.0.1');
   git(dir, 'remote', 'add', 'origin', 'https://example.invalid/lazygitvs-dogfood.git');

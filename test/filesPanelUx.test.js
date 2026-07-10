@@ -6,6 +6,7 @@ const root = path.join(__dirname, '..');
 const extension = [
   'extension.ts',
   'panelRows.ts',
+  'panels.ts',
   'gitMenus.ts'
 ].map(file => fs.readFileSync(path.join(root, 'src', file), 'utf8')).join('\n');
 
@@ -31,7 +32,7 @@ assert(extension.includes('export function treeFileRow(sel: boolean, klass: stri
 assert(extension.includes('while (visible.children.length === 1 && !visible.children[0].file)'), 'File tree should compress single-child directory chains like upstream lazygit instead of wasting one row per path segment');
 assert(extension.includes("const labelFromDepth = (node: Node, treeDepth: number) => node.path.split('/').slice(treeDepth).join('/')"), 'Compressed file tree rows should display the real remaining path segment, e.g. karabiner/assets/complex_modifications');
 assert(extension.includes('<span class="tree-name">${escapeHtml(row.label)}</span>'), 'Directory rows must render the computed tree label, not basename(path), so compressed paths remain visible');
-assert(extension.includes("if (!this.lazygitGui.showFileTree) return files.map(file => ({ kind: 'file', path: file.path, label: file.path"), 'Flat file mode should keep full paths instead of truncating to basename');
+assert(extension.includes("if (!options.showFileTree) return files.map(file => ({ kind: 'file', path: file.path, label: file.path"), 'Flat file mode should keep full paths instead of truncating to basename');
 assert(!extension.includes('.row.file.staged{border-left-color:'), 'Files panel must not add VS Code rail markers; original lazygit uses short-status letters, not a colored side rail');
 assert(!extension.includes('.row.file.unstaged{border-left-color:'), 'Files panel must not add VS Code rail markers; original lazygit uses short-status letters, not a colored side rail');
 assert(!extension.includes('border-left:2px solid transparent;'), 'Sidebar rows must not reserve a phantom rail column that lazygit original does not have');

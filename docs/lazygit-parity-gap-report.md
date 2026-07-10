@@ -207,7 +207,7 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 - [ ] Discard this commit's changes to file `d` via interactive rebase flow.
 - [ ] Copy path / copy file info exact menu.
 - [ ] Commit-file custom patch include/exclude.
-- [ ] Commit-file tree collapse/expand parity.
+- [x] Commit-file tree collapse/expand parity: `Enter` toggles directory rows independently from the Files panel, preserving the selected file for preview/HUNK entry.
 - [ ] External difftool.
 
 ### Stash gaps

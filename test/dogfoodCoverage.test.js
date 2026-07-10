@@ -1,27 +1,40 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 const root = path.join(__dirname, '..');
 const dogfood = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
 const dogfoodFixtures = fs.readFileSync(path.join(root, 'scripts', 'dogfood', 'fixtures.js'), 'utf8');
 const dogfoodReporting = fs.readFileSync(path.join(root, 'scripts', 'dogfood', 'reporting.js'), 'utf8');
+const { writeScreenshot } = require(path.join(root, 'scripts', 'dogfood', 'screenshots.js'));
 const dogfoodSource = `${dogfood}\n${dogfoodFixtures}\n${dogfoodReporting}`;
 const testingDoc = fs.readFileSync(path.join(root, 'docs', 'testing-and-verification.md'), 'utf8');
 const knownBugsDoc = fs.readFileSync(path.join(root, 'docs', 'known-bugs.md'), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
+const pendingTests = [];
 function test(name, fn) {
   try {
-    fn();
-    console.log(`ok - ${name}`);
+    const result = fn();
+    if (result && typeof result.then === 'function') {
+      pendingTests.push(result.then(() => console.log(`ok - ${name}`), error => {
+        console.error(`not ok - ${name}`);
+        console.error(error);
+        process.exitCode = 1;
+      }));
+    } else {
+      console.log(`ok - ${name}`);
+    }
   } catch (error) {
     console.error(`not ok - ${name}`);
     console.error(error);
     process.exitCode = 1;
   }
 }
+
+process.on('beforeExit', async () => { await Promise.all(pendingTests); });
 
 function requireDogfoodInvariant(name, pattern) {
   assert(pattern.test(dogfoodSource), `dogfood sources must cover: ${name}`);
@@ -67,9 +80,20 @@ test('dogfood asserts the documented visible UI smoke path', () => {
   requireDogfoodInvariant('cramped Remotes honest state assertion', /Cramped sidebar numeric 8 updates LGVS Remotes state without claiming native scroll reveal/);
   requireDogfoodInvariant('cramped limitation evidence', /nativeScmDeepPanelRevealLimitation/);
   requireDogfoodInvariant('Escape stays on normal panels', /Escape on \$\{panelKey\} \$\{panelName\} keeps the current panel/);
-  requireDogfoodInvariant('commit files detail is reachable', /Commit Enter shows changed files for the selected commit/);
-  requireDogfoodInvariant('commit files detail returns to commit list', /Esc from commit files returns to the commit list/);
+  requireDogfoodInvariant('commit files detail is reachable', /Commit Enter loads the tree before navigation reaches the nested target preview/);
   requireDogfoodInvariant('contextual help focus return is covered', /Contextual help return keeps LGVS focus after active-panel lazy rendering/);
+});
+
+test('dogfood proves the complete nested commit-file tree drilldown in full and targeted lanes', () => {
+  assert.match(pkg.scripts['dogfood:ui:commit-file-tree'], /LGVS_DOGFOOD_FAST_COMMIT_FILE_TREE=1/, 'package.json must expose a targeted commit-file-tree lane');
+  requireDogfoodInvariant('nested commit fixture', /commit-tree\/routes\/api\/target\.ts/);
+  requireDogfoodInvariant('stable focus command', /ctrl\+alt\+4/);
+  requireDogfoodInvariant('stable enter command', /LazyGitVS: Enter Selected Item/);
+  requireDogfoodInvariant('loaded tree navigation proof', /Commit Enter loads the tree before navigation reaches the nested target preview/);
+  requireDogfoodInvariant('readonly hunk proof', /Commit nested file Enter opens read-only HUNK\/LINE mode/);
+  requireDogfoodInvariant('escape context proof', /Esc from commit-file HUNK returns to the commit-file tree/);
+  assert(dogfood.includes('if (process.env.LGVS_DOGFOOD_FAST_COMMIT_FILE_TREE)'), 'targeted commit-file-tree lane must execute the real drilldown');
+  assert(dogfood.includes('await exerciseCommitFileTree();'), 'the targeted lane must execute the real commit-file tree drilldown');
 });
 
 test('dogfood asserts editor HUNK and LINE flows with real Git state', () => {
@@ -103,6 +127,41 @@ test('dogfood playbook documents screenshots only for failures by default', () =
   assert(testingDoc.includes('passing runs stay text/JSON-only'), 'playbook must document passing runs do not emit screenshot spam');
 });
 
+test('dogfood Status reaches the real focusPanel1 command through its stable dogfood keybinding', () => {
+  assert(/key: `ctrl\+alt\+\$\{i \+ 1\}`, command: `lazygitvs\.focusPanel\$\{i \+ 1\}`/.test(dogfood), 'dogfood-only panel keybindings must target the real focusPanel commands');
+  assert(/await chord\(Input, 'ctrl\+alt\+1'\)/.test(dogfood), 'Status setup must use the stable dogfood-only focusPanel1 keybinding');
+  const statusSetup = dogfood.slice(dogfood.indexOf("await chord(Input, 'ctrl+alt+1')"), dogfood.indexOf("status-requires-explicit-repo-selection"));
+  assert(!/dispatchLgvsDomKey/.test(statusSetup), 'Status setup must not fall back to synthetic DOM keyboard events');
+});
+
+test('forced failure screenshots are written when passing screenshots are disabled', async () => {
+  const shots = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-dogfood-shots-'));
+  try {
+    const file = await writeScreenshot({
+      Page: { captureScreenshot: async () => ({ data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL4aQAAAABJRU5ErkJggg==' }) },
+      name: 'failure',
+      force: true,
+      screenshots: undefined,
+      shots,
+      variant: 'no-vim',
+      variantName: 'no-vim',
+      sleep: async () => {}
+    });
+    assert(file && fs.existsSync(file), 'forced failure screenshot must be written even without screenshots=all');
+    assert.deepStrictEqual(fs.readFileSync(file).subarray(0, 8), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), 'forced screenshot must be a valid PNG, not an arbitrary CDP buffer');
+    await assert.rejects(() => writeScreenshot({
+      Page: { captureScreenshot: async () => ({ data: Buffer.from('not a PNG').toString('base64') }) },
+      name: 'invalid-failure',
+      force: true,
+      screenshots: undefined,
+      shots,
+      sleep: async () => {}
+    }), /valid PNG/, 'invalid CDP screenshot data must not be written as PNG evidence');
+  } finally {
+    fs.rmSync(shots, { recursive: true, force: true });
+  }
+});
+
 test('deep SCM panel reveal limitation stays honest and guarded against fake fixes', () => {
   assert(knownBugsDoc.includes('VS Code does not expose a reliable public API to scroll a collapsed/deep contributed SCM view'), 'known-bugs must document the native deep-panel reveal API limitation');
   assert(knownBugsDoc.includes('Do not claim visual deep-panel reveal is fixed unless the dogfood screenshot proves it'), 'known-bugs must warn future agents not to claim fake visual reveal fixes');
@@ -111,7 +170,7 @@ test('deep SCM panel reveal limitation stays honest and guarded against fake fix
 
 test('large repo refresh contract coalesces refresh storms and preserves file selection by path', () => {
   assert(/if \(this\.refreshTimer\) clearTimeout\(this\.refreshTimer\)/.test(extension), 'scheduled refreshes must debounce file watcher bursts');
-  assert(/if \(this\.refreshInFlight\) \{ this\.refreshPending = true; return; \}/.test(extension), 'in-flight refreshes must be coalesced into one pending pass');
+  assert(extension.includes('this.refreshCoordinator.request(updatePreview'), 'in-flight refreshes must use the awaitable coalescing coordinator');
   assert(/previousPath = this\.currentFile\(\)\?\.path/.test(extension), 'refresh must snapshot the active file path before reloading Git state');
   assert(/findIndex\(row => row\.kind === 'file' && row\.file\.path === previousPath\)/.test(extension), 'refresh must restore the active file row by path when the selection did not move');
   assert(/virtualRows\(fileRows, this\.selected/.test(extension), 'large Files panels must render through the virtualized row window');

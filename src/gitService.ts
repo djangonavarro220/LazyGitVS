@@ -19,6 +19,7 @@ type VsCodeGitRepository = { rootUri?: vscode.Uri; state?: { HEAD?: { name?: str
 type VsCodeGitApi = { repositories?: VsCodeGitRepository[] };
 
 let activeWorkspaceRoot: string | undefined;
+let activeWorkspaceRootIsImplicit = false;
 let discoveredWorkspaceRepoCount = 0;
 
 export function getActiveWorkspaceRoot(): string | undefined {
@@ -27,6 +28,7 @@ export function getActiveWorkspaceRoot(): string | undefined {
 
 export function setActiveWorkspaceRoot(root: string | undefined) {
   activeWorkspaceRoot = root;
+  activeWorkspaceRootIsImplicit = false;
 }
 
 export function workspaceRoot(): string {
@@ -151,6 +153,10 @@ export async function discoverWorkspaceRepositories(): Promise<WorkspaceReposito
   discoveredWorkspaceRepoCount = roots.size;
   if (!activeWorkspaceRoot || !roots.has(activeWorkspaceRoot)) {
     activeWorkspaceRoot = roots.size === 1 ? roots.keys().next().value : undefined;
+    activeWorkspaceRootIsImplicit = Boolean(activeWorkspaceRoot);
+  } else if (activeWorkspaceRootIsImplicit && roots.size > 1) {
+    activeWorkspaceRoot = undefined;
+    activeWorkspaceRootIsImplicit = false;
   }
   const repos = await Promise.all(Array.from(roots.entries()).map(async ([repoPath, workspaceFolder]) => ({
     path: repoPath,

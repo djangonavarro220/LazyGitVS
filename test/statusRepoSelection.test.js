@@ -95,18 +95,27 @@ assert(!extension.includes("row(false, '', 'gui'"), '1 Status must not dump inte
 (async () => {
   const fixture = createWorkspaceRepos();
   try {
+    setActiveWorkspaceRoot(undefined);
+    vscodeMock.workspace.workspaceFolders = [
+      { uri: { fsPath: fixture.primary }, name: 'primary-repo' }
+    ];
+    const singleRepo = await discoverWorkspaceRepositories();
+    assert.equal(singleRepo.length, 1, 'single-repo discovery should find the workspace repository');
+    assert.equal(getActiveWorkspaceRoot(), fixture.primary, 'single-repo discovery must retain the fallback target');
+    assert.equal(workspaceRoot(), fixture.primary, 'single-repo Git actions must retain the fallback target');
+
     vscodeMock.workspace.workspaceFolders = [
       { uri: { fsPath: fixture.primary }, name: 'primary-repo' },
       { uri: { fsPath: fixture.secondary }, name: 'secondary-repo' }
     ];
-    setActiveWorkspaceRoot(undefined);
-
     const repos = await discoverWorkspaceRepositories();
     assert.equal(repos.length, 2, 'fixture should expose two real Git repositories');
-    assert.equal(getActiveWorkspaceRoot(), undefined, 'multi-repo discovery must leave target unset until Status selection chooses one');
-    assert.throws(() => workspaceRoot(), /Select a Status repository/, 'Git actions must not silently target the first repo when several repos are open');
+    assert.equal(getActiveWorkspaceRoot(), undefined, 'incremental multi-repo discovery must clear a prior implicit single-repo target');
+    assert.throws(() => workspaceRoot(), /Select a Status repository/, 'Git actions must not silently target a prior implicit repo when several repos are open');
 
     setActiveWorkspaceRoot(fixture.secondary);
+    await discoverWorkspaceRepositories();
+    assert.equal(getActiveWorkspaceRoot(), fixture.secondary, 'an explicit Status selection must survive multi-repo refreshes');
     const files = await changedFiles();
     assert.deepEqual(files.map(file => file.path), ['secondary-only.txt'], 'after Status selection, Git actions/status are scoped to the selected repo');
   } finally {

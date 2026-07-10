@@ -8,6 +8,7 @@ function targetLane(env = process.env) {
     env.LGVS_DOGFOOD_FAST_RESET_STATE && 'reset-state',
     env.LGVS_DOGFOOD_FAST_COMMAND_PALETTE && 'command-palette',
     env.LGVS_DOGFOOD_FAST_HUNK_ESCAPE && 'hunk-escape',
+    env.LGVS_DOGFOOD_FAST_COMMIT_FILE_TREE && 'commit-file-tree',
     env.LGVS_DOGFOOD_DEEP_TREE && 'deep-tree',
     env.LGVS_DOGFOOD_CRAMPED_SIDEBAR && 'cramped-sidebar',
     env.LGVS_DOGFOOD_EDGE_FILES && 'edge-files',

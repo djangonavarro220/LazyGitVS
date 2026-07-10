@@ -7,7 +7,8 @@ import { applyHunk, applyLine, discardUnstagedLine, gitDiffConfigArgs, hunksForF
 import { normalizeWebviewMessage, scriptJson, webviewContentSecurityPolicy } from './webviewSecurity';
 import { hunkBodyLines, hunkChangedEditorLine, hunkSelectableLineIndexes, hunkStartLine, parseDiffHunks, type Hunk } from './hunkPatch';
 import { EMPTY_PREVIEW_SCHEME, EmptyProvider, VIRTUAL_PREVIEW_SCHEME, VirtualPreviewProvider } from './previewDocuments';
-import { FocusArea, isPanel, isViewPanel, PANEL_ORDER, REFRESH_INTERVAL_MS, STATE_KEY, VIEW_IDS, type FileTreeRow, type Panel, type ViewPanel } from './panels';
+import { buildTreeRows, FocusArea, isPanel, isViewPanel, PANEL_ORDER, REFRESH_INTERVAL_MS, STATE_KEY, VIEW_IDS, type FileTreeRow, type TreeRow, type Panel, type ViewPanel } from './panels';
+import { RefreshCoordinator } from './refreshCoordinator';
 import { branchRow, commitRow, dirRow, escapeHtml, fileRow, fileStateLabel, fileStatusHtml, row, treeFileRow } from './panelRows';
 import { originCommitUrl, pickGitAction, runGitAction, executeGitMenuItem, showCommitCopyMenu, showCommitResetMenu, showDiscardFileMenu, showDiscardHunkMenu, showPullMenu, showPushMenu, showResetMenu, showStashCreateMenu, type GitMenuItem } from './gitMenus';
 import { findMenuItemByKey } from './lazygitMenu';
@@ -74,6 +75,7 @@ class LazyGitVSController {
   private fileRangeAnchor: number | undefined;
   private fileRangeSelected = new Set<number>();
   private collapsedFileDirs = new Set<string>();
+  private collapsedCommitFileDirs = new Set<string>();
   private hunkSelected = 0;
   private branchSelected = 0;
   private tagSelected = 0;
@@ -102,7 +104,7 @@ class LazyGitVSController {
   private refreshTimer?: NodeJS.Timeout;
   private intervalTimer?: NodeJS.Timeout;
   private pendingFilesPreviewTimer?: ReturnType<typeof setTimeout>; private filesPreviewEpoch = 0;
-  private refreshInFlight = false; private refreshPending = false;
+  private readonly refreshCoordinator = new RefreshCoordinator();
   private windowFocused = vscode.window.state.focused; private refreshDirtyWhileUnfocused = false;
   private selectionEpoch = 0;
   private explosion = false;
@@ -378,8 +380,6 @@ class LazyGitVSController {
     this.fileRangeSelected.clear();
     this.pendingWebviewAutoFocus = false;
     this.suppressWebviewAutoFocusUntil = Date.now() + 2500;
-    this.refreshInFlight = false;
-    this.refreshPending = false;
     this.selectionEpoch++;
     this.persistNavigationState();
     this.renderAll();
@@ -426,7 +426,7 @@ class LazyGitVSController {
       timers: {
         refreshTimerActive: Boolean(this.refreshTimer),
         intervalTimerActive: Boolean(this.intervalTimer),
-        refreshInFlight: this.refreshInFlight, refreshPending: this.refreshPending,
+        refreshInFlight: this.refreshCoordinator.isInFlight, refreshPending: this.refreshCoordinator.hasPending,
         windowFocused: this.windowFocused, refreshDirtyWhileUnfocused: this.refreshDirtyWhileUnfocused
       },
       webviewAutofocus: {
@@ -461,7 +461,7 @@ class LazyGitVSController {
     this.requestWebviewAutoFocus();
     this.persistNavigationState();
     this.updateModeStatusBar();
-    if (panel === 'status') await this.refresh(false).catch(() => undefined);
+    if (panel === 'status' || this.activeLength(panel) === 0) await this.refresh(false).catch(() => undefined);
     this.renderAll();
     await this.revealPanelView(panel);
     if (panel === 'status') await this.revealCurrentStatusRepo().catch(() => undefined);
@@ -653,9 +653,7 @@ class LazyGitVSController {
   }
 
   private async refresh(updatePreview: boolean) {
-    if (this.refreshInFlight) { this.refreshPending = true; return; }
-    this.refreshInFlight = true;
-    try {
+    await this.refreshCoordinator.request(updatePreview, async refreshPreview => {
       const refreshSelectionEpoch = this.selectionEpoch;
       const refreshPanel = this.activePanel;
       const refreshEditorMode = this.editorHunkMode || this.editorEditMode;
@@ -677,17 +675,14 @@ class LazyGitVSController {
       this.updateEditorHunkDecorations();
       this.renderAll();
       if (
-        updatePreview &&
+        refreshPreview &&
         this.selectionEpoch === refreshSelectionEpoch &&
         this.activePanel === refreshPanel &&
         !refreshEditorMode &&
         !this.editorHunkMode &&
         !this.editorEditMode
       ) await this.openCurrent(this.activeViewPanel(), true).catch(() => undefined);
-    } finally {
-      this.refreshInFlight = false;
-      if (this.refreshPending) { this.refreshPending = false; this.scheduleRefresh(0); }
-    }
+    });
   }
 
   private activeViewPanel(): ViewPanel { return this.activePanel === 'hunks' ? 'files' : this.activePanel; }
@@ -699,7 +694,7 @@ class LazyGitVSController {
     this.tagSelected = clamp(this.tagSelected, this.filteredTags().length);
     this.remoteSelected = clamp(this.remoteSelected, this.filteredRemotes().length);
     this.commitSelected = clamp(this.commitSelected, this.filteredCommits().length);
-    this.commitFileSelected = clamp(this.commitFileSelected, this.commitFileItems.length);
+    this.commitFileSelected = clamp(this.commitFileSelected, this.commitFileTreeRows().length);
     this.stashSelected = clamp(this.stashSelected, this.filteredStashes().length);
     this.stashFileSelected = clamp(this.stashFileSelected, this.stashFileItems.length);
     this.conflictSelected = clamp(this.conflictSelected, this.filteredConflicts().length);
@@ -707,7 +702,7 @@ class LazyGitVSController {
   }
   private activeIndex(panel: Panel): number { return panel === 'hunks' ? (this.hunkSelectionMode === 'line' ? this.hunkLineSelected : this.hunkSelected) : panel === 'branches' ? this.branchSelected : panel === 'tags' ? this.tagSelected : panel === 'remotes' ? this.remoteSelected : panel === 'commits' ? (this.commitFilesFor ? this.commitFileSelected : this.commitSelected) : panel === 'stash' ? (this.stashFilesFor ? this.stashFileSelected : this.stashSelected) : panel === 'conflicts' ? this.conflictSelected : this.selected; }
   private setActiveIndex(panel: Panel, value: number) { if (panel === 'hunks') { if (this.hunkSelectionMode === 'line') this.hunkLineSelected = value; else this.hunkSelected = value; } else if (panel === 'branches') this.branchSelected = value; else if (panel === 'tags') this.tagSelected = value; else if (panel === 'remotes') this.remoteSelected = value; else if (panel === 'commits') { if (this.commitFilesFor) this.commitFileSelected = value; else this.commitSelected = value; } else if (panel === 'stash') { if (this.stashFilesFor) this.stashFileSelected = value; else this.stashSelected = value; } else if (panel === 'conflicts') this.conflictSelected = value; else this.selected = value; }
-  private activeLength(panel: Panel): number { return panel === 'status' ? 0 : panel === 'hunks' ? (this.hunkSelectionMode === 'line' ? (this.hunks[this.hunkSelected] ? hunkSelectableLineIndexes(this.hunks[this.hunkSelected]).length : 0) : this.hunks.length) : panel === 'branches' ? this.filteredBranches().length : panel === 'tags' ? this.filteredTags().length : panel === 'remotes' ? this.filteredRemotes().length : panel === 'commits' ? (this.commitFilesFor ? this.commitFileItems.length : this.filteredCommits().length) : panel === 'stash' ? (this.stashFilesFor ? this.stashFileItems.length : this.filteredStashes().length) : panel === 'conflicts' ? this.filteredConflicts().length : this.fileTreeRows().length; }
+  private activeLength(panel: Panel): number { return panel === 'status' ? 0 : panel === 'hunks' ? (this.hunkSelectionMode === 'line' ? (this.hunks[this.hunkSelected] ? hunkSelectableLineIndexes(this.hunks[this.hunkSelected]).length : 0) : this.hunks.length) : panel === 'branches' ? this.filteredBranches().length : panel === 'tags' ? this.filteredTags().length : panel === 'remotes' ? this.filteredRemotes().length : panel === 'commits' ? (this.commitFilesFor ? this.commitFileTreeRows().length : this.filteredCommits().length) : panel === 'stash' ? (this.stashFilesFor ? this.stashFileItems.length : this.filteredStashes().length) : panel === 'conflicts' ? this.filteredConflicts().length : this.fileTreeRows().length; }
   private filteredFiles(): ChangedFile[] {
     let items = this.files;
     if (this.fileStatusFilter === 'staged') items = items.filter(f => f.staged);
@@ -716,53 +711,16 @@ class LazyGitVSController {
     if (this.fileStatusFilter === 'untracked') items = items.filter(f => f.untracked);
     return this.sortFilesByLazyGitConfig(this.applyTextFilter(items, f => f.path));
   }
-  private fileTreeRows(): FileTreeRow[] {
-    const files = this.filteredFiles();
-    if (!this.lazygitGui.showFileTree) return files.map(file => ({ kind: 'file', path: file.path, label: file.path, depth: 0, file }));
-    type Node = { path: string; part: string; file?: ChangedFile; children: Node[] };
-    const root: Node = { path: '', part: '', children: [] };
-    const child = (parent: Node, part: string, pathValue: string) => {
-      let node = parent.children.find(c => c.part === part);
-      if (!node) { node = { path: pathValue, part, children: [] }; parent.children.push(node); }
-      return node;
-    };
-    for (const file of files) {
-      let node = root;
-      const parts = file.path.split('/');
-      parts.forEach((part, index) => {
-        node = child(node, part, parts.slice(0, index + 1).join('/'));
-        if (index === parts.length - 1) node.file = file;
-      });
-    }
-    const cmp = (a: Node, b: Node) => {
-      const normalize = (value: string) => this.lazygitGui.fileTreeSortCaseSensitive ? value : value.toLocaleLowerCase();
-      if (this.lazygitGui.fileTreeSortOrder === 'foldersFirst' && Boolean(a.file) !== Boolean(b.file)) return a.file ? 1 : -1;
-      if (this.lazygitGui.fileTreeSortOrder === 'filesFirst' && Boolean(a.file) !== Boolean(b.file)) return a.file ? -1 : 1;
-      return normalize(a.path).localeCompare(normalize(b.path));
-    };
-    const sort = (node: Node) => { node.children.sort(cmp); node.children.forEach(sort); };
-    sort(root);
-    const rows: FileTreeRow[] = [];
-    const labelFromDepth = (node: Node, treeDepth: number) => node.path.split('/').slice(treeDepth).join('/');
-    const render = (node: Node, treeDepth: number, visualDepth: number) => {
-      if (node.file) {
-        rows.push({ kind: 'file', path: node.path, label: labelFromDepth(node, treeDepth), depth: visualDepth, file: node.file });
-        return;
-      }
-      let visible = node;
-      let compressedDepth = treeDepth;
-      while (visible.children.length === 1 && !visible.children[0].file) {
-        visible = visible.children[0];
-        compressedDepth++;
-      }
-      const collapsed = this.collapsedFileDirs.has(visible.path);
-      rows.push({ kind: 'dir', path: visible.path, label: labelFromDepth(visible, treeDepth), depth: visualDepth, collapsed });
-      if (!collapsed) visible.children.forEach(childNode => render(childNode, compressedDepth + 1, visualDepth + 1));
-    };
-    root.children.forEach(node => render(node, 0, 0));
-    return rows;
+  private treeRowsFor<T extends { path: string }>(files: T[], collapsedDirs: Set<string>): TreeRow<T>[] { return buildTreeRows(files, this.lazygitGui, collapsedDirs); }
+  private fileTreeRows(): FileTreeRow[] { return this.treeRowsFor(this.filteredFiles(), this.collapsedFileDirs); }
+  private commitFileAsChangedFile(file: CommitFile): ChangedFile & CommitFile {
+    const status = (file.status || 'M').slice(0, 1);
+    return { ...file, xy: `${status} `, staged: status !== '?', untracked: status === '?' };
   }
+  private commitFileTreeRows(): TreeRow<ChangedFile & CommitFile>[] { return this.treeRowsFor(this.commitFileItems.map(file => this.commitFileAsChangedFile(file)), this.collapsedCommitFileDirs); }
   private currentFileTreeRow(): FileTreeRow | undefined { return this.fileTreeRows()[this.selected]; }
+  private currentCommitFileTreeRow(): TreeRow<ChangedFile & CommitFile> | undefined { return this.commitFileTreeRows()[this.commitFileSelected]; }
+  private currentCommitFile(): CommitFile | undefined { const row = this.currentCommitFileTreeRow(); return row?.kind === 'file' ? row.file : undefined; }
   private filesUnderFileTreeDir(dirPath: string): ChangedFile[] { return this.filteredFiles().filter(file => file.path === dirPath || file.path.startsWith(`${dirPath}/`)); }
   private selectFilePathInFilesPanel(filePath: string | undefined) {
     if (!filePath) return;
@@ -784,6 +742,15 @@ class LazyGitVSController {
     this.clampSelections();
     this.renderAll();
     await this.restorePanelFocusAfterModal('files');
+    return true;
+  }
+  private async toggleCurrentCommitFileTreeNode() {
+    const row = this.currentCommitFileTreeRow();
+    if (row?.kind !== 'dir') return false;
+    if (this.collapsedCommitFileDirs.has(row.path)) this.collapsedCommitFileDirs.delete(row.path); else this.collapsedCommitFileDirs.add(row.path);
+    this.clampSelections();
+    this.renderAll();
+    await this.restorePanelFocusAfterModal('commits');
     return true;
   }
   private async collapseAllFileTree() { this.collapsedFileDirs = new Set(this.allFileTreeDirs()); this.clampSelections(); this.renderAll(); await this.restorePanelFocusAfterModal('files'); }
@@ -1011,6 +978,7 @@ class LazyGitVSController {
     const repo = repos.find(repo => repo.path === repoPath);
     if (!repo) return this.recentReposMenu();
     setActiveWorkspaceRoot(repo.path);
+    this.selectionEpoch++;
     this.workspaceRepos = repos;
     this.statusLine = `Repository: ${repo.name}`;
     await this.refresh(true);
@@ -1494,7 +1462,7 @@ class LazyGitVSController {
     else if (panel === 'conflicts') { const f = this.currentConflict(); if (f) await previewDiff(f, preserveFocus); }
     else if (panel === 'commits') {
       if (this.commitFilesFor) {
-        const f = this.commitFileItems[this.commitFileSelected];
+        const f = this.currentCommitFile();
         if (f) await previewCommitFileDiff(this.commitFilesFor, f, preserveFocus);
       } else {
         const c = this.currentCommit();
@@ -1529,7 +1497,8 @@ class LazyGitVSController {
   }
   private async enterCommit() {
     if (this.commitFilesFor) {
-      const f = this.commitFileItems[this.commitFileSelected];
+      if (await this.toggleCurrentCommitFileTreeNode()) return;
+      const f = this.currentCommitFile();
       if (f) return this.enterCommitFileHunkMode(f);
       return;
     }
@@ -1727,7 +1696,15 @@ class LazyGitVSController {
     if (panel === 'tags') { const tags = this.filteredTags(); return tags.length ? tags.map((t,i)=>row(active && i===this.tagSelected, 'tag', 'T', t.name, t.date || t.subject, i)).join('') : '<div class="empty">No tags. Press T to create one.</div>'; }
     if (panel === 'remotes') { const remotes = this.filteredRemotes(); return remotes.length ? remotes.map((r,i)=>row(active && i===this.remoteSelected, 'remote', 'R', r.name, r.fetchUrl || r.pushUrl, i)).join('') : '<div class="empty">No remotes. Press n to add one.</div>'; }
     if (panel === 'commits') {
-      if (this.commitFilesFor) return this.commitFileItems.length ? this.commitFileItems.map((f,i)=>row(active && i===this.commitFileSelected, 'commit', f.status, f.path, this.commitFilesFor!.hash, i)).join('') : '<div class="empty">No files in commit.</div>';
+      if (this.commitFilesFor) {
+        const commitFileRows = this.commitFileTreeRows();
+        return commitFileRows.length ? this.virtualRows(commitFileRows, this.commitFileSelected, (r, i) => r.kind === 'dir'
+          ? dirRow(active && i===this.commitFileSelected, 'dir', r, i)
+          : this.lazygitGui.showFileTree
+            ? treeFileRow(active && i===this.commitFileSelected, statusClass(r.file), r.file, this.fileTreeLabel(r), r.depth, i)
+            : fileRow(active && i===this.commitFileSelected, statusClass(r.file), r.file, this.fileTreeLabel(r), i))
+          : '<div class="empty">No files in commit.</div>';
+      }
       const commits = this.filteredCommits(); return commits.length ? commits.map((c,i)=>commitRow(active && i===this.commitSelected, c, i)).join('') : '<div class="empty">No commits.</div>';
     }
 
