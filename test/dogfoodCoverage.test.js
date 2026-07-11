@@ -8,7 +8,7 @@ const dogfood = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'ut
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
 const dogfoodFixtures = fs.readFileSync(path.join(root, 'scripts', 'dogfood', 'fixtures.js'), 'utf8');
 const dogfoodReporting = fs.readFileSync(path.join(root, 'scripts', 'dogfood', 'reporting.js'), 'utf8');
-const { writeScreenshot } = require(path.join(root, 'scripts', 'dogfood', 'screenshots.js'));
+const { writeNativeScreenshot, writeScreenshot } = require(path.join(root, 'scripts', 'dogfood', 'screenshots.js'));
 const dogfoodSource = `${dogfood}\n${dogfoodFixtures}\n${dogfoodReporting}`;
 const testingDoc = fs.readFileSync(path.join(root, 'docs', 'testing-and-verification.md'), 'utf8');
 const knownBugsDoc = fs.readFileSync(path.join(root, 'docs', 'known-bugs.md'), 'utf8');
@@ -157,6 +157,25 @@ test('forced failure screenshots are written when passing screenshots are disabl
       shots,
       sleep: async () => {}
     }), /valid PNG/, 'invalid CDP screenshot data must not be written as PNG evidence');
+  } finally {
+    fs.rmSync(shots, { recursive: true, force: true });
+  }
+});
+
+test('native modal screenshots are captured from the owning X display and retained as PNG evidence', async () => {
+  const shots = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-native-modal-shots-'));
+  try {
+    const file = await writeNativeScreenshot({
+      name: 'native-modal',
+      shots,
+      display: ':9347',
+      sleep: async () => {},
+      capture: ({ display, file }) => {
+        assert.strictEqual(display, ':9347');
+        fs.writeFileSync(file, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL4aQAAAABJRU5ErkJggg==', 'base64'));
+      }
+    });
+    assert(file && fs.existsSync(file), 'native modal screenshot must be retained');
   } finally {
     fs.rmSync(shots, { recursive: true, force: true });
   }

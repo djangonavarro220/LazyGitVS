@@ -33,11 +33,20 @@ function writeJson(file, value) {
   fs.writeFileSync(file, JSON.stringify(value, null, 2));
 }
 
+function assertScreenshotEvidence(report) {
+  for (const item of report.evidence || []) {
+    if (!item.screenshot) continue;
+    const stat = fs.statSync(item.screenshot, { throwIfNoEntry: false });
+    if (!stat?.isFile()) throw new Error(`Dogfood screenshot evidence is missing: ${item.screenshot}`);
+  }
+}
+
 function finishReport({ reportPath, checks, report }) {
   assertChecks(checks);
+  assertScreenshotEvidence(report);
   writeJson(reportPath, report);
   console.log(JSON.stringify(report, null, 2));
   return report;
 }
 
-module.exports = { targetLane, assertChecks, finishReport, writeJson };
+module.exports = { targetLane, assertChecks, assertScreenshotEvidence, finishReport, writeJson };

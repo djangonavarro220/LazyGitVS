@@ -197,7 +197,7 @@ The broad harness should keep covering at least:
 - `Esc` exits LGVS HUNK/LINE mode back to Files/sidebar
 - normal editor/Vim text focus is not hijacked by LGVS number bindings
 - generated previews are named virtual documents, not `Untitled-*`
-- failure screenshots are written under `dogfood-output/screenshots/` automatically; passing runs stay text/JSON-only unless `LGVS_DOGFOOD_SCREENSHOTS=all` is set
+- failure screenshots are written under the report-scoped `dogfood-output/screenshots/<variant>-<lane>/` directory automatically; passing runs stay text/JSON-only unless `LGVS_DOGFOOD_SCREENSHOTS=all` is set
 
 If a bug came from VSCodeVim, run both no-vim and vim lanes. Fixing only the no-vim lane is usually fake progress.
 
@@ -336,11 +336,11 @@ Flaky UI tests are annoying. Blindly removing them is worse.
 ## Useful output paths
 
 ```text
-dogfood-output/last-run.json
-dogfood-output/last-run-no-vim.json
-dogfood-output/last-run-vim.json
-dogfood-output/screenshots/no-vim/*.png
-dogfood-output/screenshots/vim/*.png
+dogfood-output/last-run-matrix-full.json
+dogfood-output/last-run-no-vim-full.json
+dogfood-output/last-run-vim-full.json
+dogfood-output/screenshots/no-vim-full/*.png
+dogfood-output/screenshots/vim-full/*.png
 ../releases/LazyGitVS/lazygitvs-<commit>.vsix
 dist/lazygitvs-<version>.vsix
 ```

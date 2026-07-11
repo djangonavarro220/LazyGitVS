@@ -7,6 +7,8 @@ const config = fs.readFileSync(path.join(root, 'src', 'lazygitConfig.ts'), 'utf8
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
 const webviewSecurity = fs.readFileSync(path.join(root, 'src', 'webviewSecurity.ts'), 'utf8');
 const dogfood = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
+const dogfoodReporting = fs.readFileSync(path.join(root, 'scripts', 'dogfood', 'reporting.js'), 'utf8');
+const upstreamAudit = fs.readFileSync(path.join(root, 'docs', 'lazygit-undo-redo-audit.md'), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const { parseSimpleYaml } = require('../out/lazygitConfig');
 
@@ -44,5 +46,9 @@ assert(extension.includes("type:'dogfoodBoundary'"), 'the real webview key route
 assert(extension.includes("process.env.LGVS_DOGFOOD_BOUNDARY_REPORT"), 'boundary events must be gated by the existing dogfood environment/reporting channel');
 assert(dogfood.includes('boundaryEvents'), 'targeted undo dogfood must persist boundary events in its normal report');
 assert(dogfood.includes("event === 'reflogUndo'"), 'targeted undo dogfood must assert that physical x emitted reflogUndo');
+assert(dogfood.includes("path.join(SHOTS, REPORT_SLUG)"), 'each targeted lane must retain screenshots in its own report-scoped directory');
+assert(dogfoodReporting.includes('assertScreenshotEvidence(report)'), 'a passing dogfood report must reject missing screenshot evidence before it is written');
+assert(upstreamAudit.includes('146f00491820055f3a6c0d492447d7e2b9da7d83'), 'undo/redo audit must name the reproducible upstream checkout commit');
+assert(!upstreamAudit.includes('e59c1d1cb7c4fde83918e72a92897ce76d185c9f'), 'undo/redo audit must not cite the unavailable upstream object');
 
 console.log('undoRedoParity tests passed');

@@ -72,11 +72,11 @@ Output:
 
 ```text
 dogfood-output/
-  last-run.json
-  last-run-no-vim.json
-  last-run-vim.json
-  screenshots/no-vim/*.png
-  screenshots/vim/*.png
+  last-run-matrix-full.json
+  last-run-no-vim-full.json
+  last-run-vim-full.json
+  screenshots/no-vim-full/*.png
+  screenshots/vim-full/*.png
 ```
 
 `dogfood-output/` is intentionally ignored by Git and excluded from the VSIX.

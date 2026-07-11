@@ -11,7 +11,7 @@ const http = require('http');
 const { spawn, spawnSync, execFileSync } = require('child_process');
 const { makeFixture, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write, startMergeOperation, mergeOperationInProgress } = require('./dogfood/fixtures');
 const { targetLane, finishReport, writeJson } = require('./dogfood/reporting');
-const { writeScreenshot } = require('./dogfood/screenshots');
+const { writeNativeScreenshot, writeScreenshot } = require('./dogfood/screenshots');
 const CDP = require('chrome-remote-interface');
 const { downloadAndUnzipVSCode } = require('@vscode/test-electron');
 
@@ -23,7 +23,9 @@ const VARIANT_NAME = VARIANT || 'matrix';
 const TARGETED_LANE = targetLane(process.env);
 const REPORT_SLUG = `${VARIANT_NAME}-${TARGETED_LANE}`;
 const REPORT_JSON = path.join(OUT, `last-run-${REPORT_SLUG}.json`);
+const LANE_SHOTS = path.join(SHOTS, REPORT_SLUG);
 const PORT = Number(process.env.LGVS_DOGFOOD_CDP_PORT || 9322);
+const NATIVE_DISPLAY = process.env.DISPLAY || `:${PORT}`;
 const STEP_DELAY = Number(process.env.LGVS_DOGFOOD_STEP_DELAY || 900);
 const THEME = process.env.LGVS_DOGFOOD_THEME || 'Default Light Modern';
 const VIRTUAL_PREVIEW_URI_PREFIX = 'lazygitvs-preview:';
@@ -95,7 +97,6 @@ function installVSCodeVimExtension(extensionsDir) {
 
 function runMatrixIfNeeded() {
   if (VARIANT) return false;
-  fs.rmSync(SHOTS, { recursive: true, force: true });
   ensureDir(SHOTS);
   const variants = [
     { name: 'no-vim', port: PORT },
@@ -178,18 +179,15 @@ async function screenshot(Page, name, opts = {}) {
     name,
     force: opts.force,
     screenshots: process.env.LGVS_DOGFOOD_SCREENSHOTS,
-    shots: SHOTS,
-    variant: VARIANT,
-    variantName: VARIANT_NAME,
+    shots: LANE_SHOTS,
+    variant: '',
+    variantName: '',
     sleep
   });
 }
-function nativeScreenshot(name) {
-  const output = path.join(SHOTS, VARIANT_NAME, `${name}.png`);
-  ensureDir(path.dirname(output));
-  const result = spawnSync('import', ['-window', 'root', output], { encoding: 'utf8' });
-  if (result.status !== 0) throw new Error(`Could not capture native dialog screenshot: ${(result.stderr || result.stdout || '').trim()}`);
-  return output;
+let nativeXauthority;
+async function nativeScreenshot(name) {
+  return writeNativeScreenshot({ name, shots: LANE_SHOTS, display: NATIVE_DISPLAY, xauthority: nativeXauthority, sleep });
 }
 async function runCommandPalette(Input, commandText) {
   // F1 is less prone than Ctrl+Shift+P to being eaten by LGVS/webview focus during CDP dogfood.
@@ -430,9 +428,8 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
 }
 (async () => {
   if (runMatrixIfNeeded()) return;
-  const variantShots = path.join(SHOTS, VARIANT_NAME);
-  fs.rmSync(variantShots, { recursive: true, force: true });
-  ensureDir(variantShots);
+  fs.rmSync(LANE_SHOTS, { recursive: true, force: true });
+  ensureDir(LANE_SHOTS);
   const started = new Date().toISOString();
   const fixture = makeFixture();
   const secondaryRepo = secondaryFixtureRepo(fixture);
@@ -443,6 +440,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
   }
   const codePath = await downloadAndUnzipVSCode('stable');
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-code-user-'));
+  nativeXauthority = path.join(userData, 'Xauthority');
   const undoRedoConfig = path.join(userData, 'lazygit-undo-redo.yml');
   const undoRedoBoundaryReport = path.join(userData, 'lazygit-undo-redo-boundary.jsonl');
   if (process.env.LGVS_DOGFOOD_UNDO_REDO) write(undoRedoConfig, 'keybinding:\n  universal:\n    undo: x\n    redo: X\n');
@@ -488,7 +486,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     '--log=error'
   ];
   const cmd = process.env.DISPLAY ? codePath : 'xvfb-run';
-  const args = process.env.DISPLAY ? launchArgs.slice(1) : ['-a', ...launchArgs];
+  const args = process.env.DISPLAY ? launchArgs.slice(1) : ['-n', String(PORT), '-f', nativeXauthority, ...launchArgs];
   const proc = spawn(cmd, args, { cwd: ROOT, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: process.env.LGVS_DOGFOOD_UNDO_REDO ? { ...process.env, LG_CONFIG_FILE: undoRedoConfig, LGVS_DOGFOOD_BOUNDARY_REPORT: undoRedoBoundaryReport } : process.env });
   let procOut = '';
   proc.stdout.on('data', d => procOut += d.toString());
@@ -681,7 +679,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
       const modalEvent = boundaryEvents.find(({ event }) => event === 'reflogAction:modal');
       assert(modalEvent && /Are you sure you want to soft reset to/.test(modalEvent.prompt), 'Undo did not invoke the real native soft-reset modal');
       const modalExtractionText = await pageText(Runtime);
-      evidence.push({ step: 'undo-confirmation-cancel', screenshot: await screenshot(Page, '02-undo-confirmation-cancel', { force: true }), head: git(fixture, 'rev-parse', 'HEAD'), modalEvent, modalVisibleInPageExtraction: /Are you sure you want to soft reset to/.test(modalExtractionText) });
+      evidence.push({ step: 'undo-confirmation-cancel', screenshot: await nativeScreenshot('02-undo-confirmation-cancel'), screenshotSource: 'native-x-display', head: git(fixture, 'rev-parse', 'HEAD'), modalEvent, modalVisibleInPageExtraction: /Are you sure you want to soft reset to/.test(modalExtractionText) });
       await key(Input, 'Escape');
       await sleep(STEP_DELAY);
       checks.push({ name: 'Configured custom undo key replaces stale z in the real Files webview routing help', ok: !/Are you sure you want to (soft|hard) reset to/.test(staleDefaultText) && /x\s+Undo/i.test(customKeyHelp) });
@@ -1313,10 +1311,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     await runCommandPalette(Input, 'LazyGitVS: Close Sidebar');
     evidence.push({ step: 'close-sidebar', screenshot: await screenshot(Page, '11-close-sidebar'), status: status(fixture) });
 
-    for (const c of checks) assert(c.ok, `Dogfood check failed: ${c.name}`);
-    const report = { ok: true, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, targeted: TARGETED_LANE, fixture, codePath, checks, evidence, processOutput: procOut.slice(-4000) };
-    write(REPORT_JSON, JSON.stringify(report, null, 2));
-    console.log(JSON.stringify(report, null, 2));
+    finishDogfoodReport();
   } catch (error) {
     let failureScreenshot;
     if (activePage) {
