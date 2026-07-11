@@ -12,7 +12,7 @@ const { spawn, spawnSync, execFileSync } = require('child_process');
 const { makeFixture, fixtureRepos, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write, startMergeOperation, mergeOperationInProgress } = require('./dogfood/fixtures');
 const { targetLane, finishReport, writeJson } = require('./dogfood/reporting');
 const { makeFixtureResult, classifyFailure, collectProcessTreeMetrics } = require('./dogfood/telemetry');
-const { discoverOwnedCdp, makeChildTerminalFailure, publishJsonOnce, readProcessIdentity, readRunEnvelope, terminateOwnedProcessGroup } = require('./dogfood/run-envelope');
+const { discoverOwnedCdp, makeChildTerminalFailure, publishJsonOnce, readProcessIdentity, readRunEnvelope, runChildPreRuntimeLifecycle, terminateOwnedProcessGroup } = require('./dogfood/run-envelope');
 const { writeNativeScreenshot, writeScreenshot } = require('./dogfood/screenshots');
 const CDP = require('chrome-remote-interface');
 const { downloadAndUnzipVSCode } = require('@vscode/test-electron');
@@ -514,10 +514,21 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
   const cmd = process.env.DISPLAY ? codePath : 'xvfb-run';
   const args = process.env.DISPLAY ? launchArgs.slice(1) : ['-n', String(PORT), '-f', nativeXauthority, ...launchArgs];
   const processStartedAtMs = Date.now();
-  lifecyclePhase = 'spawn';
-  proc = spawn(cmd, args, { cwd: ROOT, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: process.env.LGVS_DOGFOOD_UNDO_REDO ? { ...process.env, LG_CONFIG_FILE: undoRedoConfig, LGVS_DOGFOOD_BOUNDARY_REPORT: undoRedoBoundaryReport } : process.env });
-  lifecyclePhase = 'process-identity';
-  rootProcessIdentity = readProcessIdentity(proc.pid);
+  const child = await runChildPreRuntimeLifecycle({
+    setup: () => undefined,
+    spawnChild: () => spawn(cmd, args, { cwd: ROOT, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: process.env.LGVS_DOGFOOD_UNDO_REDO ? { ...process.env, LG_CONFIG_FILE: undoRedoConfig, LGVS_DOGFOOD_BOUNDARY_REPORT: undoRedoBoundaryReport } : process.env }),
+    readIdentity: readProcessIdentity,
+    publishFailure: ({ phase, error, rootProcessIdentity: capturedIdentity }) => {
+      lifecyclePhase = phase;
+      if (TELEMETRY) {
+        publishJsonOnce(REPORT_JSON, makeChildTerminalFailure({ envelope: RUN_ENVELOPE, lane: process.env.LGVS_TELEMETRY_LANE, phase, error, rootProcessIdentity: capturedIdentity }), { runRoot: RUN_ENVELOPE.paths.runRoot });
+        terminalPublished = true;
+      }
+    },
+    cleanup: terminateOwnedProcessGroup
+  });
+  proc = child.proc;
+  rootProcessIdentity = child.rootProcessIdentity;
   proc.stdout.on('data', d => procOut += d.toString());
   proc.stderr.on('data', d => procOut += d.toString());
 

@@ -2,6 +2,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { EventEmitter } = require('events');
 const { spawnSync } = require('child_process');
 
 const root = path.resolve(__dirname, '..');
@@ -9,14 +10,13 @@ const telemetry = require(path.join(root, 'scripts', 'dogfood', 'telemetry'));
 const runEnvelope = require(path.join(root, 'scripts', 'dogfood', 'run-envelope'));
 
 function test(name, fn) {
-  try {
-    fn();
+  Promise.resolve().then(fn).then(() => {
     console.log(`ok - ${name}`);
-  } catch (error) {
+  }, error => {
     console.error(`not ok - ${name}`);
     console.error(error);
     process.exitCode = 1;
-  }
+  });
 }
 
 function validReport(file = path.join(os.tmpdir(), 'lgvs-valid-telemetry.json')) {
@@ -297,4 +297,39 @@ test('structured child failure binding rejects authority mutations but ignores w
   reworded.failure.message = 'completely different diagnostic wording';
   assert.deepStrictEqual(validate(reworded), []);
   assert.strictEqual(reworded.classification, 'infrastructure');
+});
+
+test('production pre-runtime path handles async ENOENT before identity', async () => {
+  const proc = new EventEmitter();
+  process.nextTick(() => proc.emit('error', Object.assign(new Error('missing command'), { code: 'ENOENT' })));
+  let failure;
+  let identityCalls = 0;
+  await assert.rejects(runEnvelope.runChildPreRuntimeLifecycle({
+    setup: () => undefined,
+    spawnChild: () => proc,
+    readIdentity: () => { identityCalls += 1; },
+    publishFailure: value => { failure = value; },
+    cleanup: () => assert.fail('cleanup without identity')
+  }));
+  assert.strictEqual(failure.phase, 'spawn');
+  assert.strictEqual(failure.error.code, 'ENOENT');
+  assert.strictEqual(identityCalls, 0);
+});
+
+test('production pre-runtime path deterministically covers setup, sync spawn, identity and success', async () => {
+  const failedPhases = [];
+  const run = options => runEnvelope.runChildPreRuntimeLifecycle({
+    setup: () => undefined,
+    spawnChild: () => { const proc = new EventEmitter(); proc.pid = 100; process.nextTick(() => proc.emit('spawn')); return proc; },
+    readIdentity: () => ({ pid: 100 }),
+    publishFailure: value => { failedPhases.push(value.phase); },
+    cleanup: () => assert.fail('cleanup before runtime'),
+    ...options
+  });
+  await assert.rejects(run({ setup: () => { throw new Error('setup'); } }));
+  await assert.rejects(run({ spawnChild: () => { throw new Error('spawn'); } }));
+  await assert.rejects(run({ readIdentity: () => { throw new Error('identity'); } }));
+  assert.deepStrictEqual(failedPhases, ['setup', 'spawn', 'process-identity']);
+  const success = await run({});
+  assert.strictEqual(success.rootProcessIdentity.pid, 100);
 });

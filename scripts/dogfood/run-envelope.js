@@ -183,6 +183,36 @@ function readProcessIdentity(pid) {
   return { pid: numericPid, ...parsed, executable: fs.realpathSync(`/proc/${numericPid}/exe`) };
 }
 
+function waitForChildSpawn(proc) {
+  if (!proc || typeof proc.once !== 'function') throw new Error('spawn did not return a ChildProcess');
+  return new Promise((resolve, reject) => {
+    const onSpawn = () => { proc.removeListener('error', onError); resolve(); };
+    const onError = error => { proc.removeListener('spawn', onSpawn); reject(error); };
+    proc.once('spawn', onSpawn);
+    proc.once('error', onError);
+  });
+}
+
+async function runChildPreRuntimeLifecycle({ setup, spawnChild, readIdentity = readProcessIdentity, publishFailure, cleanup }) {
+  let phase = 'setup';
+  let proc;
+  let rootProcessIdentity;
+  try {
+    const setupResult = await setup();
+    phase = 'spawn';
+    proc = spawnChild(setupResult);
+    await waitForChildSpawn(proc);
+    phase = 'process-identity';
+    rootProcessIdentity = await readIdentity(proc.pid, proc);
+    return { proc, rootProcessIdentity, setupResult };
+  } catch (error) {
+    await publishFailure({ phase, error, proc, rootProcessIdentity });
+    if (rootProcessIdentity) await cleanup(rootProcessIdentity);
+    error.childTerminalPublished = true;
+    throw error;
+  }
+}
+
 function sameProcess(left, right) {
   return left.pid === right.pid && left.startTicks === right.startTicks && left.executable === right.executable && left.processGroup === right.processGroup && left.session === right.session;
 }
@@ -312,6 +342,7 @@ module.exports = {
   publishJsonOnce,
   readRunEnvelope,
   readProcessIdentity,
+  runChildPreRuntimeLifecycle,
   terminateOwnedProcessGroup,
   validateEnvelopeBinding
 };
