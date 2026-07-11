@@ -20,7 +20,7 @@ function treeProject(items, variant) {
   let selected = items;
   if (variant.filter) selected = selected.filter(item => item.status === variant.filter);
   if (variant.sort) selected = [...selected].sort((a, b) => a.path < b.path ? 1 : a.path > b.path ? -1 : 0);
-  if (!variant.tree) return selected.map(item => ({ kind: 'file', path: item.path, depth: 0, item }));
+  if (!variant.tree) return selected.map(item => ({ kind: 'file', path: item.path, depth: 0, status: item.status, ordinal: item.ordinal }));
 
   const rootFiles = [];
   const directories = new Map();
@@ -41,11 +41,11 @@ function treeProject(items, variant) {
     rows.push({ kind: 'dir', path, depth: 0, collapsed });
     if (!collapsed) {
       files.sort(comparePath);
-      for (const item of files) rows.push({ kind: 'file', path: item.path, depth: 1, item });
+      for (const item of files) rows.push({ kind: 'file', path: item.path, depth: 1, status: item.status, ordinal: item.ordinal });
     }
   }
   rootFiles.sort(comparePath);
-  for (const item of rootFiles) rows.push({ kind: 'file', path: item.path, depth: 0, item });
+  for (const item of rootFiles) rows.push({ kind: 'file', path: item.path, depth: 0, status: item.status, ordinal: item.ordinal });
   return rows;
 }
 
@@ -63,6 +63,7 @@ function build(variant, revision) {
     cache,
     snapshot: cache.read({
       modelId: `benchmark:${variant.name}`,
+      ownerGeneration: revision,
       sourceRevision: revision,
       projectionRevision: revision,
       treeRevision: revision,
@@ -94,7 +95,7 @@ for (const variant of variants) {
 
 const hitCache = new ListModelCache({ duplicateIdentity: 'error' });
 const hitRequest = {
-  modelId: 'benchmark:hits', sourceRevision: 1, projectionRevision: 1, treeRevision: 1, items: fixture,
+  modelId: 'benchmark:hits', ownerGeneration: 1, sourceRevision: 1, projectionRevision: 1, treeRevision: 1, items: fixture,
   project: items => treeProject(items, variants[1]), identity: row => `${row.kind}:${row.path}`
 };
 const hitSnapshot = hitCache.read(hitRequest);

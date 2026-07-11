@@ -30,6 +30,8 @@ export type IdentityIndex<I> = Readonly<{
 
 export type ListModelRequest<T, R, I> = Readonly<{
   modelId: string;
+  /** Monotonic token issued by the model owner. Revisions below are cache-key values, not clocks. */
+  ownerGeneration: number;
   sourceRevision: ListModelRevision;
   projectionRevision: ListModelRevision;
   treeRevision: ListModelRevision;
@@ -62,6 +64,7 @@ export type ListModelSnapshot<R, I> = Readonly<{
 
 export type ListModelCacheOptions = Readonly<{
   duplicateIdentity?: 'error' | 'first-wins';
+  maxModels?: number;
 }>;
 
 type MutableStats = { -readonly [K in keyof ListModelStats]: number };
@@ -84,26 +87,53 @@ const ZERO_STATS: MutableStats = {
   duplicateIdentityErrors: 0
 };
 
-function frozenRow<R>(row: R): Readonly<R> {
-  if (row !== null && typeof row === 'object') {
-    return Object.freeze({ ...(row as Record<PropertyKey, unknown>) }) as Readonly<R>;
+function ownedFrozenValue<T>(value: T, seen = new Map<object, unknown>()): T {
+  if (value === null || typeof value !== 'object') return value;
+  const existing = seen.get(value as object);
+  if (existing !== undefined) return existing as T;
+  if (Array.isArray(value)) {
+    const copy: unknown[] = [];
+    seen.set(value, copy);
+    for (const entry of value) copy.push(ownedFrozenValue(entry, seen));
+    return Object.freeze(copy) as T;
   }
-  return row as Readonly<R>;
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError('List model rows may contain only owned plain objects, arrays, and primitive values');
+  }
+  const stringKeys = Object.keys(value as object);
+  const symbolKeys = Object.getOwnPropertySymbols(value as object);
+  const keys: PropertyKey[] = symbolKeys.length === 0 ? stringKeys : [...stringKeys, ...symbolKeys];
+  if (prototype === Object.prototype && keys.every(key => {
+    const entry = (value as Record<PropertyKey, unknown>)[key];
+    return entry === null || typeof entry !== 'object';
+  })) {
+    return Object.freeze({ ...(value as Record<string, unknown>) }) as T;
+  }
+  const copy = Object.create(prototype) as Record<PropertyKey, unknown>;
+  seen.set(value as object, copy);
+  for (const key of keys) {
+    copy[key] = ownedFrozenValue((value as Record<PropertyKey, unknown>)[key], seen);
+  }
+  return Object.freeze(copy) as T;
 }
 
 export class ListModelCache<T, R, I> {
-  private published: ListModelSnapshot<R, I> | undefined;
-  private generation = 0;
+  private readonly published = new Map<string, ListModelSnapshot<R, I>>();
   private readonly epochs = new Map<string, Epochs>();
   private counters: MutableStats = { ...ZERO_STATS };
   private readonly duplicateIdentity: 'error' | 'first-wins';
+  private readonly maxModels: number;
 
   constructor(options: ListModelCacheOptions = {}) {
     this.duplicateIdentity = options.duplicateIdentity ?? 'first-wins';
+    this.maxModels = options.maxModels ?? 32;
+    if (!Number.isInteger(this.maxModels) || this.maxModels < 1) throw new RangeError('maxModels must be a positive integer');
   }
 
   read(request: ListModelRequest<T, R, I>): ListModelSnapshot<R, I> {
     this.counters.reads++;
+    const published = this.published.get(request.modelId);
     const epochs = this.epochsFor(request.modelId);
     const key = Object.freeze({
       modelId: request.modelId,
@@ -115,20 +145,22 @@ export class ListModelCache<T, R, I> {
       treeEpoch: epochs.tree
     });
 
-    if (this.published && this.sameKey(this.published.semanticKey, key)) {
+    if (published && this.sameKey(published.semanticKey, key)) {
       this.counters.hits++;
-      return this.published;
+      this.touch(request.modelId, published);
+      return published;
     }
 
     this.counters.misses++;
     this.counters.buildsStarted++;
-    if (this.published?.modelId === request.modelId && this.isOlder(request, this.published)) {
+    if (published && request.ownerGeneration <= published.generation) {
       this.counters.buildsDiscarded++;
-      return this.published;
+      return published;
     }
 
     const projected = request.project(request.items, request);
-    const rows = projected.map(frozenRow);
+    const ownedValues = new Map<object, unknown>();
+    const rows = projected.map(row => ownedFrozenValue(row, ownedValues));
     const identities = new Array<I>(rows.length);
     const index = new Map<I, number>();
     for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
@@ -149,7 +181,7 @@ export class ListModelCache<T, R, I> {
 
     if (request.isCurrent && !request.isCurrent()) {
       this.counters.buildsDiscarded++;
-      if (this.published) return this.published;
+      if (published) return published;
       throw new Error(`List model publication became stale: ${request.modelId}`);
     }
 
@@ -158,7 +190,7 @@ export class ListModelCache<T, R, I> {
       has: (identity: I) => index.has(identity),
       size: index.size
     });
-    const generation = this.generation + 1;
+    const generation = request.ownerGeneration;
     const snapshot = Object.freeze({
       modelId: request.modelId,
       generation,
@@ -172,8 +204,11 @@ export class ListModelCache<T, R, I> {
       indexOfIdentity: (identity: I) => index.get(identity)
     });
 
-    this.generation = generation;
-    this.published = snapshot;
+    this.touch(request.modelId, snapshot);
+    while (this.published.size > this.maxModels) {
+      const oldest = this.published.keys().next().value as string;
+      this.published.delete(oldest);
+    }
     this.counters.buildsPublished++;
     this.counters.snapshotAllocations++;
     this.counters.rowArrayAllocations++;
@@ -217,9 +252,8 @@ export class ListModelCache<T, R, I> {
       && a.treeEpoch === b.treeEpoch;
   }
 
-  private isOlder(request: ListModelRequest<T, R, I>, snapshot: ListModelSnapshot<R, I>): boolean {
-    return request.sourceRevision < snapshot.sourceRevision
-      || request.projectionRevision < snapshot.projectionRevision
-      || request.treeRevision < snapshot.treeRevision;
+  private touch(modelId: string, snapshot: ListModelSnapshot<R, I>): void {
+    this.published.delete(modelId);
+    this.published.set(modelId, snapshot);
   }
 }
