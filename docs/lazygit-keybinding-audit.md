@@ -1,6 +1,6 @@
 # LazyGit keybinding parity audit
 
-Source: upstream lazygit `docs/keybindings/Keybindings_en.md` from `jesseduffield/lazygit` at `608c90a`.
+Source: upstream lazygit `docs/keybindings/Keybindings_en.md` from `jesseduffield/lazygit` at `146f00491820055f3a6c0d492447d7e2b9da7d83`, audited offline from the archive recorded in the canonical ledger.
 
 This is the behavior spec for LazyGitVS. If LGVS differs, it needs an explicit VS Code-native reason; otherwise it is a bug.
 
@@ -117,9 +117,9 @@ This is the behavior spec for LazyGitVS. If LGVS differs, it needs an explicit V
 ## Known LGVS parity gaps to close
 
 - Canonical audited claims live in `docs/lazygit-parity-ledger.json`; CI rejects duplicate, stale, and contradictory rows.
-<!-- parity-claim: {"id":"branches.enter","parity":"exact","reviewedAt":"2026-07-11"} -->
+<!-- parity-claim: {"id":"branches.enter","parity":"exact","reviewedAt":"2026-07-11","claim":"Branch `<enter>` now matches upstream: it views commits for the selected branch."} -->
 - Branch `<enter>` now matches upstream: it views commits for the selected branch.
-<!-- parity-claim: {"id":"commits.C","parity":"gap","reviewedAt":"2026-07-11"} -->
+<!-- parity-claim: {"id":"commits.C","parity":"gap","reviewedAt":"2026-07-11","claim":"Commit `C` matches upstream's delayed `V` paste for one commit, but selected-range copy and cancellation/reset semantics remain a canonical gap."} -->
 - Commit `C` matches upstream's delayed `V` paste for one commit, but selected-range copy and cancellation/reset semantics remain a canonical gap.
 - Several branch/commit/tag options are implemented as simplified direct Git commands rather than lazygit option menus.
 - File tree `-`/`=` collapse/expand and some filter/sort/worktree flows are incomplete.

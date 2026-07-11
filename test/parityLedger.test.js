@@ -7,11 +7,12 @@ const { spawnSync } = require('child_process');
 const root = path.join(__dirname, '..');
 const ledgerPath = path.join(root, 'docs', 'lazygit-parity-ledger.json');
 const validatorPath = path.join(root, 'scripts', 'validate-parity-ledger.js');
+const upstreamRepo = '/home/saldo/syncthing/openclaw-saldo/sync/_research/lazygit';
 
 function run(file = ledgerPath, docsDir) {
   const args = [validatorPath, file];
   if (docsDir) args.push(docsDir);
-  return spawnSync(process.execPath, args, { cwd: root, encoding: 'utf8' });
+  return spawnSync(process.execPath, args, { cwd: root, encoding: 'utf8', env: { ...process.env, LGVS_UPSTREAM_REPO: upstreamRepo } });
 }
 
 function mutatedLedger(mutate) {
@@ -31,6 +32,8 @@ assert(ledger.rows.some(row => row.id === 'branches.enter' && row.upstreamBehavi
 assert(ledger.rows.some(row => row.id === 'commits.C' && row.upstreamBehavior === 'Copy (cherry-pick)'));
 assert(ledger.rows.every(row => /^[0-9a-f]{40}$/.test(row.upstreamCommit)));
 assert(ledger.rows.every(row => /^[0-9a-f]{40}$/.test(row.lgvsCommit)));
+assert.match(ledger.upstream.archiveSha256, /^[0-9a-f]{64}$/);
+assert(ledger.rows.every(row => row.upstreamEvidence.length && row.lgvsEvidence.length));
 assert(ledger.rows.filter(row => row.parity === 'adapted').every(row => row.vscodeException?.rationale));
 
 const stale = run(mutatedLedger(value => { value.rows[0].upstreamCommit = '0'.repeat(40); }));
@@ -65,6 +68,29 @@ const nonexistentLgvsCommit = run(mutatedLedger(value => { value.rows[0].lgvsCom
 assert.notStrictEqual(nonexistentLgvsCommit.status, 0);
 assert.match(nonexistentLgvsCommit.stderr, /does not exist/i);
 
+const fakeUpstream = run(mutatedLedger(value => {
+  value.upstream.commit = 'f'.repeat(40);
+  value.rows.forEach(row => { row.upstreamCommit = value.upstream.commit; });
+}));
+assert.notStrictEqual(fakeUpstream.status, 0);
+assert.match(fakeUpstream.stderr, /upstream\.commit does not exist/i);
+
+const impossibleRange = run(mutatedLedger(value => {
+  const evidence = value.rows.find(row => row.id === 'commits.C').upstreamEvidence[1];
+  evidence.startLine = 1137;
+  evidence.endLine = 1141;
+}));
+assert.notStrictEqual(impossibleRange.status, 0);
+assert.match(impossibleRange.stderr, /impossible range/i);
+
+const wrongUpstreamPath = run(mutatedLedger(value => { value.rows[0].upstreamEvidence[0].path = 'README.md'; }));
+assert.notStrictEqual(wrongUpstreamPath.status, 0);
+assert.match(wrongUpstreamPath.stderr, /missing expected token|impossible range/i);
+
+const unrelatedAncestor = run(mutatedLedger(value => { value.rows[0].lgvsCommit = '9c2bd12a4780a6b68edf137383aa9ceb2fd3a39d'; }));
+assert.notStrictEqual(unrelatedAncestor.status, 0);
+assert.match(unrelatedAncestor.stderr, /evidence commit must equal lgvsCommit/i);
+
 const missingException = run(mutatedLedger(value => { delete value.rows.find(row => row.parity === 'adapted').vscodeException; }));
 assert.notStrictEqual(missingException.status, 0);
 assert.match(missingException.stderr, /VS Code exception/i);
@@ -84,15 +110,25 @@ assert.notStrictEqual(nestedStaleClaim.status, 0);
 assert.match(nestedStaleClaim.stderr, /stale audit claim/i);
 
 fs.rmSync(nestedClaimsDir, { recursive: true });
-fs.writeFileSync(path.join(claimsDir, 'claim.md'), 'Commit C has exact parity with upstream.\n');
-const contradictoryProse = run(ledgerPath, claimsDir);
-assert.notStrictEqual(contradictoryProse.status, 0);
-assert.match(contradictoryProse.stderr, /contradictory canonical parity prose/i);
-
-fs.writeFileSync(path.join(claimsDir, 'claim.md'), '<!-- parity-claim: {"id":"commits.C","parity":"exact","reviewedAt":"2026-07-11"} -->\n');
+fs.writeFileSync(path.join(claimsDir, 'claim.md'), '<!-- parity-claim: {"id":"commits.C","parity":"exact","reviewedAt":"2026-07-11","claim":"Commit C has exact parity."} -->\n- Commit C has exact parity.\n');
 const contradictoryExternalClaim = run(ledgerPath, claimsDir);
 assert.notStrictEqual(contradictoryExternalClaim.status, 0);
 assert.match(contradictoryExternalClaim.stderr, /contradictory external claim/i);
+
+fs.writeFileSync(path.join(claimsDir, 'claim.md'), '<!-- parity-claim: {"id":"commits.C","parity":"gap","reviewedAt":"2026-07-11","claim":"Canonical gap."} -->\n- Different prose.\n');
+const markerProseDisagreement = run(ledgerPath, claimsDir);
+assert.notStrictEqual(markerProseDisagreement.status, 0);
+assert.match(markerProseDisagreement.stderr, /marker\/prose disagreement/i);
+
+fs.writeFileSync(path.join(claimsDir, 'claim.md'), '<!-- parity-claim: {"id":"commits.C","parity":"gap","reviewedAt":"2026-07-11","claim":"Canonical gap."} -->\n- Canonical gap.\n<!-- parity-claim: {"id":"commits.C","parity":"gap","reviewedAt":"2026-07-11","claim":"Canonical gap."} -->\n- Canonical gap.\n');
+const duplicateMarker = run(ledgerPath, claimsDir);
+assert.notStrictEqual(duplicateMarker.status, 0);
+assert.match(duplicateMarker.stderr, /duplicate external parity claim/i);
+
+fs.writeFileSync(path.join(claimsDir, 'claim.md'), 'Source: upstream `jesseduffield/lazygit` at `608c90a`.\n');
+const staleProvenance = run(ledgerPath, claimsDir);
+assert.notStrictEqual(staleProvenance.status, 0);
+assert.match(staleProvenance.stderr, /stale upstream provenance/i);
 
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 assert.strictEqual(pkg.scripts['check:parity-ledger'], 'node scripts/validate-parity-ledger.js');
