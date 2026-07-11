@@ -95,7 +95,7 @@ LGVS currently covers the core spine only: Status, Files, Hunk/Main, Branches, C
 - Bisect is owned by the Commits controller, not the Status working-tree state, and remains a separate gap.
 
 ### 9. Undo/redo via reflog
-- Status: Implemented and re-audited against upstream `e59c1d1`.
+- Status: Implemented and re-audited against upstream `146f00491820055f3a6c0d492447d7e2b9da7d83`.
 - `z` / `Z`, config keys, confirmation text, reflog markers, commit/reset/checkout/rebase classification, operation-state guards, and hard-reset autostash follow lazygit's global undo controller.
 - Scope is limited to upstream-equivalent LGVS sidebar surfaces. Conflicts keeps its non-reflog `z` meaning and editor HUNK/LINE does not acquire reflog undo.
 - The Reflog panel itself remains a separate missing surface.
