@@ -172,3 +172,39 @@ test('contract exposes exact matrix and run-scoped report identity wiring', () =
   assert.match(runner, /validateEnvelopeBinding/);
   assert.match(dogfood, /LGVS_TELEMETRY_ENVELOPE_DIGEST/);
 });
+
+function runInjectedCoordinator(injection, message) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-coordinator-terminal-'));
+  const result = spawnSync(process.execPath, [path.join(root, 'scripts', 'run-dogfood-telemetry.js')], {
+    encoding: 'utf8',
+    env: { ...process.env, LGVS_TELEMETRY_OUTPUT: path.join(dir, 'telemetry.json'), LGVS_TELEMETRY_FIXTURES: '320x1', LGVS_TELEMETRY_TEST_INJECTION: injection, ...(message ? { LGVS_TELEMETRY_TEST_MESSAGE: message } : {}) }
+  });
+  const runIds = fs.readdirSync(path.join(dir, 'runs'));
+  assert.strictEqual(runIds.length, 1, `${injection}: expected one envelope`);
+  const runRoot = path.join(dir, 'runs', runIds[0]);
+  const reportPath = path.join(runRoot, 'result.json');
+  assert.notStrictEqual(result.status, 0, `${injection}: unexpectedly succeeded`);
+  return { report: JSON.parse(fs.readFileSync(reportPath, 'utf8')), reportPath, runRoot };
+}
+
+test('post-envelope exception publishes one immutable aggregate and refuses duplicates', () => {
+  const { report, reportPath, runRoot } = runInjectedCoordinator('post-envelope-exception');
+  assert.deepStrictEqual([report.outcome, report.phase, report.code], ['failure', 'coordinator', 'COORDINATOR_EXCEPTION']);
+  assert.strictEqual(report.identity.reportPath, reportPath);
+  assert.throws(() => runEnvelope.publishJsonOnce(reportPath, { replacement: true }, { runRoot }));
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(reportPath, 'utf8')), report);
+});
+
+test('launch failure and zero-exit without a child result fail closed', () => {
+  const launched = runInjectedCoordinator('launch-failure').report;
+  const empty = runInjectedCoordinator('zero-result').report;
+  assert.deepStrictEqual([launched.outcome, launched.phase, launched.code], ['failure', 'coordinator', 'CHILD_LAUNCH_FAILED']);
+  assert.deepStrictEqual([empty.outcome, empty.phase, empty.code], ['failure', 'coordinator', 'CHILD_RESULT_MISSING_OR_INVALID']);
+});
+
+test('coordinator classification does not depend on human wording', () => {
+  const first = runInjectedCoordinator('post-envelope-exception', 'download ECONNREFUSED').report;
+  const second = runInjectedCoordinator('post-envelope-exception', 'the product is broken').report;
+  assert.deepStrictEqual([first.outcome, first.phase, first.code, first.classification], [second.outcome, second.phase, second.code, second.classification]);
+  assert.notStrictEqual(first.message, second.message);
+});

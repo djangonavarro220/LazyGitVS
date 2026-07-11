@@ -4,8 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const { downloadAndUnzipVSCode } = require('@vscode/test-electron');
-const { fixtureKey, parseFixtureSelector, makeTelemetryReport, validateTelemetryReport, classifyFailure } = require('./dogfood/telemetry');
+const { fixtureKey, parseFixtureSelector, makeTelemetryReport, validateTelemetryReport } = require('./dogfood/telemetry');
 const { captureProvenance, createRunEnvelope, publishJsonOnce, validateEnvelopeBinding } = require('./dogfood/run-envelope');
 
 const root = path.resolve(__dirname, '..');
@@ -27,14 +26,33 @@ function runChild(command, args, options) {
   });
 }
 
+function coordinatorFailure(runEnvelope, provenance, code, message) {
+  return {
+    schemaVersion: 1, contract: 'lgvs-telemetry', status: 'failure', ok: false,
+    classification: 'infrastructure', outcome: 'failure', phase: 'coordinator', code,
+    message: String(message).slice(0, 8000), generatedAt: new Date().toISOString(),
+    runId: runEnvelope.runId, lane: runEnvelope.lane, envelopeDigest: runEnvelope.digest, provenance,
+    identity: { runId: runEnvelope.runId, lane: runEnvelope.lane, source: provenance.head, build: provenance.digest, reportPath: runEnvelope.paths.aggregateResult }
+  };
+}
+
 (async () => {
   fs.mkdirSync(path.dirname(output), { recursive: true });
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-  const selection = parseFixtureSelector(process.env.LGVS_TELEMETRY_FIXTURES);
-  const codePath = await downloadAndUnzipVSCode('stable');
-  const provenance = captureProvenance({ repoRoot: root, extensionVersion: pkg.version, nodeExecutable: process.execPath, vscodeExecutable: codePath });
+  const injection = process.env.LGVS_TELEMETRY_TEST_INJECTION;
+  const codePath = injection ? process.execPath : await require('@vscode/test-electron').downloadAndUnzipVSCode('stable');
+  const provenance = injection ? { head: 'a'.repeat(40), tree: 'b'.repeat(40), digest: 'c'.repeat(64), extensionVersion: pkg.version } : captureProvenance({ repoRoot: root, extensionVersion: pkg.version, nodeExecutable: process.execPath, vscodeExecutable: codePath });
   const runId = crypto.randomUUID();
   const runEnvelope = createRunEnvelope({ outputPath: output, repoRoot: root, runId, lane: 'telemetry-matrix', provenance });
+  let published = false;
+  const publishTerminal = report => {
+    if (published) throw new Error('Coordinator terminal result was already published');
+    publishJsonOnce(runEnvelope.paths.aggregateResult, report, { runRoot: runEnvelope.paths.runRoot });
+    published = true;
+  };
+  try {
+  if (injection === 'post-envelope-exception') throw Object.assign(new Error(process.env.LGVS_TELEMETRY_TEST_MESSAGE || 'injected coordinator exception'), { coordinatorCode: 'COORDINATOR_EXCEPTION' });
+  const selection = parseFixtureSelector(process.env.LGVS_TELEMETRY_FIXTURES);
   const runs = [];
   const failures = [];
   for (const fixture of selection.fixtures) {
@@ -45,7 +63,7 @@ function runChild(command, args, options) {
     const dogfoodArgs = [process.execPath, path.join(__dirname, 'dogfood-ui.js')];
     const command = process.env.DISPLAY ? dogfoodArgs.shift() : 'xvfb-run';
     const args = process.env.DISPLAY ? dogfoodArgs : ['-a', ...dogfoodArgs];
-    const result = await runChild(command, args, {
+    const result = await runChild(injection === 'zero-result' ? process.execPath : injection === 'launch-failure' ? path.join(runEnvelope.paths.tempDir, 'missing-executable') : command, injection === 'zero-result' ? ['-e', ''] : args, {
       cwd: root,
       timeout: Number(process.env.LGVS_TELEMETRY_RUN_TIMEOUT_MS || 1200000),
       env: {
@@ -74,7 +92,9 @@ function runChild(command, args, options) {
       : ['child did not atomically publish a current terminal result'];
     if (result.status !== 0 || dogfoodReport?.status !== 'success' || !dogfoodReport?.telemetry || bindingErrors.length) {
       const error = bindingErrors.join('; ') || dogfoodReport?.error || result.error || result.stderr || `dogfood exited ${result.status}${result.signal ? ` (${result.signal})` : ''}`;
-      failures.push({ fixture, classification: dogfoodReport?.classification || classifyFailure(error), error: String(error).slice(0, 8000) });
+      const code = result.error ? 'CHILD_LAUNCH_FAILED' : !dogfoodReport ? 'CHILD_RESULT_MISSING_OR_INVALID' : result.status !== 0 ? 'CHILD_EXECUTION_FAILED' : dogfoodReport.status !== 'success' || !dogfoodReport.telemetry ? 'CHILD_RESULT_FAILED' : 'CHILD_BINDING_INVALID';
+      const classification = ['infrastructure', 'product'].includes(dogfoodReport?.classification) ? dogfoodReport.classification : 'infrastructure';
+      failures.push({ fixture, outcome: 'failure', phase: 'coordinator', code, classification, error: String(error).slice(0, 8000) });
       break;
     }
     runs.push(dogfoodReport.telemetry);
@@ -91,6 +111,9 @@ function runChild(command, args, options) {
     failures
   });
   report.status = failures.length ? 'failure' : 'success';
+  report.outcome = failures.length ? 'failure' : 'success';
+  report.phase = 'coordinator';
+  report.code = failures[0]?.code || 'COORDINATOR_COMPLETED';
   if (failures.length) {
     report.ok = false;
     report.classification = failures.some(failure => failure.classification === 'product') ? 'product' : 'infrastructure';
@@ -102,16 +125,22 @@ function runChild(command, args, options) {
   });
   if (errors.length) {
     report.status = 'failure';
+    report.outcome = 'failure';
+    report.code = 'AGGREGATE_VALIDATION_FAILED';
     report.ok = false;
     report.classification = 'infrastructure';
-    report.failures = [{ classification: 'infrastructure', error: errors.join('; ') }];
+    report.failures = [{ outcome: 'failure', phase: 'coordinator', code: 'AGGREGATE_VALIDATION_FAILED', classification: 'infrastructure', error: errors.join('; ') }];
   }
-  publishJsonOnce(runEnvelope.paths.aggregateResult, report, { runRoot: runEnvelope.paths.runRoot });
+  publishTerminal(report);
   if (failures.length || errors.length) {
     if (errors.length) console.error(errors.join('\n'));
     process.exit(1);
   }
   console.log(`Telemetry matrix passed: ${runs.length} fixtures -> ${runEnvelope.paths.aggregateResult}`);
+  } catch (error) {
+    if (!published) publishTerminal(coordinatorFailure(runEnvelope, provenance, error.coordinatorCode || 'COORDINATOR_EXCEPTION', error.message || error));
+    throw error;
+  }
 })().catch(error => {
   console.error(error);
   process.exit(1);
