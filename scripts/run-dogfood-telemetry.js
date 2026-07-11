@@ -36,12 +36,19 @@ function coordinatorFailure(runEnvelope, provenance, code, message) {
   };
 }
 
-(async () => {
+async function runTelemetryCoordinator(testOnly = undefined) {
+  if (!testOnly && process.env.LGVS_TELEMETRY_TEST_INJECTION) {
+    throw new Error('LGVS_TELEMETRY_TEST_INJECTION is not accepted by the production entry point');
+  }
+  const injection = testOnly?.injection;
+  const knownInjections = new Set(['post-envelope-exception', 'launch-failure', 'zero-result']);
+  if (injection && !knownInjections.has(injection)) throw new Error(`Unknown test injection: ${injection}`);
   fs.mkdirSync(path.dirname(output), { recursive: true });
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-  const injection = process.env.LGVS_TELEMETRY_TEST_INJECTION;
-  const codePath = injection ? process.execPath : await require('@vscode/test-electron').downloadAndUnzipVSCode('stable');
-  const provenance = injection ? { head: 'a'.repeat(40), tree: 'b'.repeat(40), digest: 'c'.repeat(64), extensionVersion: pkg.version } : captureProvenance({ repoRoot: root, extensionVersion: pkg.version, nodeExecutable: process.execPath, vscodeExecutable: codePath });
+  const codePath = testOnly?.codePath || await require('@vscode/test-electron').downloadAndUnzipVSCode('stable');
+  const provenance = testOnly?.captureProvenance
+    ? testOnly.captureProvenance({ repoRoot: root, extensionVersion: pkg.version, nodeExecutable: process.execPath, vscodeExecutable: codePath })
+    : captureProvenance({ repoRoot: root, extensionVersion: pkg.version, nodeExecutable: process.execPath, vscodeExecutable: codePath });
   const runId = crypto.randomUUID();
   const runEnvelope = createRunEnvelope({ outputPath: output, repoRoot: root, runId, lane: 'telemetry-matrix', provenance });
   let published = false;
@@ -141,7 +148,13 @@ function coordinatorFailure(runEnvelope, provenance, code, message) {
     if (!published) publishTerminal(coordinatorFailure(runEnvelope, provenance, error.coordinatorCode || 'COORDINATOR_EXCEPTION', error.message || error));
     throw error;
   }
-})().catch(error => {
-  console.error(error);
-  process.exit(1);
-});
+}
+
+module.exports = { runTelemetryCoordinator };
+
+if (require.main === module) {
+  runTelemetryCoordinator().catch(error => {
+    console.error(error);
+    process.exit(1);
+  });
+}

@@ -175,9 +175,18 @@ test('contract exposes exact matrix and run-scoped report identity wiring', () =
 
 function runInjectedCoordinator(injection, message) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-coordinator-terminal-'));
-  const result = spawnSync(process.execPath, [path.join(root, 'scripts', 'run-dogfood-telemetry.js')], {
+  const runner = path.join(root, 'scripts', 'run-dogfood-telemetry.js');
+  const script = `
+    const { runTelemetryCoordinator } = require(${JSON.stringify(runner)});
+    runTelemetryCoordinator({
+      injection: ${JSON.stringify(injection)},
+      codePath: process.execPath,
+      captureProvenance: ({ extensionVersion }) => ({ head: 'a'.repeat(40), tree: 'b'.repeat(40), digest: 'c'.repeat(64), extensionVersion })
+    }).catch(error => { console.error(error); process.exit(1); });
+  `;
+  const result = spawnSync(process.execPath, ['-e', script], {
     encoding: 'utf8',
-    env: { ...process.env, LGVS_TELEMETRY_OUTPUT: path.join(dir, 'telemetry.json'), LGVS_TELEMETRY_FIXTURES: '320x1', LGVS_TELEMETRY_TEST_INJECTION: injection, ...(message ? { LGVS_TELEMETRY_TEST_MESSAGE: message } : {}) }
+    env: { ...process.env, LGVS_TELEMETRY_OUTPUT: path.join(dir, 'telemetry.json'), LGVS_TELEMETRY_FIXTURES: '320x1', ...(message ? { LGVS_TELEMETRY_TEST_MESSAGE: message } : {}) }
   });
   const runIds = fs.readdirSync(path.join(dir, 'runs'));
   assert.strictEqual(runIds.length, 1, `${injection}: expected one envelope`);
@@ -186,6 +195,17 @@ function runInjectedCoordinator(injection, message) {
   assert.notStrictEqual(result.status, 0, `${injection}: unexpectedly succeeded`);
   return { report: JSON.parse(fs.readFileSync(reportPath, 'utf8')), reportPath, runRoot };
 }
+
+test('production entry point rejects arbitrary injection env values before provenance exists', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-coordinator-untrusted-injection-'));
+  const result = spawnSync(process.execPath, [path.join(root, 'scripts', 'run-dogfood-telemetry.js')], {
+    encoding: 'utf8',
+    env: { ...process.env, LGVS_TELEMETRY_OUTPUT: path.join(dir, 'telemetry.json'), LGVS_TELEMETRY_TEST_INJECTION: 'fabricate-anything' }
+  });
+  assert.notStrictEqual(result.status, 0);
+  assert.match(result.stderr, /not accepted by the production entry point/);
+  assert.strictEqual(fs.existsSync(path.join(dir, 'runs')), false);
+});
 
 test('post-envelope exception publishes one immutable aggregate and refuses duplicates', () => {
   const { report, reportPath, runRoot } = runInjectedCoordinator('post-envelope-exception');
