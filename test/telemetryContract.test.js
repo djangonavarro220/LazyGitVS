@@ -228,3 +228,73 @@ test('coordinator classification does not depend on human wording', () => {
   assert.deepStrictEqual([first.outcome, first.phase, first.code, first.classification], [second.outcome, second.phase, second.code, second.classification]);
   assert.notStrictEqual(first.message, second.message);
 });
+
+function runForcedChildLifecycle({ envelope, reportPath, failPhase, rootProcessIdentity }) {
+  let phase = 'setup';
+  try {
+    if (failPhase === phase) throw new Error(`${phase} diagnostic`);
+    phase = 'spawn';
+    if (failPhase === phase) throw new Error(`${phase} diagnostic`);
+    phase = 'process-identity';
+    if (failPhase === phase) throw new Error(`${phase} diagnostic`);
+    throw new Error('fixture must fail before runtime');
+  } catch (error) {
+    const report = runEnvelope.makeChildTerminalFailure({ envelope, lane: 'telemetry-child', phase, error, rootProcessIdentity });
+    runEnvelope.publishJsonOnce(reportPath, report, { runRoot: envelope.paths.runRoot });
+    return { exitCode: 1, report, cleanupCalls: rootProcessIdentity ? 1 : 0 };
+  }
+}
+
+test('child setup, spawn and process-identity failures publish once with conditional cleanup', () => {
+  const phases = [
+    ['setup', 'LGVS_TELEMETRY_CHILD_SETUP_FAILED', undefined],
+    ['spawn', 'LGVS_TELEMETRY_CHILD_SPAWN_FAILED', undefined],
+    ['process-identity', 'LGVS_TELEMETRY_CHILD_PROCESS_IDENTITY_FAILED', { pid: 100, ppid: 1, processGroup: 100, session: 100, startTicks: '1', executable: '/test/code' }]
+  ];
+  for (const [phase, code, identity] of phases) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-child-terminal-'));
+    const provenance = { head: 'a'.repeat(40), digest: 'b'.repeat(64) };
+    const envelope = runEnvelope.createRunEnvelope({ outputPath: path.join(dir, 'telemetry.json'), repoRoot: root, runId: `child-${phase}`, lane: 'telemetry-matrix', provenance });
+    const reportPath = path.join(envelope.paths.childrenDir, `${phase}.json`);
+    const result = runForcedChildLifecycle({ envelope, reportPath, failPhase: phase, rootProcessIdentity: identity });
+    assert.strictEqual(result.exitCode, 1);
+    assert.strictEqual(result.report.failure.phase, phase);
+    assert.strictEqual(result.report.failure.code, code);
+    assert.strictEqual(result.report.status, 'failure');
+    assert.strictEqual(result.report.ok, false);
+    assert.strictEqual(result.report.classification, 'infrastructure');
+    assert.strictEqual(result.cleanupCalls, identity ? 1 : 0);
+    assert.strictEqual(result.report.process?.root, identity);
+    const original = fs.readFileSync(reportPath, 'utf8');
+    assert.throws(() => runEnvelope.publishJsonOnce(reportPath, { overwritten: true }, { runRoot: envelope.paths.runRoot }), Error);
+    assert.strictEqual(fs.readFileSync(reportPath, 'utf8'), original);
+  }
+});
+
+test('structured child failure binding rejects authority mutations but ignores wording', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-child-binding-'));
+  const provenance = { head: 'a'.repeat(40), digest: 'b'.repeat(64) };
+  const envelope = runEnvelope.createRunEnvelope({ outputPath: path.join(dir, 'telemetry.json'), repoRoot: root, runId: 'child-binding', lane: 'telemetry-matrix', provenance });
+  const reportPath = path.join(envelope.paths.childrenDir, 'child.json');
+  const report = runEnvelope.makeChildTerminalFailure({ envelope, lane: 'telemetry-child', phase: 'setup', error: new Error('original wording') });
+  runEnvelope.publishJsonOnce(reportPath, report, { runRoot: envelope.paths.runRoot });
+  const stat = fs.statSync(reportPath);
+  const validate = (value, candidatePath = reportPath) => runEnvelope.validateEnvelopeBinding({ envelope, report: value, reportPath: candidatePath, stat, expectedLane: 'telemetry-child' });
+  assert.deepStrictEqual(validate(report), []);
+  const mutations = [
+    value => value.failure.phase = 'spawn',
+    value => value.failure.code = 'LGVS_TELEMETRY_CHILD_SPAWN_FAILED',
+    value => value.envelopeDigest = '0'.repeat(64),
+    value => value.provenance.head = 'foreign'
+  ];
+  for (const mutate of mutations) {
+    const changed = structuredClone(report);
+    mutate(changed);
+    assert.notDeepStrictEqual(validate(changed), []);
+  }
+  assert.notDeepStrictEqual(validate(report, path.join(envelope.paths.runRoot, 'foreign.json')), []);
+  const reworded = structuredClone(report);
+  reworded.failure.message = 'completely different diagnostic wording';
+  assert.deepStrictEqual(validate(reworded), []);
+  assert.strictEqual(reworded.classification, 'infrastructure');
+});

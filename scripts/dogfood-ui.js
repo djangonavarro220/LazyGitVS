@@ -12,7 +12,7 @@ const { spawn, spawnSync, execFileSync } = require('child_process');
 const { makeFixture, fixtureRepos, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write, startMergeOperation, mergeOperationInProgress } = require('./dogfood/fixtures');
 const { targetLane, finishReport, writeJson } = require('./dogfood/reporting');
 const { makeFixtureResult, classifyFailure, collectProcessTreeMetrics } = require('./dogfood/telemetry');
-const { discoverOwnedCdp, publishJsonOnce, readProcessIdentity, readRunEnvelope, terminateOwnedProcessGroup } = require('./dogfood/run-envelope');
+const { discoverOwnedCdp, makeChildTerminalFailure, publishJsonOnce, readProcessIdentity, readRunEnvelope, terminateOwnedProcessGroup } = require('./dogfood/run-envelope');
 const { writeNativeScreenshot, writeScreenshot } = require('./dogfood/screenshots');
 const CDP = require('chrome-remote-interface');
 const { downloadAndUnzipVSCode } = require('@vscode/test-electron');
@@ -433,11 +433,26 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
 }
 (async () => {
   if (runMatrixIfNeeded()) return;
+  let lifecyclePhase = 'setup';
+  let rootProcessIdentity;
+  let proc;
+  let procOut = '';
+  let client;
+  let activePage;
+  let cdpOwnership;
+  let terminalPublished = false;
+  let fixture;
+  let useVim;
+  let vimExtension;
+  let started;
+  let checks = [];
+  let evidence = [];
+  try {
   if (!TELEMETRY) fs.rmSync(LANE_SHOTS, { recursive: true, force: true });
   ensureDir(LANE_SHOTS);
-  const started = new Date().toISOString();
+  started = new Date().toISOString();
   const fixtureStartedAtMs = Date.now();
-  const fixture = makeFixture();
+  fixture = makeFixture();
   const fixtureReadyAtMs = Date.now();
   const fixtureRepositories = fixtureRepos(fixture);
   const secondaryRepo = secondaryFixtureRepo(fixture);
@@ -476,8 +491,8 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
   ], null, 2));
   const extensionsDir = TELEMETRY ? path.join(TELEMETRY_CHILD_DIR, 'extensions') : fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-code-ext-'));
   if (TELEMETRY) fs.mkdirSync(extensionsDir, { mode: 0o700 });
-  const useVim = VARIANT === 'vim';
-  const vimExtension = useVim ? installVSCodeVimExtension(extensionsDir) : undefined;
+  useVim = VARIANT === 'vim';
+  vimExtension = useVim ? installVSCodeVimExtension(extensionsDir) : undefined;
   const launchArgs = [
     codePath,
     ...fixtureRepositories,
@@ -499,14 +514,14 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
   const cmd = process.env.DISPLAY ? codePath : 'xvfb-run';
   const args = process.env.DISPLAY ? launchArgs.slice(1) : ['-n', String(PORT), '-f', nativeXauthority, ...launchArgs];
   const processStartedAtMs = Date.now();
-  const proc = spawn(cmd, args, { cwd: ROOT, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: process.env.LGVS_DOGFOOD_UNDO_REDO ? { ...process.env, LG_CONFIG_FILE: undoRedoConfig, LGVS_DOGFOOD_BOUNDARY_REPORT: undoRedoBoundaryReport } : process.env });
-  const rootProcessIdentity = readProcessIdentity(proc.pid);
-  let procOut = '';
+  lifecyclePhase = 'spawn';
+  proc = spawn(cmd, args, { cwd: ROOT, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: process.env.LGVS_DOGFOOD_UNDO_REDO ? { ...process.env, LG_CONFIG_FILE: undoRedoConfig, LGVS_DOGFOOD_BOUNDARY_REPORT: undoRedoBoundaryReport } : process.env });
+  lifecyclePhase = 'process-identity';
+  rootProcessIdentity = readProcessIdentity(proc.pid);
   proc.stdout.on('data', d => procOut += d.toString());
   proc.stderr.on('data', d => procOut += d.toString());
 
-  const evidence = [];
-  const checks = [];
+  lifecyclePhase = 'runtime';
   const finishDogfoodReport = (extra = {}) => finishReport({
     reportPath: REPORT_JSON,
     checks,
@@ -527,11 +542,6 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
       ...extra
     }
   });
-  let client;
-  let activePage;
-  let cdpOwnership;
-  let terminalPublished = false;
-  try {
     if (TELEMETRY) {
       cdpOwnership = await waitFor(() => {
         try { return discoverOwnedCdp({ userDataDir: userData, rootProcessIdentity }); } catch { return undefined; }
@@ -1409,7 +1419,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     if (activePage) {
       try { failureScreenshot = await screenshot(activePage, 'failure', { force: true }); } catch { /* best-effort only */ }
     }
-    const report = TELEMETRY ? {
+    const report = TELEMETRY && lifecyclePhase !== 'runtime' ? makeChildTerminalFailure({ envelope: RUN_ENVELOPE, lane: process.env.LGVS_TELEMETRY_LANE, phase: lifecyclePhase, error, rootProcessIdentity }) : TELEMETRY ? {
       schemaVersion: 1,
       status: 'failure',
       ok: false,
@@ -1430,9 +1440,9 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     process.exitCode = 1;
   } finally {
     if (client) { try { await client.close(); } catch {} }
-    if (TELEMETRY) {
+    if (TELEMETRY && rootProcessIdentity) {
       try { terminateOwnedProcessGroup(rootProcessIdentity); } catch (error) { console.error(`Owned cleanup refused: ${error.message}`); }
-    } else {
+    } else if (!TELEMETRY && proc) {
       try { process.kill(-proc.pid, 'SIGTERM'); } catch { proc.kill('SIGTERM'); }
       try { spawnSync('pkill', ['-f', `remote-debugging-port=${PORT}`]); } catch {}
     }

@@ -247,6 +247,30 @@ function terminateOwnedProcessGroup(rootIdentity, signal = 'SIGTERM', kill = pro
   kill(-rootIdentity.processGroup, signal);
 }
 
+const CHILD_TERMINAL_FAILURE_CODES = Object.freeze({
+  setup: 'LGVS_TELEMETRY_CHILD_SETUP_FAILED',
+  spawn: 'LGVS_TELEMETRY_CHILD_SPAWN_FAILED',
+  'process-identity': 'LGVS_TELEMETRY_CHILD_PROCESS_IDENTITY_FAILED'
+});
+
+function makeChildTerminalFailure({ envelope, lane, phase, error, rootProcessIdentity }) {
+  const code = CHILD_TERMINAL_FAILURE_CODES[phase];
+  if (!code) throw new Error(`Invalid child terminal failure phase: ${phase}`);
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    status: 'failure',
+    ok: false,
+    classification: 'infrastructure',
+    generatedAt: new Date().toISOString(),
+    runId: envelope.runId,
+    lane,
+    envelopeDigest: envelope.digest,
+    provenance: envelope.provenance,
+    failure: { phase, code, message: String(error?.message || error || 'Unknown child lifecycle failure').slice(0, 1000) },
+    ...(rootProcessIdentity ? { process: { root: rootProcessIdentity } } : {})
+  };
+}
+
 function validateEnvelopeBinding({ envelope, report, reportPath, stat, expectedLane }) {
   const errors = [];
   const body = { ...envelope };
@@ -259,11 +283,21 @@ function validateEnvelopeBinding({ envelope, report, reportPath, stat, expectedL
   try { assertOwnedPath(envelope.paths.runRoot, reportPath, envelope.paths.childrenDir); } catch (error) { errors.push(error.message); }
   const generatedAt = Date.parse(report?.generatedAt);
   if (!Number.isFinite(generatedAt) || generatedAt < Date.parse(envelope?.createdAt) || generatedAt > stat.mtimeMs + 1000 || Math.abs(stat.mtimeMs - generatedAt) > 5000) errors.push('report publication time is outside the envelope');
-  const root = report?.process?.root;
-  const listener = report?.process?.listener;
-  const identityFields = ['pid', 'ppid', 'processGroup', 'session', 'startTicks', 'executable'];
-  if (!root || !listener || identityFields.some(field => root[field] === undefined || listener[field] === undefined)) errors.push('report process ownership is required');
-  else if (root.processGroup !== listener.processGroup || root.session !== listener.session) errors.push('report listener ownership identity is invalid');
+  if (report?.status === 'failure') {
+    const phase = report?.failure?.phase;
+    if (report?.ok !== false || report?.classification !== 'infrastructure') errors.push('failure report status is invalid');
+    if (!CHILD_TERMINAL_FAILURE_CODES[phase] || report?.failure?.code !== CHILD_TERMINAL_FAILURE_CODES[phase]) errors.push('failure report phase and code are invalid');
+    const root = report?.process?.root;
+    const identityFields = ['pid', 'ppid', 'processGroup', 'session', 'startTicks', 'executable'];
+    if (report?.process && (!root || report.process.listener || identityFields.some(field => root[field] === undefined))) errors.push('failure report process identity is invalid');
+  } else {
+    if (report?.ok !== true || report?.classification !== 'none') errors.push('success report status is invalid');
+    const root = report?.process?.root;
+    const listener = report?.process?.listener;
+    const identityFields = ['pid', 'ppid', 'processGroup', 'session', 'startTicks', 'executable'];
+    if (!root || !listener || identityFields.some(field => root[field] === undefined || listener[field] === undefined)) errors.push('report process ownership is required');
+    else if (root.processGroup !== listener.processGroup || root.session !== listener.session) errors.push('report listener ownership identity is invalid');
+  }
   return errors;
 }
 
@@ -274,6 +308,7 @@ module.exports = {
   captureProvenance,
   createRunEnvelope,
   discoverOwnedCdp,
+  makeChildTerminalFailure,
   publishJsonOnce,
   readRunEnvelope,
   readProcessIdentity,
