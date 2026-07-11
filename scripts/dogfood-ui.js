@@ -241,7 +241,7 @@ async function clickQuickPickRowEndingWith(Runtime, Input, suffix, waitForHide =
   const r = await Runtime.evaluate({ expression: `(() => {
     const suffix = ${JSON.stringify("__SUFFIX__")}.replace('__SUFFIX__', ${JSON.stringify(suffix)});
     const rows = Array.from(document.querySelectorAll('.quick-input-list .monaco-list-row'));
-    const row = rows.find(el => (el.textContent || '').trim().includes(suffix));
+    const row = rows.find(el => (el.textContent || '').trim().endsWith(suffix));
     if (!row) return undefined;
     const rect = row.getBoundingClientRect();
     return { x: rect.left + Math.min(40, Math.max(8, rect.width / 2)), y: rect.top + rect.height / 2, text: row.textContent || '' };
