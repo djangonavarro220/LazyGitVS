@@ -6,6 +6,7 @@ const { spawnSync } = require('child_process');
 
 const root = path.resolve(__dirname, '..');
 const telemetry = require(path.join(root, 'scripts', 'dogfood', 'telemetry'));
+const runEnvelope = require(path.join(root, 'scripts', 'dogfood', 'run-envelope'));
 
 function test(name, fn) {
   try {
@@ -46,6 +47,26 @@ function validReport(file = path.join(os.tmpdir(), 'lgvs-valid-telemetry.json'))
     failures: [],
     identity
   });
+}
+
+function validEnvelopeReport() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-envelope-contract-'));
+  const provenance = { head: 'a'.repeat(40), tree: 'b'.repeat(40), digest: 'c'.repeat(64) };
+  const envelope = runEnvelope.createRunEnvelope({ outputPath: path.join(dir, 'telemetry.json'), repoRoot: root, runId: `run-${Date.now()}-${Math.random().toString(16).slice(2)}`, lane: 'telemetry-matrix', provenance });
+  const report = validReport(envelope.paths.aggregateResult);
+  report.identity = { runId: envelope.runId, lane: envelope.lane, source: provenance.head, build: provenance.digest, reportPath: envelope.paths.aggregateResult };
+  report.envelopeDigest = envelope.digest;
+  report.provenance = provenance;
+  const processIdentity = { pid: 100, ppid: 1, processGroup: 100, session: 100, startTicks: '1', executable: '/test/code' };
+  for (const run of report.runs) {
+    run.identity.runId = envelope.runId;
+    run.identity.source = provenance.head;
+    run.identity.build = provenance.digest;
+    run.identity.reportPath = path.join(envelope.paths.childrenDir, `${run.identity.fixture}.json`);
+    const child = { schemaVersion: 1, status: 'success', ok: true, classification: 'none', generatedAt: new Date().toISOString(), runId: envelope.runId, lane: run.identity.lane, envelopeDigest: envelope.digest, provenance, process: { root: processIdentity, listener: { ...processIdentity } }, telemetry: run };
+    runEnvelope.publishJsonOnce(run.identity.reportPath, child, { runRoot: envelope.paths.runRoot });
+  }
+  return { envelope, report };
 }
 
 test('summaries retain cold samples and compute warm p50/p95', () => {
@@ -118,6 +139,24 @@ test('checker rejects a missing current report instead of consuming retained evi
   assert.match(result.stderr, /could not be read/);
 });
 
+test('exact-nine aggregate rejects envelope, provenance and child-path mutations', () => {
+  const { envelope, report } = validEnvelopeReport();
+  const validate = value => telemetry.validateTelemetryReport(value, { envelope, reportPath: envelope.paths.aggregateResult });
+  assert.deepStrictEqual(validate(report), []);
+  const mutations = [
+    value => value.envelopeDigest = '0'.repeat(64),
+    value => value.provenance.head = 'foreign',
+    value => value.runs[1].identity.reportPath = value.runs[0].identity.reportPath,
+    value => value.runs[0].identity.reportPath = path.join(envelope.paths.runRoot, '..', 'foreign.json'),
+    value => value.runs[0].identity.reportPath = path.join(envelope.paths.childrenDir, 'retained.json')
+  ];
+  for (const mutate of mutations) {
+    const changed = structuredClone(report);
+    mutate(changed);
+    assert.notDeepStrictEqual(validate(changed), [], 'envelope mutation passed');
+  }
+});
+
 test('failure classification distinguishes infrastructure from product failures', () => {
   assert.strictEqual(telemetry.classifyFailure(new Error('ECONNREFUSED 127.0.0.1 CDP targets')), 'infrastructure');
   assert.strictEqual(telemetry.classifyFailure(new Error('Dogfood check failed: input p95 budget')), 'product');
@@ -130,6 +169,6 @@ test('contract exposes exact matrix and run-scoped report identity wiring', () =
   const runner = fs.readFileSync(path.join(root, 'scripts', 'run-dogfood-telemetry.js'), 'utf8');
   const dogfood = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
   assert.match(runner, /LGVS_DOGFOOD_REPORT_PATH/);
-  assert.match(runner, /childIdentityMatches/);
-  assert.match(dogfood, /LGVS_TELEMETRY_RUN_ID/);
+  assert.match(runner, /validateEnvelopeBinding/);
+  assert.match(dogfood, /LGVS_TELEMETRY_ENVELOPE_DIGEST/);
 });

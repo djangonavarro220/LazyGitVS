@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { validateEnvelopeBinding } = require('./run-envelope');
 
 const SIGNALS = {
   phases: ['sidebarReadyMs', 'panelReadyMs'],
@@ -122,6 +123,13 @@ function validateTelemetryReport(report, options = {}) {
   if (!Number.isFinite(generatedAt)) errors.push('generatedAt must be a valid timestamp');
   else if (generatedAt > now + 1000 || now - generatedAt > maxAgeMs) errors.push('report is stale');
   if (options.reportPath && path.resolve(report?.identity?.reportPath || '') !== path.resolve(options.reportPath)) errors.push('identity.reportPath does not match checked path');
+  const envelope = options.envelope;
+  if (envelope) {
+    if (report?.envelopeDigest !== envelope.digest) errors.push('aggregate envelope digest does not match');
+    if (JSON.stringify(report?.provenance) !== JSON.stringify(envelope.provenance)) errors.push('aggregate provenance does not match envelope');
+    if (report?.identity?.runId !== envelope.runId || report?.identity?.lane !== envelope.lane) errors.push('aggregate envelope identity does not match');
+  }
+  const childPaths = new Set();
   for (const [index, run] of report.runs.entries()) {
     const expectedFixture = expectedKeys[index];
     if (!expectedFixture) continue;
@@ -131,6 +139,20 @@ function validateTelemetryReport(report, options = {}) {
     if (run?.identity?.lane !== `telemetry-${expectedFixture.replace('x', 'f-')}r`) errors.push(`${expectedFixture} identity.lane is invalid`);
     if (run?.identity?.fixture !== expectedFixture) errors.push(`${expectedFixture} identity.fixture is invalid`);
     if (typeof run?.identity?.reportPath !== 'string' || !run.identity.reportPath) errors.push(`${expectedFixture} identity.reportPath is required`);
+    if (envelope && typeof run?.identity?.reportPath === 'string') {
+      const childPath = path.resolve(run.identity.reportPath);
+      if (childPaths.has(childPath)) errors.push(`${expectedFixture} child report path is duplicated`);
+      childPaths.add(childPath);
+      if (path.dirname(childPath) !== envelope.paths.childrenDir) errors.push(`${expectedFixture} child report path is not directly beneath childrenDir`);
+      try {
+        const child = JSON.parse(fs.readFileSync(childPath, 'utf8'));
+        const stat = fs.statSync(childPath);
+        errors.push(...validateEnvelopeBinding({ envelope, report: child, reportPath: childPath, stat, expectedLane: run.identity.lane }).map(error => `${expectedFixture} ${error}`));
+        if (JSON.stringify(child.telemetry) !== JSON.stringify(run)) errors.push(`${expectedFixture} child telemetry does not match aggregate`);
+      } catch (error) {
+        errors.push(`${expectedFixture} child report is unavailable or invalid: ${error.message}`);
+      }
+    }
   }
   return errors;
 }
