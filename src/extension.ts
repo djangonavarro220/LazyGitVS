@@ -39,23 +39,18 @@ async function showChangedFilesQuickPick() {
   qp.onDidHide(() => qp.dispose()); qp.show();
 }
 const virtualPreviewProvider = new VirtualPreviewProvider();
-
 class PanelViewProvider implements vscode.WebviewViewProvider {
   constructor(private readonly app: LazyGitVSController, private readonly panel: ViewPanel) {} resolveWebviewView(view: vscode.WebviewView) { this.app.attach(this.panel, view); }
 }
-
 class StatusTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
   private readonly onChange = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this.onChange.event;
-
   constructor(private readonly app: LazyGitVSController) {}
-
   refresh() { this.onChange.fire(); }
   dispose() { this.onChange.dispose(); }
   getTreeItem(item: vscode.TreeItem) { return item; }
   getChildren() { return this.app.statusTreeItems(); }
 }
-
 class LazyGitVSController {
   private views = new Map<ViewPanel, vscode.WebviewView>();
   private statusTree?: vscode.TreeView<vscode.TreeItem>;
@@ -131,7 +126,6 @@ class LazyGitVSController {
   private suppressWebviewAutoFocusUntil = 0;
   private pendingWebviewAutoFocus = false;
   private defaultPanelsRevealed = false;
-
   constructor(private readonly context: vscode.ExtensionContext) {
     this.unstagedHunkDecoration = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: 'rgba(210, 153, 34, 0.13)', borderWidth: '0 0 0 2px', borderStyle: 'solid', borderColor: '#d29922' });
     this.stagedHunkDecoration = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: 'rgba(46, 160, 67, 0.13)', borderWidth: '0 0 0 2px', borderStyle: 'solid', borderColor: '#2ea043' });
@@ -160,7 +154,6 @@ class LazyGitVSController {
     context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => this.handleActiveTextEditorChanged(editor)));
     context.subscriptions.push(vscode.window.onDidChangeWindowState(state => this.handleWindowStateChanged(state)));
   }
-
   private async updateActiveViewContext() {
     const viewPanel = this.activeViewPanel();
     await Promise.all([
@@ -168,7 +161,6 @@ class LazyGitVSController {
       vscode.commands.executeCommand('setContext', 'lazygitvs.statusViewVisible', viewPanel === 'status')
     ]);
   }
-
   attach(panel: ViewPanel, view: vscode.WebviewView) {
     this.views.set(panel, view);
     view.webview.options = { enableScripts: true };
@@ -237,14 +229,12 @@ class LazyGitVSController {
     this.render(panel);
     this.scheduleRefresh(0);
   }
-
   attachStatusTree(provider: StatusTreeProvider, tree: vscode.TreeView<vscode.TreeItem>) {
     this.statusTreeProvider = provider;
     this.statusTree = tree;
     tree.onDidChangeVisibility(() => { if (tree.visible) this.scheduleRefresh(0); else if (!this.visible()) this.clearRuntimeTimers(); }, null, this.context.subscriptions);
     provider.refresh();
   }
-
   statusTreeItems(): vscode.TreeItem[] {
     const repos = this.workspaceRepos;
     if (!repos.length) {
@@ -267,9 +257,7 @@ class LazyGitVSController {
       return item;
     });
   }
-
   openRecentRepos() { return this.recentReposMenu(); }
-
   async statusEnter(target?: string | { repoPath?: string; operationOptions?: boolean }) {
     if (typeof target === 'object' && target.operationOptions) return this.openOperationOptions(target);
     const repoPath = typeof target === 'string' ? target : target?.repoPath;
@@ -280,7 +268,6 @@ class LazyGitVSController {
     if (selectedRepoPath) return this.selectRepository(selectedRepoPath);
     return this.recentReposMenu();
   }
-
   async openOperationOptions(target?: string | { repoPath?: string }) {
     // Status acts on its highlighted repository. Other panels act only on the
     // explicitly active repository, never the first folder in a multi-repo UI.
@@ -292,7 +279,6 @@ class LazyGitVSController {
     if (!isAvailable()) return;
     await showGitOperationOptions(repoPath, isAvailable, () => this.refresh(true));
   }
-
   async enterSelected() {
     if (this.editorHunkMode || this.editorEditMode) return;
     const panel = this.activeViewPanel();
@@ -303,7 +289,6 @@ class LazyGitVSController {
     void vscode.commands.executeCommand('setContext', 'lazygitvs.keyboardMode', true);
     return this.enter(panel);
   }
-
   async enterCurrentFileHunkMode() {
     if (this.editorHunkMode || this.editorEditMode) return;
     this.activePanel = 'files';
@@ -313,7 +298,6 @@ class LazyGitVSController {
     void vscode.commands.executeCommand('setContext', 'lazygitvs.keyboardMode', false);
     return this.enterHunks();
   }
-
   private loadLazyGitConfig() {
     const config = readLazyGitConfig();
     this.lazygitKeymap = config.keymap;
@@ -321,7 +305,6 @@ class LazyGitVSController {
     this.lazygitGit = config.git;
     this.lazygitConfigFiles = config.files;
   }
-
   private restoreNavigationState() {
     const state = this.context.workspaceState.get<Partial<Record<string, unknown>>>(STATE_KEY, {});
     const panel = state.activePanel;
@@ -342,7 +325,6 @@ class LazyGitVSController {
     if (state.hunkSide === 'staged' || state.hunkSide === 'unstaged') this.hunkSide = state.hunkSide;
     if (state.hunkSelectionMode === 'hunk' || state.hunkSelectionMode === 'line') this.hunkSelectionMode = state.hunkSelectionMode;
   }
-
   private persistNavigationState() {
     void this.context.workspaceState.update(STATE_KEY, {
       activePanel: this.activePanel,
@@ -361,7 +343,6 @@ class LazyGitVSController {
       hunkSelectionMode: this.hunkSelectionMode
     });
   }
-
   async focus() {
     this.loadLazyGitConfig();
     await this.revealDefaultOpenPanels();
@@ -390,7 +371,6 @@ class LazyGitVSController {
     this.updateModeStatusBar();
     await vscode.commands.executeCommand('workbench.action.closeSidebar');
   }
-
   async resetState() {
     this.clearRuntimeTimers();
     await this.releaseEditorOwnership();
