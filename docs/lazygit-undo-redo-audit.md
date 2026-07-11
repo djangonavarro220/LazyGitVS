@@ -10,7 +10,7 @@ Audited from a clean upstream lazygit checkout at `e59c1d1cb7c4fde83918e72a92897
 - `docs/keybindings/Keybindings_en.md:33-36` describes both as reflog operations over commits rather than working-tree changes.
 - `docs/keybindings/Keybindings_en.md:211-214` separately assigns `z` in merge-conflict resolution to undo the last conflict resolution. LGVS therefore does not route reflog undo from its Conflicts surface.
 
-LGVS exposes these actions on its top-level sidebar panels and their commit/stash drill-down views. It deliberately keeps them out of editor HUNK/LINE mode and the Conflicts panel, where LGVS does not provide upstream's reflog-global context or where upstream gives `z` another meaning.
+LGVS exposes these actions on its top-level sidebar panels and their commit/stash drill-down views through one runtime keymap router, including Status, so custom lazygit keys behave consistently. It deliberately keeps them out of editor HUNK/LINE mode and the Conflicts panel, where LGVS does not provide upstream's reflog-global context or where upstream gives `z` another meaning.
 
 ## Reflog algorithm and mutations
 
@@ -21,7 +21,7 @@ LGVS exposes these actions on its top-level sidebar panels and their commit/stas
 - `pkg/gui/controllers/undo_controller.go:248-281` stashes tracked working-tree changes around hard reset and pops them afterward.
 - `pkg/commands/git_commands/reflog_commit_loader.go:25-34` loads the complete HEAD reflog with `git log -g`, not an arbitrary UI-sized limit.
 
-LGVS follows that parser and marker format, refuses root-boundary actions without a valid target, and scopes every command to the currently selected workspace repository.
+LGVS follows that parser and marker format, refuses root-boundary actions without a valid target, and scopes every command to the currently selected workspace repository. The extension caps each read at 10,000 newest entries and a 4 MiB process buffer so pathological reflogs cannot stall or exhaust the extension host; this is an intentional VS Code responsiveness adaptation around the same newest-first parser semantics.
 
 ## Guards and exact prompts
 

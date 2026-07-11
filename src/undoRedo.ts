@@ -12,13 +12,15 @@ export type ReflogEntry = { hash: string; name: string };
 export type ReflogConfirm = (prompt: string, title: 'Undo' | 'Redo' | 'Autostash?') => Promise<boolean>;
 
 type GitOptions = { env?: NodeJS.ProcessEnv; allowFailure?: boolean };
+export const REFLOG_ENTRY_LIMIT = 10_000;
+const REFLOG_BUFFER_LIMIT = 4 * 1024 * 1024;
 
 function runGit(cwd: string, args: string[], options: GitOptions = {}): Promise<string> {
   return new Promise((resolve, reject) => {
     cp.execFile('git', args, {
       cwd,
       encoding: 'utf8',
-      maxBuffer: 16 * 1024 * 1024,
+      maxBuffer: REFLOG_BUFFER_LIMIT,
       env: options.env ?? process.env,
     }, (error, stdout, stderr) => {
       if (error && !options.allowFailure) {
@@ -33,7 +35,7 @@ function runGit(cwd: string, args: string[], options: GitOptions = {}): Promise<
 }
 
 export async function readReflog(cwd: string): Promise<ReflogEntry[]> {
-  const output = await runGit(cwd, ['-c', 'log.showSignature=false', 'log', '-g', '--format=%H%x00%gs%x00']);
+  const output = await runGit(cwd, ['-c', 'log.showSignature=false', 'log', '-g', `--max-count=${REFLOG_ENTRY_LIMIT}`, '--format=%H%x00%gs%x00']);
   const fields = output.split('\0');
   const entries: ReflogEntry[] = [];
   for (let i = 0; i + 1 < fields.length; i += 2) {

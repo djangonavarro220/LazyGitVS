@@ -26,6 +26,8 @@ export const allowedMessageTypes = new Set([
   'statusMenu',
   'repoMenu',
   'helpMenu',
+  'reflogUndo',
+  'reflogRedo',
   'commitAction',
   'panelAction',
   'moveBlock',
@@ -51,7 +53,8 @@ export const allowedMessageTypes = new Set([
   'close',
   'back',
   'togglePanel',
-  'toggleHunkSelection'
+  'toggleHunkSelection',
+  'dogfoodBoundary'
 ]);
 
 export function normalizeWebviewMessage(value: unknown): WebviewMessage | undefined {

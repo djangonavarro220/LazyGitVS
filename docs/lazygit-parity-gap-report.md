@@ -14,7 +14,7 @@ Last reviewed after commit `e432187 feat: close next lazygit parity gaps`.
 - [x] Typed QuickPick key execution.
 - [x] Shared command registry for contextual help, QuickPick entries, and typed panel actions.
 - [x] CSP + script nonce for webviews.
-- [x] Global `z` / `Z` reflog undo/redo on upstream-equivalent LGVS sidebar surfaces, with lazygit markers, confirmations, operation-state guards, autostash behavior, and selected-repository isolation. Conflicts and editor HUNK/LINE retain their own/non-reflog scope.
+- [x] Global configured `universal.undo` / `universal.redo` reflog actions on upstream-equivalent LGVS sidebar surfaces, with lazygit markers, confirmations, operation-state guards, autostash behavior, bounded reflog reads, and selected-repository isolation. Conflicts and editor HUNK/LINE retain their own/non-reflog scope.
 
 ### Navigation / panels
 - [x] LazyGit-style numbered panels: Status, Files, Branches, Commits, Stash, Conflicts, Tags, Remotes.

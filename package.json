@@ -196,6 +196,7 @@
         {
           "id": "lazygitvs.statusView",
           "name": "1 Status",
+          "type": "webview",
           "when": "lazygitvs.statusViewVisible",
           "visibility": "hidden"
         },
@@ -263,16 +264,7 @@
       }
     },
     "keybindings": [
-      {
-        "key": "z",
-        "command": "lazygitvs.undoReflog",
-        "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
-      },
-      {
-        "key": "shift+z",
-        "command": "lazygitvs.redoReflog",
-        "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
-      },
+
       {
         "key": "down",
         "command": "lazygitvs.editorHunkNext",

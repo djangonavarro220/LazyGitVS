@@ -154,6 +154,9 @@ async function chord(Input, keys) {
 
   if (keys === 'ctrl+1') return key(Input, '1', { ctrl: true });
   if (keys === 'ctrl+alt+h') return key(Input, 'h', { ctrl: true, alt: true });
+  if (keys === 'ctrl+alt+r') return key(Input, 'r', { ctrl: true, alt: true });
+  if (keys === 'ctrl+alt+f') return key(Input, 'f', { ctrl: true, alt: true });
+
   if (keys === 'ctrl+alt+?') return key(Input, '/', { ctrl: true, alt: true });
   if (keys === 'ctrl+alt+o') return key(Input, 'o', { ctrl: true, alt: true });
   const panelChord = /^ctrl\+alt\+([1-8])$/.exec(keys);
@@ -254,6 +257,7 @@ async function clickQuickPickRowEndingWith(Runtime, Input, suffix, waitForHide =
   await sleep(STEP_DELAY);
   return point;
 }
+
 async function selectedLgvsRowInfo(Runtime) {
   const r = await Runtime.evaluate({ expression: `(() => {
     function collect(root, out = []) {
@@ -408,6 +412,22 @@ async function clickWorkbenchTreeRow(Runtime, Input, textPart) {
   await sleep(300);
   return point;
 }
+async function focusWorkbenchPanelBody(Runtime, Input, label) {
+  const r = await Runtime.evaluate({ expression: `(() => {
+    const wanted = ${JSON.stringify(label)};
+    const header = Array.from(document.querySelectorAll('.pane-header')).find(el => { const rect = el.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 && ((el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim()).includes(wanted); });
+    const pane = header?.closest('.pane');
+    if (!header || !pane) return undefined;
+    const paneRect = pane.getBoundingClientRect();
+    return { x: paneRect.left + paneRect.width / 2, y: paneRect.bottom - 8 };
+  })()`, returnByValue: true });
+  const point = r.result.value;
+  if (!point) return false;
+  await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+  await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+  await sleep(STEP_DELAY);
+  return true;
+}
 (async () => {
   if (runMatrixIfNeeded()) return;
   const variantShots = path.join(SHOTS, VARIANT_NAME);
@@ -423,6 +443,9 @@ async function clickWorkbenchTreeRow(Runtime, Input, textPart) {
   }
   const codePath = await downloadAndUnzipVSCode('stable');
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-code-user-'));
+  const undoRedoConfig = path.join(userData, 'lazygit-undo-redo.yml');
+  const undoRedoBoundaryReport = path.join(userData, 'lazygit-undo-redo-boundary.jsonl');
+  if (process.env.LGVS_DOGFOOD_UNDO_REDO) write(undoRedoConfig, 'keybinding:\n  universal:\n    undo: x\n    redo: X\n');
   write(path.join(userData, 'User', 'settings.json'), JSON.stringify({
     'workbench.colorTheme': THEME,
     'workbench.startupEditor': 'none',
@@ -436,6 +459,8 @@ async function clickWorkbenchTreeRow(Runtime, Input, textPart) {
     { key: 'ctrl+alt+9', command: 'lazygitvs.statusEnter', args: { repoPath: secondaryRepo } },
     { key: 'ctrl+alt+0', command: 'lazygitvs.statusEnter', args: { repoPath: fixture } },
     { key: 'ctrl+alt+enter', command: 'lazygitvs.enterSelected' },
+    { key: 'ctrl+alt+r', command: 'lazygitvs.statusEnter', args: fixture },
+    { key: 'ctrl+alt+f', command: 'lazygitvs.filesView.focus' },
     { key: 'f9', command: 'lazygitvs.enterSelected' },
     { key: 'ctrl+alt+/', command: 'lazygitvs.helpCurrentPanel' },
     { key: 'ctrl+alt+h', command: 'lazygitvs.enterCurrentFileHunkMode' }
@@ -464,7 +489,7 @@ async function clickWorkbenchTreeRow(Runtime, Input, textPart) {
   ];
   const cmd = process.env.DISPLAY ? codePath : 'xvfb-run';
   const args = process.env.DISPLAY ? launchArgs.slice(1) : ['-a', ...launchArgs];
-  const proc = spawn(cmd, args, { cwd: ROOT, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const proc = spawn(cmd, args, { cwd: ROOT, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: process.env.LGVS_DOGFOOD_UNDO_REDO ? { ...process.env, LG_CONFIG_FILE: undoRedoConfig, LGVS_DOGFOOD_BOUNDARY_REPORT: undoRedoBoundaryReport } : process.env });
   let procOut = '';
   proc.stdout.on('data', d => procOut += d.toString());
   proc.stderr.on('data', d => procOut += d.toString());
@@ -609,8 +634,18 @@ async function clickWorkbenchTreeRow(Runtime, Input, textPart) {
       finishDogfoodReport();
       return;
     }
-    await key(Input, '0', { ctrl: true, alt: true });
-    const pickedPrimary = { keybinding: 'ctrl+alt+0', repoPath: fixture };
+    let pickedPrimary;
+    if (process.env.LGVS_DOGFOOD_UNDO_REDO) {
+      assert(await focusWorkbenchPanelBody(Runtime, Input, '1 STATUS'), 'Visible Status panel body was not found for repository selection');
+      await key(Input, 'Enter');
+      await waitFor(async () => (await quickInputState(Runtime)).visible, 5000, 200, 'repository selector QuickPick');
+      pickedPrimary = await clickQuickPickRowEndingWith(Runtime, Input, fixture);
+    } else if (process.env.LGVS_DOGFOOD_OPERATION_STATUS) {
+      throw new Error('Operation-status lane should have returned before repository selection');
+    } else {
+      await key(Input, '0', { ctrl: true, alt: true });
+      pickedPrimary = { keybinding: 'ctrl+alt+0', repoPath: fixture };
+    }
     await sleep(1200);
     const primarySelectedText = (await pageText(Runtime)).slice(0, 3000);
     evidence.push({ step: 'status-select-primary-repo-before-main-flow', screenshot: await screenshot(Page, '02-status-select-primary-repo-before-main-flow'), status: status(fixture), pickedPrimary, textSample: primarySelectedText });
@@ -626,14 +661,33 @@ async function clickWorkbenchTreeRow(Runtime, Input, textPart) {
       const targetReflog = git(fixture, 'reflog', '--format=%H %gs');
       const secondaryHead = secondaryRepo ? git(secondaryRepo, 'rev-parse', 'HEAD') : '';
 
-      await runCommandPalette(Input, 'LazyGitVS: Undo');
+      await key(Input, '2');
+      await waitForText(Runtime, /-- FILES · LG --/);
+      await chord(Input, 'ctrl+alt+f');
       await sleep(STEP_DELAY);
-      const cancelPrompt = await pageText(Runtime);
-      evidence.push({ step: 'undo-confirmation-cancel', screenshot: await screenshot(Page, '02-undo-confirmation-cancel', { force: true }), head: git(fixture, 'rev-parse', 'HEAD'), textSample: cancelPrompt.slice(-1200) });
+      await key(Input, 'z');
+      await sleep(400);
+      const staleDefaultText = await pageText(Runtime);
+      await key(Input, '?');
+      const customKeyHelp = await waitForText(Runtime, /x\s+Undo/i);
       await key(Input, 'Escape');
       await sleep(STEP_DELAY);
+      await chord(Input, 'ctrl+alt+f');
+      await sleep(STEP_DELAY);
+      await key(Input, 'x');
+      await waitFor(() => fs.existsSync(undoRedoBoundaryReport) && fs.readFileSync(undoRedoBoundaryReport, 'utf8').includes('reflogAction:modal'), 10000, 100, 'undo boundary modal event');
+      const boundaryEvents = fs.readFileSync(undoRedoBoundaryReport, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+      assert(boundaryEvents.some(({ event }) => event === 'reflogUndo'), 'Physical x did not emit reflogUndo from the Files webview');
+      const modalEvent = boundaryEvents.find(({ event }) => event === 'reflogAction:modal');
+      assert(modalEvent && /Are you sure you want to soft reset to/.test(modalEvent.prompt), 'Undo did not invoke the real native soft-reset modal');
+      const modalExtractionText = await pageText(Runtime);
+      evidence.push({ step: 'undo-confirmation-cancel', screenshot: await screenshot(Page, '02-undo-confirmation-cancel', { force: true }), head: git(fixture, 'rev-parse', 'HEAD'), modalEvent, modalVisibleInPageExtraction: /Are you sure you want to soft reset to/.test(modalExtractionText) });
+      await key(Input, 'Escape');
+      await sleep(STEP_DELAY);
+      checks.push({ name: 'Configured custom undo key replaces stale z in the real Files webview routing help', ok: !/Are you sure you want to (soft|hard) reset to/.test(staleDefaultText) && /x\s+Undo/i.test(customKeyHelp) });
+      checks.push({ name: 'Configured x reaches the production undo handler and invokes the real native confirmation modal', ok: boundaryEvents.some(({ event }) => event === 'reflogUndo:handler') && modalEvent?.root === fixture && /Are you sure you want to soft reset to/.test(modalEvent?.prompt || ''), modalEvent, modalVisibleInPageExtraction: /Are you sure you want to soft reset to/.test(modalExtractionText) });
       checks.push({ name: 'Undo cancellation leaves HEAD, reflog, and the non-selected repository unchanged', ok: git(fixture, 'rev-parse', 'HEAD') === targetHead && git(fixture, 'reflog', '--format=%H %gs') === targetReflog && (!secondaryRepo || git(secondaryRepo, 'rev-parse', 'HEAD') === secondaryHead) });
-      finishDogfoodReport();
+      finishDogfoodReport({ boundaryEvents });
       return;
     }
 
@@ -666,6 +720,8 @@ async function clickWorkbenchTreeRow(Runtime, Input, textPart) {
       await waitForText(Runtime, /2 FILES/, 10000);
       const refreshLatencyMs = Date.now() - beforeRefresh;
       await key(Input, '2');
+      await chord(Input, 'ctrl+alt+f');
+      await sleep(STEP_DELAY);
       await clickLgvsRoot(Runtime, Input);
       await key(Input, 'End');
       await sleep(STEP_DELAY);

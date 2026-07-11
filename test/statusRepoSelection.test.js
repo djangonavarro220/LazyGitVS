@@ -42,23 +42,19 @@ assert(gitService.includes('repositoryScanHeadPatterns(maxDepth)'), 'Fallback re
 assert(gitService.includes("repoRootFor(folder.uri.fsPath)"), 'Workspace folder Git roots must remain as fallback when VS Code Git has not discovered repos yet');
 assert(!gitService.includes("findFiles('**/.git/HEAD'"), 'Nested fallback discovery must not scan every depth; it must honor git.repositoryScanMaxDepth');
 assert(extension.includes("if (panel === 'status') return this.recentReposMenu();"), 'Enter on 1 Status must open the repository selector, matching lazygit original recent repos behavior');
-assert(extension.includes('class StatusTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem>'), '1 Status should use a native compact TreeView instead of a tall webview');
-assert(extension.includes("vscode.window.createTreeView(VIEW_IDS.status, { treeDataProvider: statusProvider })"), '1 Status must be registered as a native TreeView');
-assert(!extension.includes("registerWebviewViewProvider(VIEW_IDS.status"), '1 Status must not be registered as a webview; webviews keep too much empty vertical space');
+assert(extension.includes('for (const panel of PANEL_ORDER) context.subscriptions.push(vscode.window.registerWebviewViewProvider'), '1 Status must share the runtime keymap-aware webview provider with the other panels');
+assert.strictEqual(JSON.parse(pkg).contributes.views.scm.find(view => view.id === 'lazygitvs.statusView').type, 'webview', '1 Status must support configured lazygit keys rather than static manifest bindings');
 assert(pkg.includes('\"id\": \"lazygitvs.statusView\"') && pkg.includes('\"visibility\": \"hidden\"'), '1 Status should default hidden and materialize only when the user presses 1');
 assert(pkg.includes('\"when\": \"lazygitvs.statusViewVisible\"'), '1 Status should disappear again when focus leaves panel 1');
 assert(extension.includes("executeCommand('setContext', 'lazygitvs.statusViewVisible', viewPanel === 'status')"), 'LGVS must drive Status visibility from active focus panel, not leave 1 Status stuck open');
-assert(extension.includes('await this.updateActiveViewContext();\n    this.requestWebviewAutoFocus();'), 'Panel focus must await active-view context before revealing the native Status tree');
+assert(extension.includes('await this.updateActiveViewContext();\n    this.requestWebviewAutoFocus();'), 'Panel focus must await active-view context before revealing Status');
 assert(extension.includes('await Promise.all([\n      vscode.commands.executeCommand'), 'Status visibility context updates must be awaitable instead of fire-and-pray');
-assert(extension.includes('statusTreeItems(): vscode.TreeItem[]'), '1 Status must render the workspace repositories as native tree rows');
-assert(extension.includes("item.command = { command: 'lazygitvs.statusEnter', title: 'Select repository', arguments: [repo.path] };"), 'Status repo rows must be selectable with Enter');
 const keybindings = JSON.parse(pkg).contributes.keybindings;
-assert(keybindings.some(binding => binding.key === 'enter' && binding.command === 'lazygitvs.statusEnter' && binding.when === 'focusedView == lazygitvs.statusView && !editorTextFocus'), 'Pressing 1 then Enter must select/open the focused Status repository row without stealing Enter from real editors');
-assert(extension.includes('repoDescription(repo, isCurrent)'), '1 Status must mark the active repository row as current while preserving branch and change count');
+assert(!keybindings.some(binding => ['lazygitvs.undoReflog', 'lazygitvs.redoReflog'].includes(binding.command)), 'Status must not retain static undo/redo keys that conflict with lazygit config');
 assert(extension.includes('repoChangeDescription(repo)'), '1 Status rows must show pending-change counts next to each repository, like VS Code SCM badges');
 assert(extension.includes("repo.changeCount ? `${repo.changeCount} change${repo.changeCount === 1 ? '' : 's'}` : 'clean'"), 'Clean and dirty repositories must be distinguishable in the Status repository list');
 assert(extension.includes('description: repoChangeDescription(repo)'), 'Repository QuickPick must also show pending-change counts before switching repos');
-assert(extension.includes("if (isCurrent) item.iconPath = new vscode.ThemeIcon('check');"), '1 Status must visually mark the active repository row');
+
 assert(extension.includes('const current = getActiveWorkspaceRoot();'), '1 Status must not visually mark the first repository as current before explicit Status selection');
 assert(!extension.includes('const current = getActiveWorkspaceRoot() ?? repos[0]?.path'), '1 Status must not silently fall back to the first repo for visual current/check state');
 assert(!extension.includes('path.basename(workspaceRoot()), vscode.TreeItemCollapsibleState.None'), '1 Status empty-state must not call workspaceRoot before the user can select a repo');
