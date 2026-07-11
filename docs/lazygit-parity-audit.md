@@ -4,7 +4,7 @@ Objetivo: LazyGitVS no debe ser “inspirado en lazygit”; debe copiar lazygit 
 
 ## Fuentes auditadas
 
-- Ledger canónico ejecutable: `docs/lazygit-parity-ledger.json` (auditado contra `jesseduffield/lazygit@bea025f5b7abbefe306a252826f1ccb2482baa00` el 2026-07-11)
+- Ledger canónico ejecutable: `docs/lazygit-parity-ledger.json` (auditado offline contra la revisión exacta preservada localmente `jesseduffield/lazygit@146f00491820055f3a6c0d492447d7e2b9da7d83` el 2026-07-11)
 - Código lazygit: upstream lazygit checkout used for parity research
 - Keybindings generados: `docs/keybindings/Keybindings_en.md`
 - Config/schema: `pkg/config/user_config.go`, `pkg/config/app_config.go`, `docs/Config.md`
@@ -276,10 +276,14 @@ Fuente: `pkg/config/app_config.go`.
 
 The canonical rows and immutable source links are in `docs/lazygit-parity-ledger.json`. Current upstream source confirms:
 
+<!-- parity-claim: {"id":"branches.enter","parity":"exact","reviewedAt":"2026-07-11"} -->
 - `docs/keybindings/Keybindings_en.md` extract and this audit's generated keybinding dump list Local branches `<enter>` as **View commits** (`Local branches` lines in this file), matching LGVS `Branches` Enter routing to `enterBranchCommits()` / the `4 Commits` panel scoped to the selected branch. `Space` remains the checkout action.
+<!-- parity-claim: {"id":"commits.enter","parity":"exact","reviewedAt":"2026-07-11"} -->
 - Commits `<enter>` is listed as **View files**, matching LGVS `enterCommit()` drilling from the commit list into commit files and previewing the first file diff.
+<!-- parity-claim: {"id":"commit-files.enter","parity":"adapted","reviewedAt":"2026-07-11"} -->
 - Commit files `<enter>` is listed as **Enter file / Toggle directory collapsed** and is tied to lazygit custom patch-builder line entry. LGVS does not yet implement patch-building mode, so the audited/documented VS Code-native behavior is: file rows enter a read-only HUNK/LINE editor view for the selected commit-file patch, staging/discard mutations are blocked, and `Esc` returns to the commit-files subview. The remaining patch-builder parity work stays tracked under Commit files gaps.
-- Commit `C` is **Copy (cherry-pick)** and invokes upstream's copy-range path; LGVS likewise stores the selected hash for later `V` paste rather than cherry-picking immediately.
+<!-- parity-claim: {"id":"commits.C","parity":"gap","reviewedAt":"2026-07-11"} -->
+- Commit `C` is **Copy (cherry-pick)** and invokes upstream's copy-range path. LGVS preserves delayed `V` paste but stores only the current hash; selected ranges and cancellation/reset semantics remain an explicit gap in the canonical ledger.
 
 ## Keybindings que LGVS debe copiar primero
 

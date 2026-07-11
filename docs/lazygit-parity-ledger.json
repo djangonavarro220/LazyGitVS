@@ -2,7 +2,8 @@
   "schemaVersion": 1,
   "upstream": {
     "repository": "https://github.com/jesseduffield/lazygit",
-    "commit": "bea025f5b7abbefe306a252826f1ccb2482baa00"
+    "commit": "146f00491820055f3a6c0d492447d7e2b9da7d83",
+    "provenance": "Locally preserved lazygit checkout and /tmp/lazygit-pinned.tar.gz; audited offline at this exact revision"
   },
   "reviewedAt": "2026-07-11",
   "rows": [
@@ -13,11 +14,12 @@
       "upstreamBehavior": "View commits",
       "lgvsBehavior": "Open the Commits panel scoped to the selected branch",
       "parity": "exact",
-      "sourceCommit": "bea025f5b7abbefe306a252826f1ccb2482baa00",
+      "upstreamCommit": "146f00491820055f3a6c0d492447d7e2b9da7d83",
+      "lgvsCommit": "6b8a981c5d5dd4d081bad1405ccfba64a26b8eb8",
       "reviewedAt": "2026-07-11",
       "evidence": [
-        "https://github.com/jesseduffield/lazygit/blob/bea025f5b7abbefe306a252826f1ccb2482baa00/pkg/gui/controllers/switch_to_sub_commits_controller.go#L45-L52",
-        "https://github.com/jesseduffield/lazygit/blob/bea025f5b7abbefe306a252826f1ccb2482baa00/docs/keybindings/Keybindings_en.md#L195-L201"
+        "https://github.com/jesseduffield/lazygit/blob/146f00491820055f3a6c0d492447d7e2b9da7d83/pkg/gui/controllers/switch_to_sub_commits_controller.go#L45-L52",
+        "https://github.com/jesseduffield/lazygit/blob/146f00491820055f3a6c0d492447d7e2b9da7d83/docs/keybindings/Keybindings_en.md#L198-L200"
       ]
     },
     {
@@ -25,14 +27,15 @@
       "surface": "Commits",
       "key": "C",
       "upstreamBehavior": "Copy (cherry-pick)",
-      "lgvsBehavior": "Store the selected commit for a later V paste/cherry-pick",
-      "parity": "exact",
-      "sourceCommit": "bea025f5b7abbefe306a252826f1ccb2482baa00",
+      "lgvsBehavior": "Store only the current commit hash for a later V paste/cherry-pick; selected ranges and copy-selection cancellation/reset are not implemented",
+      "parity": "gap",
+      "upstreamCommit": "146f00491820055f3a6c0d492447d7e2b9da7d83",
+      "lgvsCommit": "6b8a981c5d5dd4d081bad1405ccfba64a26b8eb8",
       "reviewedAt": "2026-07-11",
       "evidence": [
-        "https://github.com/jesseduffield/lazygit/blob/bea025f5b7abbefe306a252826f1ccb2482baa00/pkg/gui/controllers/basic_commits_controller.go#L108-L119",
-        "https://github.com/jesseduffield/lazygit/blob/bea025f5b7abbefe306a252826f1ccb2482baa00/pkg/config/user_config.go#L1137-L1141",
-        "https://github.com/jesseduffield/lazygit/blob/bea025f5b7abbefe306a252826f1ccb2482baa00/docs/keybindings/Keybindings_en.md#L112-L120"
+        "https://github.com/jesseduffield/lazygit/blob/146f00491820055f3a6c0d492447d7e2b9da7d83/pkg/gui/controllers/basic_commits_controller.go#L103-L119",
+        "https://github.com/jesseduffield/lazygit/blob/146f00491820055f3a6c0d492447d7e2b9da7d83/pkg/config/user_config.go#L1137-L1141",
+        "https://github.com/jesseduffield/lazygit/blob/146f00491820055f3a6c0d492447d7e2b9da7d83/docs/keybindings/Keybindings_en.md#L115-L121"
       ]
     },
     {
@@ -42,10 +45,11 @@
       "upstreamBehavior": "View files",
       "lgvsBehavior": "Drill into files changed by the selected commit",
       "parity": "exact",
-      "sourceCommit": "bea025f5b7abbefe306a252826f1ccb2482baa00",
+      "upstreamCommit": "146f00491820055f3a6c0d492447d7e2b9da7d83",
+      "lgvsCommit": "c7604c36e6777b1f157266f7509543ad9461b062",
       "reviewedAt": "2026-07-11",
       "evidence": [
-        "https://github.com/jesseduffield/lazygit/blob/bea025f5b7abbefe306a252826f1ccb2482baa00/docs/keybindings/Keybindings_en.md#L120-L122"
+        "https://github.com/jesseduffield/lazygit/blob/146f00491820055f3a6c0d492447d7e2b9da7d83/docs/keybindings/Keybindings_en.md#L117-L121"
       ]
     },
     {
@@ -55,10 +59,15 @@
       "upstreamBehavior": "Enter file / Toggle directory collapsed for custom patch building",
       "lgvsBehavior": "Toggle directories; open file patches in a read-only HUNK/LINE view",
       "parity": "adapted",
-      "sourceCommit": "bea025f5b7abbefe306a252826f1ccb2482baa00",
+      "upstreamCommit": "146f00491820055f3a6c0d492447d7e2b9da7d83",
+      "lgvsCommit": "17ec3e6f87759d88fdbc7e19c894a95b27dfb1a1",
       "reviewedAt": "2026-07-11",
+      "vscodeException": {
+        "upstreamDifference": "Upstream enters custom patch-building mode; LGVS opens a read-only editor HUNK/LINE view and blocks mutations",
+        "rationale": "LGVS adapts this flow to VS Code's real editor and has not implemented lazygit's custom patch builder"
+      },
       "evidence": [
-        "https://github.com/jesseduffield/lazygit/blob/bea025f5b7abbefe306a252826f1ccb2482baa00/docs/keybindings/Keybindings_en.md#L63-L67"
+        "https://github.com/jesseduffield/lazygit/blob/146f00491820055f3a6c0d492447d7e2b9da7d83/docs/keybindings/Keybindings_en.md#L67-L70"
       ]
     }
   ]

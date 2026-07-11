@@ -117,7 +117,9 @@ This is the behavior spec for LazyGitVS. If LGVS differs, it needs an explicit V
 ## Known LGVS parity gaps to close
 
 - Canonical audited claims live in `docs/lazygit-parity-ledger.json`; CI rejects duplicate, stale, and contradictory rows.
+<!-- parity-claim: {"id":"branches.enter","parity":"exact","reviewedAt":"2026-07-11"} -->
 - Branch `<enter>` now matches upstream: it views commits for the selected branch.
-- Commit `C` now matches upstream: it marks/copies for later `V` paste rather than cherry-picking immediately.
+<!-- parity-claim: {"id":"commits.C","parity":"gap","reviewedAt":"2026-07-11"} -->
+- Commit `C` matches upstream's delayed `V` paste for one commit, but selected-range copy and cancellation/reset semantics remain a canonical gap.
 - Several branch/commit/tag options are implemented as simplified direct Git commands rather than lazygit option menus.
 - File tree `-`/`=` collapse/expand and some filter/sort/worktree flows are incomplete.
