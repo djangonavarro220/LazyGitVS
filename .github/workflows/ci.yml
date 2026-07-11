@@ -31,6 +31,9 @@ jobs:
       - name: Release consistency check
         run: npm run check:release
 
+      - name: Canonical upstream parity ledger
+        run: npm run check:parity-ledger
+
       - name: Unit and integration tests
         run: npm test
 

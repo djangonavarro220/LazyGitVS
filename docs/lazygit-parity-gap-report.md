@@ -2,7 +2,7 @@
 
 Tracked, committed parity status against upstream lazygit. Keep this file updated whenever a parity gap is closed or a new mismatch is found. Vibes are not a tracking system.
 
-Last reviewed after commit `e432187 feat: close next lazygit parity gaps`.
+Canonical disputed claims were re-audited against `jesseduffield/lazygit@bea025f5b7abbefe306a252826f1ccb2482baa00` on 2026-07-11 and live in `docs/lazygit-parity-ledger.json`.
 
 ## Done / usable parity
 

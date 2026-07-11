@@ -116,7 +116,8 @@ This is the behavior spec for LazyGitVS. If LGVS differs, it needs an explicit V
 
 ## Known LGVS parity gaps to close
 
-- Branch `<enter>` is still not true lazygit parity: upstream views commits for the selected branch.
-- Commit `C` should mark/copy for later paste; LGVS currently cherry-picks directly.
+- Canonical audited claims live in `docs/lazygit-parity-ledger.json`; CI rejects duplicate, stale, and contradictory rows.
+- Branch `<enter>` now matches upstream: it views commits for the selected branch.
+- Commit `C` now matches upstream: it marks/copies for later `V` paste rather than cherry-picking immediately.
 - Several branch/commit/tag options are implemented as simplified direct Git commands rather than lazygit option menus.
 - File tree `-`/`=` collapse/expand and some filter/sort/worktree flows are incomplete.

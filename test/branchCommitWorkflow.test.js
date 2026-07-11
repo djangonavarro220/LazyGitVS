@@ -11,6 +11,7 @@ const lazygitConfig = fs.readFileSync(path.join(root, 'src', 'lazygitConfig.ts')
 const dogfoodUi = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
 const parityGapReport = fs.readFileSync(path.join(root, 'docs', 'lazygit-parity-gap-report.md'), 'utf8');
 const parityAudit = fs.readFileSync(path.join(root, 'docs', 'lazygit-parity-audit.md'), 'utf8');
+const parityLedger = JSON.parse(fs.readFileSync(path.join(root, 'docs', 'lazygit-parity-ledger.json'), 'utf8'));
 
 assert(gitService.includes("'diff-tree', '--root', '--no-commit-id', '--name-status', '-r', hash"), 'Commit file list must include root commits too; otherwise Enter on the first commit never opens the lazygit-style file subview');
 assert(gitService.includes("'stash', 'show', '--name-status', '--find-renames', ref"), 'Stash file list must keep real paths/renames for diff-editor preview, not display-only joined paths');
@@ -51,7 +52,7 @@ assert(extension.includes("if(hit(e,u.return)){e.preventDefault();vscode.postMes
 assert(dogfoodUi.includes("branches-enter-shows-selected-branch-commits"), 'Dogfood must exercise Branches Enter -> branch-scoped commits');
 assert(dogfoodUi.includes("commit-file-tree-readonly-hunk"), 'Dogfood must exercise commit-file Enter -> read-only HUNK/LINE mode');
 assert(dogfoodUi.includes("commit-file-tree-escape-keeps-context"), 'Dogfood must exercise Esc from read-only commit-file HUNK/LINE mode back to the expanded commit-files tree');
-assert(parityAudit.includes('Story 5 Enter re-audit'), 'Parity audit must record the Story 5 upstream lazygit Enter re-audit source notes');
+assert(parityAudit.includes('Enter / commit C re-audit') && parityLedger.rows.some(row => row.id === 'branches.enter' && row.upstreamBehavior === 'View commits'), 'Canonical parity evidence must record the current upstream Branch Enter claim');
 assert(parityGapReport.includes('Branches `<enter>` views commits for the selected branch; re-audited against lazygit keybinding docs/source extract') && !parityGapReport.includes('Branches` `<enter>` semantics are suspect') && !parityGapReport.includes('commit-file `<enter>` should feel like'), 'Parity gap report must clear the stale Enter suspect notes and document the VS Code-native commit-file difference');
 
 assert(extension.includes('private cherryPickCommitHashes: string[] = [];'), 'Commit C must copy commits into a cherry-pick buffer, not cherry-pick immediately');
