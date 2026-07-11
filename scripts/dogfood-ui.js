@@ -9,8 +9,9 @@ const os = require('os');
 const path = require('path');
 const http = require('http');
 const { spawn, spawnSync, execFileSync } = require('child_process');
-const { makeFixture, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write, startMergeOperation, mergeOperationInProgress } = require('./dogfood/fixtures');
+const { makeFixture, fixtureRepos, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write, startMergeOperation, mergeOperationInProgress } = require('./dogfood/fixtures');
 const { targetLane, finishReport, writeJson } = require('./dogfood/reporting');
+const { makeFixtureResult, classifyFailure, collectProcessTreeMetrics } = require('./dogfood/telemetry');
 const { writeNativeScreenshot, writeScreenshot } = require('./dogfood/screenshots');
 const CDP = require('chrome-remote-interface');
 const { downloadAndUnzipVSCode } = require('@vscode/test-electron');
@@ -22,7 +23,7 @@ const VARIANT = process.env.LGVS_DOGFOOD_VARIANT || '';
 const VARIANT_NAME = VARIANT || 'matrix';
 const TARGETED_LANE = targetLane(process.env);
 const REPORT_SLUG = `${VARIANT_NAME}-${TARGETED_LANE}`;
-const REPORT_JSON = path.join(OUT, `last-run-${REPORT_SLUG}.json`);
+const REPORT_JSON = path.resolve(process.env.LGVS_DOGFOOD_REPORT_PATH || path.join(OUT, `last-run-${REPORT_SLUG}.json`));
 const LANE_SHOTS = path.join(SHOTS, REPORT_SLUG);
 const PORT = Number(process.env.LGVS_DOGFOOD_CDP_PORT || 9322);
 const NATIVE_DISPLAY = process.env.DISPLAY || `:${PORT}`;
@@ -431,7 +432,10 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
   fs.rmSync(LANE_SHOTS, { recursive: true, force: true });
   ensureDir(LANE_SHOTS);
   const started = new Date().toISOString();
+  const fixtureStartedAtMs = Date.now();
   const fixture = makeFixture();
+  const fixtureReadyAtMs = Date.now();
+  const fixtureRepositories = fixtureRepos(fixture);
   const secondaryRepo = secondaryFixtureRepo(fixture);
   const deepRepo = deepNestedFixtureRepo(fixture);
   if (process.env.LGVS_DOGFOOD_OPERATION_STATUS) {
@@ -439,6 +443,8 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     startMergeOperation(secondaryRepo);
   }
   const codePath = await downloadAndUnzipVSCode('stable');
+  const vscodePreparedAtMs = Date.now();
+  const vscodeVersion = JSON.parse(fs.readFileSync(path.join(path.dirname(codePath), 'resources', 'app', 'package.json'), 'utf8')).version;
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-code-user-'));
   nativeXauthority = path.join(userData, 'Xauthority');
   const undoRedoConfig = path.join(userData, 'lazygit-undo-redo.yml');
@@ -468,8 +474,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
   const vimExtension = useVim ? installVSCodeVimExtension(extensionsDir) : undefined;
   const launchArgs = [
     codePath,
-    fixture,
-    ...(secondaryRepo ? [secondaryRepo] : []),
+    ...fixtureRepositories,
     `--extensionDevelopmentPath=${ROOT}`,
     `--user-data-dir=${userData}`,
     `--extensions-dir=${extensionsDir}`,
@@ -487,6 +492,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
   ];
   const cmd = process.env.DISPLAY ? codePath : 'xvfb-run';
   const args = process.env.DISPLAY ? launchArgs.slice(1) : ['-n', String(PORT), '-f', nativeXauthority, ...launchArgs];
+  const processStartedAtMs = Date.now();
   const proc = spawn(cmd, args, { cwd: ROOT, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: process.env.LGVS_DOGFOOD_UNDO_REDO ? { ...process.env, LG_CONFIG_FILE: undoRedoConfig, LGVS_DOGFOOD_BOUNDARY_REPORT: undoRedoBoundaryReport } : process.env });
   let procOut = '';
   proc.stdout.on('data', d => procOut += d.toString());
@@ -518,9 +524,9 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
   let activePage;
   try {
     client = await cdpConnect();
-    const { Page, Input, Runtime, Browser, Emulation } = client;
+    const { Page, Input, Runtime, Browser, Emulation, Performance } = client;
     activePage = Page;
-    await Promise.all([Page.enable(), Runtime.enable()]);
+    await Promise.all([Page.enable(), Runtime.enable(), Performance.enable()]);
     async function exerciseCommitFileTree() {
       const expectedPath = 'commit-tree/routes/api/target.ts';
       const gitCommitFiles = git(fixture, 'show', '--format=', '--name-only', 'HEAD');
@@ -608,6 +614,63 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     await clickLgvsRoot(Runtime, Input);
     const sidebarText = await waitForText(Runtime, /2 FILES|1 STATUS/);
     evidence.push({ step: 'open-lgvs-scm-sidebar', screenshot: await screenshot(Page, '02-open-lgvs-scm-sidebar'), status: status(fixture), textSample: sidebarText });
+    if (process.env.LGVS_DOGFOOD_TELEMETRY) {
+      await key(Input, '0', { ctrl: true, alt: true });
+      await waitForText(Runtime, /-- FILES · LG --/, 20000);
+      const warmSamples = Math.max(2, Math.min(20, Number(process.env.LGVS_TELEMETRY_WARM_SAMPLES || 5)));
+      const phases = {
+        sidebarReadyMs: [{ kind: 'cold', value: Date.now() - processStartedAtMs }],
+        panelReadyMs: []
+      };
+      const input = { panelSwitchMs: [] };
+      const memory = { rssBytes: [] };
+      const dom = { nodeCount: [] };
+      const subprocess = { childCount: [] };
+      for (let index = 0; index <= warmSamples; index++) {
+        const kind = index === 0 ? 'cold' : 'warm';
+        if (kind === 'warm') {
+          const sidebarStarted = Date.now();
+          await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
+          await waitForText(Runtime, /2 FILES|1 STATUS/, 10000);
+          phases.sidebarReadyMs.push({ kind, value: Date.now() - sidebarStarted });
+        }
+        const panel = index % 2 === 0 ? ['3', /-- BRANCHES · LG --/] : ['2', /-- FILES · LG --/];
+        const phaseStarted = Date.now();
+        await chord(Input, `ctrl+alt+${panel[0]}`);
+        await waitForText(Runtime, panel[1], 10000);
+        const elapsed = Date.now() - phaseStarted;
+        phases.panelReadyMs.push({ kind, value: elapsed });
+        input.panelSwitchMs.push({ kind, value: elapsed });
+        const performanceMetrics = await Performance.getMetrics();
+        const domMetric = performanceMetrics.metrics.find(metric => metric.name === 'Nodes')?.value;
+        const fallbackDom = await Runtime.evaluate({ expression: 'document.getElementsByTagName("*").length', returnByValue: true });
+        const processMetrics = collectProcessTreeMetrics(proc.pid);
+        memory.rssBytes.push({ kind, value: processMetrics.rssBytes });
+        dom.nodeCount.push({ kind, value: Number(domMetric ?? fallbackDom.result.value) });
+        subprocess.childCount.push({ kind, value: processMetrics.childCount });
+      }
+      const telemetry = makeFixtureResult({
+        fixture: { fileCount: Number(process.env.LGVS_TELEMETRY_FILE_COUNT), repoCount: Number(process.env.LGVS_TELEMETRY_REPO_COUNT), actualRepoCount: fixtureRepositories.length },
+        phases,
+        input,
+        memory,
+        dom,
+        subprocess,
+        infrastructure: { fixtureSetupMs: fixtureReadyAtMs - fixtureStartedAtMs, vscodePrepareMs: vscodePreparedAtMs - fixtureReadyAtMs },
+        launch: { cdpPort: PORT, processId: proc.pid, vscodeVersion },
+        identity: {
+          runId: process.env.LGVS_TELEMETRY_RUN_ID,
+          lane: process.env.LGVS_TELEMETRY_LANE,
+          source: process.env.LGVS_TELEMETRY_SOURCE,
+          build: process.env.LGVS_TELEMETRY_BUILD,
+          fixture: `${process.env.LGVS_TELEMETRY_FILE_COUNT}x${process.env.LGVS_TELEMETRY_REPO_COUNT}`,
+          reportPath: REPORT_JSON
+        }
+      });
+      checks.push({ name: 'Telemetry fixture renders real changed files', ok: /bulk\/file-/.test(status(fixture)), fixture: telemetry.fixture });
+      finishDogfoodReport({ telemetry });
+      return;
+    }
     addCheck(checks, { name: 'Light theme dogfood profile is active', ok: !!process.env.LGVS_DOGFOOD_FAST_THEME || THEME.toLowerCase().includes('light'), theme: THEME });
     addCheck(checks, { name: `${useVim ? 'VSCodeVim' : 'No Vim'} dogfood variant is active`, ok: true, variant: VARIANT, vimExtension: useVim, vimVersion: vimExtension?.version });
     checks.push({ name: 'SCM sidebar exposes default LazyGitVS panels while Status stays hidden until 1', ok: !sidebarText.includes('1 STATUS') && ['2 FILES', '3 BRANCHES', '4 COMMITS', '5 STASH', '6 CONFLICTS', '7 TAGS', '8 REMOTES'].every(label => sidebarText.includes(label)), textSample: sidebarText.slice(0, 1200) });
@@ -1317,7 +1380,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     if (activePage) {
       try { failureScreenshot = await screenshot(activePage, 'failure', { force: true }); } catch { /* best-effort only */ }
     }
-    const report = { ok: false, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, failureScreenshot, error: String(error && error.stack || error), processOutput: procOut.slice(-8000) };
+    const report = { ok: false, classification: classifyFailure(error), variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, failureScreenshot, error: String(error && error.stack || error), processOutput: procOut.slice(-8000) };
     write(REPORT_JSON, JSON.stringify(report, null, 2));
     console.error(JSON.stringify(report, null, 2));
     process.exitCode = 1;

@@ -155,6 +155,15 @@ npm run dogfood:ui:edge-files
 npm run dogfood:ui:operation-status
 ```
 
+Trustworthy performance telemetry:
+
+```bash
+npm run dogfood:telemetry
+npm run dogfood:telemetry:check
+```
+
+The telemetry matrix launches a fresh real VS Code Extension Development Host on an allocated free CDP port for every 320/2k/10k-file × 1/4/16-repository fixture. Its ignored JSON report records Node, VS Code, extension, and platform versions; uncontaminated cold and warm samples with p50/p95 for startup phases and physical input; process-tree RSS and child counts; and DOM node counts. Runs are bounded to 2-20 warm samples (`LGVS_TELEMETRY_WARM_SAMPLES`, default 5). Failures are classified explicitly as `infrastructure` or `product`; a malformed or incomplete report fails the checker instead of being accepted as green.
+
 The operation-status lane allocates a free CDP port, creates merge conflicts in two real repositories, and captures the Status row, options menu, and native abort confirmation. It proves cancel is mutation-free and a confirmed abort only clears the selected repository.
 
 Cramped sidebar check (focused no-Vim lane; writes forced screenshots for `7` and `8` state evidence, but does not assert VS Code visually scrolled native deep headers):
