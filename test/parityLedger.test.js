@@ -7,12 +7,11 @@ const { spawnSync } = require('child_process');
 const root = path.join(__dirname, '..');
 const ledgerPath = path.join(root, 'docs', 'lazygit-parity-ledger.json');
 const validatorPath = path.join(root, 'scripts', 'validate-parity-ledger.js');
-const upstreamRepo = '/home/saldo/syncthing/openclaw-saldo/sync/_research/lazygit';
 
 function run(file = ledgerPath, docsDir) {
   const args = [validatorPath, file];
   if (docsDir) args.push(docsDir);
-  return spawnSync(process.execPath, args, { cwd: root, encoding: 'utf8', env: { ...process.env, LGVS_UPSTREAM_REPO: upstreamRepo } });
+  return spawnSync(process.execPath, args, { cwd: root, encoding: 'utf8' });
 }
 
 function mutatedLedger(mutate) {
@@ -33,6 +32,9 @@ assert(ledger.rows.some(row => row.id === 'commits.C' && row.upstreamBehavior ==
 assert(ledger.rows.every(row => /^[0-9a-f]{40}$/.test(row.upstreamCommit)));
 assert(ledger.rows.every(row => /^[0-9a-f]{40}$/.test(row.lgvsCommit)));
 assert.match(ledger.upstream.archiveSha256, /^[0-9a-f]{64}$/);
+assert.match(ledger.upstream.tree, /^[0-9a-f]{40}$/);
+assert.match(ledger.reviewedLgvs.commit, /^[0-9a-f]{40}$/);
+assert.match(ledger.reviewedLgvs.tree, /^[0-9a-f]{40}$/);
 assert(ledger.rows.every(row => row.upstreamEvidence.length && row.lgvsEvidence.length));
 assert(ledger.rows.filter(row => row.parity === 'adapted').every(row => row.vscodeException?.rationale));
 
@@ -73,7 +75,19 @@ const fakeUpstream = run(mutatedLedger(value => {
   value.rows.forEach(row => { row.upstreamCommit = value.upstream.commit; });
 }));
 assert.notStrictEqual(fakeUpstream.status, 0);
-assert.match(fakeUpstream.stderr, /upstream\.commit does not exist/i);
+assert.match(fakeUpstream.stderr, /archive commit mismatch/i);
+
+const fakeArchiveDigest = run(mutatedLedger(value => { value.upstream.archiveSha256 = '0'.repeat(64); }));
+assert.notStrictEqual(fakeArchiveDigest.status, 0);
+assert.match(fakeArchiveDigest.stderr, /archive SHA-256 mismatch/i);
+
+const fakeUpstreamTree = run(mutatedLedger(value => { value.upstream.tree = '0'.repeat(40); }));
+assert.notStrictEqual(fakeUpstreamTree.status, 0);
+assert.match(fakeUpstreamTree.stderr, /archive tree mismatch/i);
+
+const fakeReviewedTree = run(mutatedLedger(value => { value.reviewedLgvs.tree = '0'.repeat(40); }));
+assert.notStrictEqual(fakeReviewedTree.status, 0);
+assert.match(fakeReviewedTree.stderr, /reviewedLgvs tree/i);
 
 const impossibleRange = run(mutatedLedger(value => {
   const evidence = value.rows.find(row => row.id === 'commits.C').upstreamEvidence[1];
@@ -120,6 +134,11 @@ const markerProseDisagreement = run(ledgerPath, claimsDir);
 assert.notStrictEqual(markerProseDisagreement.status, 0);
 assert.match(markerProseDisagreement.stderr, /marker\/prose disagreement/i);
 
+fs.writeFileSync(path.join(claimsDir, 'claim.md'), '<!-- parity-claim: {"id":"commits.C","parity":"gap","reviewedAt":"2026-07-11"} -->\n- Historical prose.\n');
+const legacyMarker = run(ledgerPath, claimsDir);
+assert.notStrictEqual(legacyMarker.status, 0);
+assert.match(legacyMarker.stderr, /legacy unbound parity claim/i);
+
 fs.writeFileSync(path.join(claimsDir, 'claim.md'), '<!-- parity-claim: {"id":"commits.C","parity":"gap","reviewedAt":"2026-07-11","claim":"Canonical gap."} -->\n- Canonical gap.\n<!-- parity-claim: {"id":"commits.C","parity":"gap","reviewedAt":"2026-07-11","claim":"Canonical gap."} -->\n- Canonical gap.\n');
 const duplicateMarker = run(ledgerPath, claimsDir);
 assert.notStrictEqual(duplicateMarker.status, 0);
@@ -134,5 +153,8 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 assert.strictEqual(pkg.scripts['check:parity-ledger'], 'node scripts/validate-parity-ledger.js');
 const ci = fs.readFileSync(path.join(root, '.github', 'workflows', 'ci.yml'), 'utf8');
 assert.match(ci, /npm run check:parity-ledger/);
+const hostPathPrefix = `/${'ho'}me/`;
+assert(!fs.readFileSync(validatorPath, 'utf8').includes(hostPathPrefix));
+assert(!fs.readFileSync(__filename, 'utf8').includes(hostPathPrefix));
 
 console.log('parity ledger tests passed');

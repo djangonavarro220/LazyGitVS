@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
+const os = require('os');
+const zlib = require('zlib');
 const { spawnSync } = require('child_process');
 
 const repositoryRoot = path.resolve(__dirname, '..');
 const ledgerPath = path.resolve(process.argv[2] || path.join(repositoryRoot, 'docs', 'lazygit-parity-ledger.json'));
 const claimsDir = path.resolve(process.argv[3] || path.join(repositoryRoot, 'docs'));
-const upstreamRoot = process.env.LGVS_UPSTREAM_REPO && path.resolve(process.env.LGVS_UPSTREAM_REPO);
 const errors = [];
 let ledger;
 try { ledger = JSON.parse(fs.readFileSync(ledgerPath, 'utf8')); }
@@ -14,6 +16,8 @@ catch (error) { console.error(`Invalid parity ledger: ${error.message}`); proces
 
 const git = (cwd, args) => spawnSync('git', args, { cwd, encoding: 'utf8' });
 const isHash = value => /^[0-9a-f]{40}$/.test(value || '');
+let upstreamRoot;
+let temporaryUpstreamRoot;
 function isIsoDate(value) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
   const date = new Date(`${value}T00:00:00Z`);
@@ -39,24 +43,62 @@ function verifyEvidence(repo, commit, evidence, label, requiredCommit) {
     if (!Array.isArray(entry.tokens) || entry.tokens.length === 0 || entry.tokens.some(token => typeof token !== 'string' || !token)) {
       errors.push(`${item}: non-empty expected evidence tokens are required`); return;
     }
-    const object = git(repo, ['show', `${commit}:${entry.path}`]);
-    if (object.status !== 0) { errors.push(`${item}: path does not exist at ${commit}: ${entry.path}`); return; }
-    const lines = object.stdout.split(/\r?\n/);
+    let contents;
+    if (commit) {
+      const object = git(repo, ['show', `${commit}:${entry.path}`]);
+      if (object.status !== 0) { errors.push(`${item}: path does not exist at ${commit}: ${entry.path}`); return; }
+      contents = object.stdout;
+    } else {
+      const evidencePath = path.resolve(repo, entry.path);
+      if (!evidencePath.startsWith(`${repo}${path.sep}`) || !fs.existsSync(evidencePath)) { errors.push(`${item}: path does not exist in verified archive: ${entry.path}`); return; }
+      contents = fs.readFileSync(evidencePath, 'utf8');
+    }
+    const lines = contents.split(/\r?\n/);
     if (entry.endLine > lines.length) { errors.push(`${item}: impossible range ${entry.startLine}-${entry.endLine}; ${entry.path} has ${lines.length} lines`); return; }
     const range = lines.slice(entry.startLine - 1, entry.endLine).join('\n');
     for (const token of entry.tokens) if (!range.includes(token)) errors.push(`${item}: range is missing expected token ${JSON.stringify(token)}`);
   });
 }
 
+function provisionUpstreamArchive() {
+  if (!validRelativePath(ledger.upstream?.archive)) {
+    errors.push('upstream.archive must be a portable repository-relative path');
+    return;
+  }
+  const archivePath = path.resolve(repositoryRoot, ledger.upstream.archive);
+  if (!archivePath.startsWith(`${repositoryRoot}${path.sep}`) || !fs.existsSync(archivePath)) {
+    errors.push(`upstream archive does not exist: ${ledger.upstream.archive}`);
+    return;
+  }
+  const archive = fs.readFileSync(archivePath);
+  const digest = crypto.createHash('sha256').update(archive).digest('hex');
+  if (digest !== ledger.upstream.archiveSha256) errors.push(`upstream archive SHA-256 mismatch: expected ${ledger.upstream.archiveSha256}, got ${digest}`);
+  let tar;
+  try { tar = zlib.gunzipSync(archive); }
+  catch (error) { errors.push(`upstream archive is not valid gzip: ${error.message}`); return; }
+  const embeddedCommit = spawnSync('git', ['get-tar-commit-id'], { input: tar, encoding: 'utf8', maxBuffer: tar.length + 1024 });
+  if (embeddedCommit.status !== 0 || embeddedCommit.stdout.trim() !== ledger.upstream.commit) errors.push(`upstream archive commit mismatch: expected ${ledger.upstream.commit}, got ${embeddedCommit.stdout.trim() || 'none'}`);
+  temporaryUpstreamRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-upstream-'));
+  const extracted = spawnSync('tar', ['-xzf', archivePath, '-C', temporaryUpstreamRoot, '--strip-components=1'], { encoding: 'utf8' });
+  if (extracted.status !== 0) { errors.push(`cannot extract upstream archive: ${extracted.stderr.trim()}`); return; }
+  git(temporaryUpstreamRoot, ['init', '-q']);
+  git(temporaryUpstreamRoot, ['config', 'core.autocrlf', 'false']);
+  const added = git(temporaryUpstreamRoot, ['add', '-A']);
+  const tree = added.status === 0 ? git(temporaryUpstreamRoot, ['write-tree']) : added;
+  if (tree.status !== 0 || tree.stdout.trim() !== ledger.upstream.tree) errors.push(`upstream archive tree mismatch: expected ${ledger.upstream.tree}, got ${tree.stdout.trim() || 'none'}`);
+  upstreamRoot = temporaryUpstreamRoot;
+}
+
 if (!ledger.upstream || !isHash(ledger.upstream.commit)) errors.push('upstream.commit must be a full immutable Git commit');
 if (ledger.upstream?.repository !== 'https://github.com/jesseduffield/lazygit') errors.push('upstream.repository must identify jesseduffield/lazygit');
+if (!isHash(ledger.upstream?.tree)) errors.push('upstream.tree must be a full immutable Git tree');
 if (!/^[0-9a-f]{64}$/.test(ledger.upstream?.archiveSha256 || '')) errors.push('upstream.archiveSha256 must be an immutable SHA-256');
-if (!upstreamRoot) errors.push('LGVS_UPSTREAM_REPO must point to the pinned local upstream checkout');
-else if (!fs.existsSync(upstreamRoot)) errors.push(`LGVS_UPSTREAM_REPO does not exist: ${upstreamRoot}`);
-else if (isHash(ledger.upstream?.commit)) {
-  const remote = git(upstreamRoot, ['config', '--get', 'remote.origin.url']);
-  if (remote.status !== 0 || !/github\.com[/:]jesseduffield\/lazygit(?:\.git)?\s*$/.test(remote.stdout)) errors.push('LGVS_UPSTREAM_REPO is not the configured jesseduffield/lazygit repository');
-  commitExists(upstreamRoot, ledger.upstream.commit, 'upstream.commit');
+if (isHash(ledger.upstream?.commit) && isHash(ledger.upstream?.tree) && /^[0-9a-f]{64}$/.test(ledger.upstream?.archiveSha256 || '')) provisionUpstreamArchive();
+if (!isHash(ledger.reviewedLgvs?.commit) || !isHash(ledger.reviewedLgvs?.tree)) errors.push('reviewedLgvs commit and tree must be full immutable Git hashes');
+else if (commitExists(repositoryRoot, ledger.reviewedLgvs.commit, 'reviewedLgvs.commit')) {
+  const reviewedTree = git(repositoryRoot, ['rev-parse', `${ledger.reviewedLgvs.commit}^{tree}`]);
+  if (reviewedTree.status !== 0 || reviewedTree.stdout.trim() !== ledger.reviewedLgvs.tree) errors.push('reviewedLgvs tree does not belong to reviewedLgvs commit');
+  if (git(repositoryRoot, ['merge-base', '--is-ancestor', ledger.reviewedLgvs.commit, 'HEAD']).status !== 0) errors.push('reviewedLgvs commit is not reachable from HEAD');
 }
 if (!isIsoDate(ledger.reviewedAt)) errors.push('reviewedAt must be a valid ISO date');
 if (!Array.isArray(ledger.rows) || ledger.rows.length === 0) errors.push('rows must be a non-empty array');
@@ -73,10 +115,10 @@ for (const [index, row] of (ledger.rows || []).entries()) {
   if (row.upstreamCommit !== ledger.upstream?.commit || row.reviewedAt !== ledger.reviewedAt) errors.push(`${label}: stale row; upstreamCommit/reviewedAt must match the ledger audit`);
   if (!isHash(row.lgvsCommit)) errors.push(`${label}: lgvsCommit must be a full immutable Git commit`);
   else if (commitExists(repositoryRoot, row.lgvsCommit, `${label}: lgvsCommit`)) {
-    if (git(repositoryRoot, ['merge-base', '--is-ancestor', row.lgvsCommit, 'HEAD']).status !== 0) errors.push(`${label}: lgvsCommit is not reachable from reviewed HEAD: ${row.lgvsCommit}`);
+    if (isHash(ledger.reviewedLgvs?.commit) && git(repositoryRoot, ['merge-base', '--is-ancestor', row.lgvsCommit, ledger.reviewedLgvs.commit]).status !== 0) errors.push(`${label}: lgvsCommit is not reachable from reviewed LGVS snapshot: ${row.lgvsCommit}`);
     verifyEvidence(repositoryRoot, row.lgvsCommit, row.lgvsEvidence, `${label}: LGVS`, row.lgvsCommit);
   }
-  if (upstreamRoot && isHash(ledger.upstream?.commit)) verifyEvidence(upstreamRoot, ledger.upstream.commit, row.upstreamEvidence, `${label}: upstream`);
+  if (upstreamRoot && isHash(ledger.upstream?.commit)) verifyEvidence(upstreamRoot, null, row.upstreamEvidence, `${label}: upstream`);
   if (!['exact', 'adapted', 'gap'].includes(row.parity)) errors.push(`${label}: invalid parity ${row.parity}`);
   if (row.parity === 'adapted' && (!row.vscodeException || typeof row.vscodeException.rationale !== 'string' || !row.vscodeException.rationale.trim())) errors.push(`${label}: adapted parity requires an explicit VS Code exception rationale`);
   const claimKey = `${row.surface}\u0000${row.key}`;
@@ -111,11 +153,9 @@ if (isIsoDate(ledger.reviewedAt) && fs.existsSync(claimsDir)) {
       if (!marker) return;
       try {
         const claim = JSON.parse(marker[1]);
-        // Older unbound markers are historical annotations, not canonical repetitions.
-        // Only records carrying their exact adjacent claim text participate in validation.
-        if (typeof claim.claim !== 'string' || !claim.claim) return;
         const canonical = rowsById.get(claim.id);
         const location = `${path.relative(process.cwd(), file)}:${index + 1}`;
+        if (typeof claim.claim !== 'string' || !claim.claim) { errors.push(`legacy unbound parity claim in ${location}: ${claim.id || 'missing id'}`); return; }
         if (seenMarkers.has(claim.id)) errors.push(`duplicate external parity claim for ${claim.id}: ${seenMarkers.get(claim.id)} and ${location}`);
         else seenMarkers.set(claim.id, location);
         if (!canonical || claim.parity !== canonical.parity || claim.reviewedAt !== canonical.reviewedAt) errors.push(`contradictory external claim in ${location}: ${claim.id || 'missing id'}`);
@@ -125,7 +165,9 @@ if (isIsoDate(ledger.reviewedAt) && fs.existsSync(claimsDir)) {
       } catch (error) { errors.push(`invalid external parity claim in ${path.relative(process.cwd(), file)}:${index + 1}: ${error.message}`); }
     });
   }
+  for (const row of (ledger.rows || [])) if (!seenMarkers.has(row.id)) errors.push(`missing external parity claim for ${row.id}`);
 }
 
+if (temporaryUpstreamRoot) fs.rmSync(temporaryUpstreamRoot, { recursive: true, force: true });
 if (errors.length) { for (const error of errors) console.error(`parity ledger: ${error}`); process.exit(1); }
 console.log(`Parity ledger valid: ${ledger.rows.length} rows at ${ledger.upstream.commit.slice(0, 12)}.`);

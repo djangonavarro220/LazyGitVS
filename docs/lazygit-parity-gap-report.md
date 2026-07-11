@@ -141,7 +141,6 @@ Canonical disputed claims were re-audited offline against the locally preserved 
 
 These are behaviours that currently work in LGVS but are not trusted enough to call lazygit parity. Re-check against upstream lazygit before polishing or documenting them as done.
 
-<!-- parity-claim: {"id":"commit-files.enter","parity":"adapted","reviewedAt":"2026-07-11"} -->
 - No active Story 5 Enter-path suspects remain. Branches/Commits/commit-files Enter were re-audited on 2026-07-11; commit-file Enter is explicitly tracked as the VS Code-native read-only HUNK/LINE difference above and patch-builder parity remains in Commit files gaps.
 
 ## Remaining gaps
@@ -188,7 +187,6 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 - [ ] Merge/rebase option menus instead of simplified direct commands.
 
 ### Commit gaps
-<!-- parity-claim: {"id":"commits.C","parity":"gap","reviewedAt":"2026-07-11"} -->
 - [ ] Commit `C` copies only the current commit; upstream copies a selected range and supports cancelling/resetting that selection before `V` paste.
 - [ ] Squash down `s`.
 - [ ] Autosquash/apply fixups `S`.

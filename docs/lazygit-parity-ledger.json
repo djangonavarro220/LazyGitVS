@@ -3,8 +3,14 @@
   "upstream": {
     "repository": "https://github.com/jesseduffield/lazygit",
     "commit": "146f00491820055f3a6c0d492447d7e2b9da7d83",
+    "tree": "adc104f8f8ecfff39534ac2df6d911d0f2b5479c",
+    "archive": "test/fixtures/lazygit-146f00491820055f3a6c0d492447d7e2b9da7d83.tar.gz",
     "archiveSha256": "1222b60b5d5d8bd7a77fa548316cb58d33094cf6e399406d887a9d557de5f32e",
-    "provenance": "Audited offline from an immutable archive of the exact repository commit; local checkout and archive locations are intentionally not canonical"
+    "provenance": "The committed portable archive is verified byte-for-byte, by embedded Git commit ID, and by reconstructed Git tree before evidence is read"
+  },
+  "reviewedLgvs": {
+    "commit": "9c2bd12a4780a6b68edf137383aa9ceb2fd3a39d",
+    "tree": "ece8650ce5edcc05e4d154c9c3e4f8c7babe1bc1"
   },
   "reviewedAt": "2026-07-11",
   "rows": [
