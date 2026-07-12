@@ -39,6 +39,8 @@ export type ListModelRequest<T, R, I extends ListModelIdentity> = Readonly<{
   treeRevision: ListModelRevision;
   items: readonly T[];
   project(items: readonly T[], request: ListModelRequest<T, R, I>): readonly R[];
+  /** Transfer freshly projected rows whose nested values are already immutable, avoiding a second copy. */
+  projectedRows?: 'copy' | 'transfer';
   identity(row: R): I;
   isCurrent?: () => boolean;
 }>;
@@ -91,9 +93,9 @@ const ZERO_STATS: MutableStats = {
 
 function ownedFrozenValue<T>(value: T, seen = new Map<object, unknown>()): T {
   if (value === null || typeof value !== 'object') return value;
-  const existing = seen.get(value as object);
-  if (existing !== undefined) return existing as T;
   if (Array.isArray(value)) {
+    const existing = seen.get(value);
+    if (existing !== undefined) return existing as T;
     const copy: unknown[] = [];
     seen.set(value, copy);
     for (const entry of value) copy.push(ownedFrozenValue(entry, seen));
@@ -103,21 +105,47 @@ function ownedFrozenValue<T>(value: T, seen = new Map<object, unknown>()): T {
   if (prototype !== Object.prototype && prototype !== null) {
     throw new TypeError('List model rows may contain only owned plain objects, arrays, and primitive values');
   }
+  if (prototype === Object.prototype) {
+    const flatCopy = { ...(value as Record<PropertyKey, unknown>) };
+    let isFlat = true;
+    for (const key in flatCopy) {
+      const entry = flatCopy[key];
+      if (entry !== null && typeof entry === 'object') {
+        isFlat = false;
+        break;
+      }
+    }
+    if (isFlat) {
+      for (const key of Object.getOwnPropertySymbols(flatCopy)) {
+        const entry = flatCopy[key];
+        if (entry !== null && typeof entry === 'object') {
+          isFlat = false;
+          break;
+        }
+      }
+    }
+    if (isFlat) return Object.freeze(flatCopy) as T;
+  }
+  const existing = seen.get(value as object);
+  if (existing !== undefined) return existing as T;
   const stringKeys = Object.keys(value as object);
   const symbolKeys = Object.getOwnPropertySymbols(value as object);
   const keys: PropertyKey[] = symbolKeys.length === 0 ? stringKeys : [...stringKeys, ...symbolKeys];
-  if (prototype === Object.prototype && keys.every(key => {
-    const entry = (value as Record<PropertyKey, unknown>)[key];
-    return entry === null || typeof entry !== 'object';
-  })) {
-    return Object.freeze({ ...(value as Record<string, unknown>) }) as T;
-  }
   const copy = Object.create(prototype) as Record<PropertyKey, unknown>;
   seen.set(value as object, copy);
   for (const key of keys) {
     copy[key] = ownedFrozenValue((value as Record<PropertyKey, unknown>)[key], seen);
   }
   return Object.freeze(copy) as T;
+}
+
+function freezeTransferredValue<T>(value: T): T {
+  if (value === null || typeof value !== 'object') return value;
+  const prototype = Object.getPrototypeOf(value);
+  if (!Array.isArray(value) && prototype !== Object.prototype && prototype !== null) {
+    throw new TypeError('List model rows may contain only owned plain objects, arrays, and primitive values');
+  }
+  return Object.freeze(value);
 }
 
 export class ListModelCache<T, R, I extends ListModelIdentity> {
@@ -162,18 +190,23 @@ export class ListModelCache<T, R, I extends ListModelIdentity> {
 
     const projected = request.project(request.items, request);
     const ownedValues = new Map<object, unknown>();
-    const rows = projected.map(row => ownedFrozenValue(row, ownedValues));
-    const identities = new Array<I>(rows.length);
+
+    const rows = new Array<Readonly<R>>(projected.length);
+    const identities = new Array<I>(projected.length);
     const index = new Map<I, number>();
-    for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
-      const identity = request.identity(rows[rowIndex] as R);
+    for (let rowIndex = 0; rowIndex < projected.length; rowIndex++) {
+      const row = (request.projectedRows === 'transfer'
+        ? freezeTransferredValue(projected[rowIndex])
+        : ownedFrozenValue(projected[rowIndex], ownedValues)) as Readonly<R>;
+      rows[rowIndex] = row;
+      const identity = request.identity(row as R);
       const identityType = typeof identity;
       if (identityType === 'function' || (identityType === 'object' && identity !== null)) {
         this.counters.buildsDiscarded++;
         throw new TypeError(`List model identity must be an immutable primitive in ${request.modelId}`);
       }
       identities[rowIndex] = identity;
-      if (index.has(identity)) {
+      if (index.get(identity) !== undefined) {
         this.counters.duplicateIdentityErrors++;
         if (this.duplicateIdentity === 'error') {
           this.counters.buildsDiscarded++;

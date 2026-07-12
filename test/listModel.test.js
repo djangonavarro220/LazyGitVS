@@ -51,6 +51,24 @@ assert.deepStrictEqual(immutableSnapshot.rows[0].value, { count: 1 });
 assert.deepStrictEqual(immutableSnapshot.rows[0].tags, ['old']);
 assert(Object.isFrozen(immutableSnapshot.rows[0].value));
 assert(Object.isFrozen(immutableSnapshot.rows[0].tags));
+const symbolKey = Symbol('stable metadata');
+const symbolSnapshot = new ListModelCache().read(request({
+  modelId: 'symbol-row',
+  items: [{ path: 'symbol', [symbolKey]: 'kept' }],
+  project: sourceItems => sourceItems
+}));
+assert.strictEqual(symbolSnapshot.rows[0][symbolKey], 'kept', 'the flat-row ownership fast path preserves symbol fields');
+assert(Object.isFrozen(symbolSnapshot.rows[0]));
+const transferredRow = { path: 'transferred', nested: Object.freeze({ value: 1 }), identity: 'repo:path:transferred' };
+const transferredSnapshot = new ListModelCache().read(request({
+  modelId: 'transferred-row',
+  items: [],
+  project: () => [transferredRow],
+  projectedRows: 'transfer'
+}));
+assert.strictEqual(transferredSnapshot.rows[0], transferredRow, 'fresh projected rows transfer without a second allocation');
+assert(Object.isFrozen(transferredRow));
+assert(Object.isFrozen(transferredRow.nested));
 assert.deepStrictEqual(cache.stats(), {
   reads: 2, hits: 1, misses: 1, buildsStarted: 1, buildsPublished: 1, buildsDiscarded: 0,
   snapshotAllocations: 1, rowArrayAllocations: 1, rowAllocations: 3, identityIndexAllocations: 1,
