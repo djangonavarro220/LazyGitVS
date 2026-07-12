@@ -1,4 +1,5 @@
 import type { ChangedFile } from './gitService';
+import { ListModelCache } from './listModel';
 
 export type TreeRow<T extends { path: string }> =
   | { kind: 'dir'; path: string; label: string; depth: number; collapsed: boolean; file?: never }
@@ -7,6 +8,42 @@ export type TreeRow<T extends { path: string }> =
 export type FileTreeRow = TreeRow<ChangedFile>;
 
 export type TreeSortOptions = { showFileTree: boolean; fileTreeSortOrder: string; fileTreeSortCaseSensitive: boolean };
+
+export type FilePanelModelRequest = Readonly<{
+  files: readonly ChangedFile[];
+  selection: number;
+  projectionKey: string;
+  treeKey: string;
+  project(files: readonly ChangedFile[]): ChangedFile[];
+  options: TreeSortOptions;
+  collapsedDirs: ReadonlySet<string>;
+}>;
+
+/** Production Files-panel seam. LGVS-005 must replace this local generation with its accepted refresh generation. */
+export class FilePanelListModel {
+  private readonly cache = new ListModelCache<ChangedFile, FileTreeRow, string>();
+  private source: readonly ChangedFile[] | undefined;
+  private projectionKey = '';
+  private treeKey = '';
+  private generation = 0;
+
+  read(request: FilePanelModelRequest): readonly Readonly<FileTreeRow>[] {
+    if (request.files !== this.source || request.projectionKey !== this.projectionKey || request.treeKey !== this.treeKey) {
+      this.source = request.files;
+      this.projectionKey = request.projectionKey;
+      this.treeKey = request.treeKey;
+      this.generation++;
+    }
+    return this.cache.read({
+      modelId: 'production:files-panel', ownerGeneration: this.generation,
+      sourceRevision: this.generation,
+      projectionRevision: this.generation, treeRevision: this.generation,
+      items: request.files, selection: request.selection,
+      project: files => buildTreeRows(request.project(files).map(file => ({ ...file })), request.options, new Set(request.collapsedDirs)),
+      projectedRows: 'transfer', identity: row => `${row.kind}:${row.path}`
+    }).rows;
+  }
+}
 
 export function buildTreeRows<T extends { path: string }>(files: T[], options: TreeSortOptions, collapsedDirs: Set<string>): TreeRow<T>[] {
   if (!options.showFileTree) return files.map(file => ({ kind: 'file', path: file.path, label: file.path, depth: 0, file }));

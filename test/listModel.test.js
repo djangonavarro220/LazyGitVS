@@ -69,6 +69,22 @@ const transferredSnapshot = new ListModelCache().read(request({
 assert.strictEqual(transferredSnapshot.rows[0], transferredRow, 'fresh projected rows transfer without a second allocation');
 assert(Object.isFrozen(transferredRow));
 assert(Object.isFrozen(transferredRow.nested));
+const sharedTransferred = { value: 1 };
+const cycleTransferred = { value: 1 };
+cycleTransferred.self = cycleTransferred;
+const nestedSymbol = Symbol('nested ownership');
+const graphRow = { path: 'graph', left: sharedTransferred, right: sharedTransferred, cycleTransferred, [nestedSymbol]: { value: 1 }, identity: 'repo:path:graph' };
+const graphSnapshot = new ListModelCache().read(request({ modelId: 'transferred-graph', items: [], project: () => [graphRow], projectedRows: 'transfer' }));
+assert.strictEqual(graphSnapshot.rows[0], graphRow);
+assert.strictEqual(graphSnapshot.rows[0].left, graphSnapshot.rows[0].right, 'transfer preserves shared ownership');
+assert.strictEqual(graphSnapshot.rows[0].cycleTransferred.self, graphSnapshot.rows[0].cycleTransferred, 'transfer preserves cycles');
+for (const value of [graphRow, sharedTransferred, cycleTransferred, graphRow[nestedSymbol]]) assert(Object.isFrozen(value));
+assert.strictEqual(Reflect.set(sharedTransferred, 'value', 9), false);
+assert.strictEqual(Reflect.set(cycleTransferred, 'extra', true), false);
+assert.strictEqual(Reflect.set(graphRow[nestedSymbol], 'value', 9), false);
+assert.strictEqual(graphSnapshot.rows[0].left.value, 1);
+assert.strictEqual(graphSnapshot.rows[0].cycleTransferred.extra, undefined);
+assert.strictEqual(graphSnapshot.rows[0][nestedSymbol].value, 1);
 assert.deepStrictEqual(cache.stats(), {
   reads: 2, hits: 1, misses: 1, buildsStarted: 1, buildsPublished: 1, buildsDiscarded: 0,
   snapshotAllocations: 1, rowArrayAllocations: 1, rowAllocations: 3, identityIndexAllocations: 1,

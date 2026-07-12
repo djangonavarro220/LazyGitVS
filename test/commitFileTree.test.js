@@ -67,7 +67,8 @@ assert(selectedCommitFile && selectedCommitFile.file.id === 'alpha', 'Commit nav
 assert(commitExpandedRows.some(row => row.kind === 'file' && row.path === 'src/alpha.ts'), 'Files collapse state cannot hide the same directory in Commits');
 
 assert(extension.includes('private collapsedCommitFileDirs = new Set<string>();'), 'Commit file tree needs its own collapsed-directory state');
-assert.match(extension, /private fileTreeRows\(\): FileTreeRow\[\] \{ return this\.treeRowsFor\(this\.filteredFiles\(\), this\.collapsedFileDirs\); \}/, 'Files tree must use only Files collapse state');
+assert(extension.includes('private fileTreeRows(): readonly Readonly<FileTreeRow>[] { return this.filePanelListModel.read({'), 'Files tree must use the production cache seam');
+assert(extension.includes('collapsedDirs: this.collapsedFileDirs }); }'), 'Files tree must use only Files collapse state');
 assert.match(extension, /private commitFileTreeRows\(\): TreeRow<ChangedFile & CommitFile>\[\] \{ return this\.treeRowsFor\(this\.commitFileItems\.map\(file => this\.commitFileAsChangedFile\(file\)\), this\.collapsedCommitFileDirs\); \}/, 'Commit tree must use only commit-file collapse state');
 assert.match(extension, /if \(panel === 'status' \|\| this\.activeLength\(panel\) === 0\) await this\.refresh\(false\)/, 'Focusing an empty lazily rendered panel must refresh real repository data before navigation');
 assert.match(extension, /private async toggleCurrentCommitFileTreeNode\(\)[\s\S]*this\.collapsedCommitFileDirs\.has\(row\.path\)[\s\S]*this\.collapsedCommitFileDirs\.add\(row\.path\)/, 'Enter on a commit directory must toggle only commit-file collapse state');

@@ -18,7 +18,7 @@ assert(!extension.includes('private panelCommandCatalog(viewPanel: ViewPanel): G
 
 assert(extension.includes('export type FileTreeRow ='), 'Files panel needs real tree rows, not path text with slashes replaced by arrows');
 assert(extension.includes('private collapsedFileDirs = new Set<string>();'), 'Files tree must track collapsed directories');
-assert(extension.includes('private fileTreeRows(): FileTreeRow[]'), 'Files panel must render directory and file rows from a tree row model');
+assert(extension.includes('private fileTreeRows(): readonly Readonly<FileTreeRow>[]'), 'Files panel must render immutable directory and file rows from a tree row model');
 assert(extension.includes('toggleCurrentFileTreeNode()'), 'Enter on a directory must collapse/expand that node');
 assert(extension.includes('collapseAllFileTree()') && extension.includes('expandAllFileTree()'), 'Files -/= must collapse and expand all tree directories');
 assert(!extension.includes("filePath.replace(/\\//g, ' › ')"), 'Fake tree text replacement is not a file tree');

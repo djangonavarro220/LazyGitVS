@@ -8,7 +8,7 @@ import { applyHunk, applyLine, discardUnstagedLine, gitDiffConfigArgs, hunksForF
 import { normalizeWebviewMessage, scriptJson, webviewContentSecurityPolicy } from './webviewSecurity';
 import { hunkBodyLines, hunkChangedEditorLine, hunkSelectableLineIndexes, hunkStartLine, parseDiffHunks, type Hunk } from './hunkPatch';
 import { EMPTY_PREVIEW_SCHEME, EmptyProvider, VIRTUAL_PREVIEW_SCHEME, VirtualPreviewProvider } from './previewDocuments';
-import { buildTreeRows, FocusArea, isPanel, isViewPanel, PANEL_ORDER, REFRESH_INTERVAL_MS, STATE_KEY, VIEW_IDS, type FileTreeRow, type TreeRow, type Panel, type ViewPanel } from './panels';
+import { buildTreeRows, FilePanelListModel, FocusArea, isPanel, isViewPanel, PANEL_ORDER, REFRESH_INTERVAL_MS, STATE_KEY, VIEW_IDS, type FileTreeRow, type TreeRow, type Panel, type ViewPanel } from './panels';
 import { RefreshCoordinator } from './refreshCoordinator';
 import { branchRow, commitRow, dirRow, escapeHtml, fileRow, fileStateLabel, fileStatusHtml, row, treeFileRow } from './panelRows';
 import { originCommitUrl, pickGitAction, runGitAction, executeGitMenuItem, showCommitCopyMenu, showCommitResetMenu, showDiscardFileMenu, showDiscardHunkMenu, showPullMenu, showPushMenu, showResetMenu, showStashCreateMenu, type GitMenuItem } from './gitMenus';
@@ -105,6 +105,7 @@ class LazyGitVSController {
   private intervalTimer?: NodeJS.Timeout;
   private pendingFilesPreviewTimer?: ReturnType<typeof setTimeout>; private filesPreviewEpoch = 0;
   private readonly refreshCoordinator = new RefreshCoordinator();
+  private readonly filePanelListModel = new FilePanelListModel();
   private windowFocused = vscode.window.state.focused; private refreshDirtyWhileUnfocused = false;
   private selectionEpoch = 0;
   private explosion = false;
@@ -689,7 +690,6 @@ class LazyGitVSController {
       ) await this.openCurrent(this.activeViewPanel(), true).catch(() => undefined);
     });
   }
-
   private activeViewPanel(): ViewPanel { return this.activePanel === 'hunks' ? 'files' : this.activePanel; }
   private panelForView(panel: ViewPanel): Panel { return panel === 'files' ? this.activePanel === 'hunks' ? 'hunks' : 'files' : panel; }
   private clampSelections() {
@@ -717,7 +717,7 @@ class LazyGitVSController {
     return this.sortFilesByLazyGitConfig(this.applyTextFilter(items, f => f.path));
   }
   private treeRowsFor<T extends { path: string }>(files: T[], collapsedDirs: Set<string>): TreeRow<T>[] { return buildTreeRows(files, this.lazygitGui, collapsedDirs); }
-  private fileTreeRows(): FileTreeRow[] { return this.treeRowsFor(this.filteredFiles(), this.collapsedFileDirs); }
+  private fileTreeRows(): readonly Readonly<FileTreeRow>[] { return this.filePanelListModel.read({ files: this.files, selection: this.selected, projectionKey: `${this.fileStatusFilter}\0${this.filterText}\0${this.fileSortMode}\0${this.lazygitGui.fileTreeSortOrder}\0${this.lazygitGui.fileTreeSortCaseSensitive}`, treeKey: `${this.lazygitGui.showFileTree}\0${Array.from(this.collapsedFileDirs).sort().join('\0')}`, project: () => this.filteredFiles(), options: this.lazygitGui, collapsedDirs: this.collapsedFileDirs }); }
   private commitFileAsChangedFile(file: CommitFile): ChangedFile & CommitFile {
     const status = (file.status || 'M').slice(0, 1);
     return { ...file, xy: `${status} `, staged: status !== '?', untracked: status === '?' };
@@ -1697,7 +1697,7 @@ class LazyGitVSController {
     return common + `${kb([String(u.goInto), String(u.openFile)])} open conflict · resolve with VS Code`;
   }
   private fileTreeLabel(row: FileTreeRow): string { return row.label; }
-  private virtualRows<T>(items: T[], activeIndex: number, render: (item: T, index: number) => string): string {
+  private virtualRows<T>(items: readonly T[], activeIndex: number, render: (item: T, index: number) => string): string {
     const windowSize = 240;
     if (items.length <= windowSize) return items.map(render).join('');
     const start = Math.max(0, Math.min(items.length - windowSize, activeIndex - Math.floor(windowSize / 2)));

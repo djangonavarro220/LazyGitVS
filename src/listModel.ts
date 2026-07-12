@@ -37,9 +37,11 @@ export type ListModelRequest<T, R, I extends ListModelIdentity> = Readonly<{
   sourceRevision: ListModelRevision;
   projectionRevision: ListModelRevision;
   treeRevision: ListModelRevision;
+  /** Deliberately non-semantic UI state; changing it must remain a cache hit. */
+  selection?: number;
   items: readonly T[];
   project(items: readonly T[], request: ListModelRequest<T, R, I>): readonly R[];
-  /** Transfer freshly projected rows whose nested values are already immutable, avoiding a second copy. */
+  /** Transfer a freshly projected owned graph. The cache deeply freezes it in place before publication. */
   projectedRows?: 'copy' | 'transfer';
   identity(row: R): I;
   isCurrent?: () => boolean;
@@ -139,13 +141,51 @@ function ownedFrozenValue<T>(value: T, seen = new Map<object, unknown>()): T {
   return Object.freeze(copy) as T;
 }
 
-function freezeTransferredValue<T>(value: T): T {
+function freezeTransferredValue<T>(value: T, completed: Set<object>): T {
   if (value === null || typeof value !== 'object') return value;
-  const prototype = Object.getPrototypeOf(value);
-  if (!Array.isArray(value) && prototype !== Object.prototype && prototype !== null) {
-    throw new TypeError('List model rows may contain only owned plain objects, arrays, and primitive values');
+  let flat = true;
+  for (const key in value) {
+    const child = (value as Record<PropertyKey, unknown>)[key];
+    if (child !== null && typeof child === 'object') { flat = false; break; }
   }
-  return Object.freeze(value);
+  if (flat) {
+    for (const key of Object.getOwnPropertySymbols(value)) {
+      const child = (value as Record<PropertyKey, unknown>)[key];
+      if (child !== null && typeof child === 'object') { flat = false; break; }
+    }
+  }
+  if (flat) {
+    Object.freeze(value);
+    return value;
+  }
+  const visiting = new Set<object>();
+  const stack: Array<{ value: object; exit: boolean }> = [{ value, exit: false }];
+  while (stack.length) {
+    const frame = stack.pop()!;
+    const current = frame.value;
+    if (completed.has(current)) continue;
+    if (frame.exit) {
+      Object.freeze(current);
+      visiting.delete(current);
+      completed.add(current);
+      continue;
+    }
+    const prototype = Object.getPrototypeOf(current);
+    if (!Array.isArray(current) && prototype !== Object.prototype && prototype !== null) {
+      throw new TypeError('List model rows may contain only owned plain objects, arrays, and primitive values');
+    }
+    visiting.add(current);
+    stack.push({ value: current, exit: true });
+    for (const key of Reflect.ownKeys(current)) {
+      const descriptor = Object.getOwnPropertyDescriptor(current, key)!;
+      if (!('value' in descriptor)) throw new TypeError('Transferred list model graphs may contain only data properties');
+      const child = descriptor.value;
+      if (child !== null && typeof child === 'object' && !completed.has(child) && !visiting.has(child)) {
+        stack.push({ value: child, exit: false });
+      }
+    }
+  }
+  return value;
 }
 
 export class ListModelCache<T, R, I extends ListModelIdentity> {
@@ -190,13 +230,14 @@ export class ListModelCache<T, R, I extends ListModelIdentity> {
 
     const projected = request.project(request.items, request);
     const ownedValues = new Map<object, unknown>();
+    const transferredValues = new Set<object>();
 
     const rows = new Array<Readonly<R>>(projected.length);
     const identities = new Array<I>(projected.length);
     const index = new Map<I, number>();
     for (let rowIndex = 0; rowIndex < projected.length; rowIndex++) {
       const row = (request.projectedRows === 'transfer'
-        ? freezeTransferredValue(projected[rowIndex])
+        ? freezeTransferredValue(projected[rowIndex], transferredValues)
         : ownedFrozenValue(projected[rowIndex], ownedValues)) as Readonly<R>;
       rows[rowIndex] = row;
       const identity = request.identity(row as R);
