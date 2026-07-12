@@ -1,5 +1,7 @@
 export type ListModelRevision = number;
 
+export type ListModelIdentity = string | number | bigint | boolean | symbol | null | undefined;
+
 export type ListModelInvalidationScope = Readonly<{
   modelId: string;
   kind: 'source' | 'projection' | 'tree';
@@ -22,13 +24,13 @@ export type ListModelStats = Readonly<{
   duplicateIdentityErrors: number;
 }>;
 
-export type IdentityIndex<I> = Readonly<{
+export type IdentityIndex<I extends ListModelIdentity> = Readonly<{
   get(identity: I): number | undefined;
   has(identity: I): boolean;
   readonly size: number;
 }>;
 
-export type ListModelRequest<T, R, I> = Readonly<{
+export type ListModelRequest<T, R, I extends ListModelIdentity> = Readonly<{
   modelId: string;
   /** Monotonic token issued by the model owner. Revisions below are cache-key values, not clocks. */
   ownerGeneration: number;
@@ -41,7 +43,7 @@ export type ListModelRequest<T, R, I> = Readonly<{
   isCurrent?: () => boolean;
 }>;
 
-export type ListModelSnapshot<R, I> = Readonly<{
+export type ListModelSnapshot<R, I extends ListModelIdentity> = Readonly<{
   modelId: string;
   generation: number;
   semanticKey: Readonly<{
@@ -118,7 +120,7 @@ function ownedFrozenValue<T>(value: T, seen = new Map<object, unknown>()): T {
   return Object.freeze(copy) as T;
 }
 
-export class ListModelCache<T, R, I> {
+export class ListModelCache<T, R, I extends ListModelIdentity> {
   private readonly published = new Map<string, ListModelSnapshot<R, I>>();
   private readonly epochs = new Map<string, Epochs>();
   private counters: MutableStats = { ...ZERO_STATS };
@@ -165,6 +167,11 @@ export class ListModelCache<T, R, I> {
     const index = new Map<I, number>();
     for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
       const identity = request.identity(rows[rowIndex] as R);
+      const identityType = typeof identity;
+      if (identityType === 'function' || (identityType === 'object' && identity !== null)) {
+        this.counters.buildsDiscarded++;
+        throw new TypeError(`List model identity must be an immutable primitive in ${request.modelId}`);
+      }
       identities[rowIndex] = identity;
       if (index.has(identity)) {
         this.counters.duplicateIdentityErrors++;

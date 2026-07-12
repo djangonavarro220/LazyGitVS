@@ -109,20 +109,32 @@ const duplicateSnapshot = productionCache.read(request({
 assert.strictEqual(duplicateSnapshot.indexOfIdentity('repo:path:same'), 0, 'production duplicate handling is deterministic first-wins');
 assert.strictEqual(productionCache.stats().duplicateIdentityErrors, 1);
 
+for (const invalidIdentity of [{ path: 'mutable' }, () => 'callable']) {
+  const invalidIdentityCache = new ListModelCache({ duplicateIdentity: 'error' });
+  assert.throws(() => invalidIdentityCache.read(request({
+    modelId: `invalid:${typeof invalidIdentity}`,
+    identity: () => invalidIdentity
+  })), /identity must be an immutable primitive/);
+  assert.strictEqual(invalidIdentityCache.stats().buildsDiscarded, 1);
+  assert.strictEqual(invalidIdentityCache.stats().buildsPublished, 0);
+  assert.strictEqual(invalidIdentityCache.stats().identityIndexAllocations, 0);
+}
+
 const multiModelCache = new ListModelCache({ maxModels: 2 });
 const modelA = multiModelCache.read(request({ modelId: 'A' }));
 multiModelCache.read(request({ modelId: 'B' }));
 assert.strictEqual(multiModelCache.read(request({ modelId: 'A' })), modelA, 'A-B-A unchanged reads reuse A');
 assert.strictEqual(multiModelCache.stats().buildsPublished, 2);
 
-for (const identity of [
-  'repo:path:src/a.ts',
-  'commit:0123456789abcdef0123456789abcdef01234567:path:src/a.ts',
-  'refs/heads/feature/x',
-  'refs/remotes/origin/feature/x',
-  'refs/tags/v1.0.0',
-  'stash:fedcba9876543210fedcba9876543210fedcba98:path:src/a.ts'
+for (const identityParts of [
+  ['repo', ':path:', 'src/a.ts'],
+  ['commit:', '0123456789abcdef0123456789abcdef01234567', ':path:src/a.ts'],
+  ['refs/heads/', 'feature/', 'x'],
+  ['refs/remotes/', 'origin/feature/', 'x'],
+  ['refs/tags/', 'v1.0.', '0'],
+  ['stash:', 'fedcba9876543210fedcba9876543210fedcba98', ':path:src/a.ts']
 ]) {
+  const identity = identityParts.join('');
   const identityCache = new ListModelCache({ duplicateIdentity: 'error' });
   const snapshot = identityCache.read(request({
     modelId: identity,
@@ -130,7 +142,8 @@ for (const identity of [
     project: sourceItems => sourceItems.map(item => ({ ...item, identity })),
     identity: row => row.identity
   }));
-  assert.strictEqual(snapshot.indexOfIdentity(identity), 0, `restores exact semantic identity ${identity}`);
+  const restoredIdentity = identityParts.map(part => `${part}`).join('');
+  assert.strictEqual(snapshot.indexOfIdentity(restoredIdentity), 0, `restores exact semantic identity by string value ${identity}`);
 }
 
 const statsCopy = cache.stats();
