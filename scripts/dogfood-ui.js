@@ -9,6 +9,7 @@ const os = require('os');
 const path = require('path');
 const http = require('http');
 const { spawn, spawnSync, execFileSync } = require('child_process');
+const { performance } = require('perf_hooks');
 const { makeFixture, fixtureRepos, telemetryFixtureManifest, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write, startMergeOperation, mergeOperationInProgress } = require('./dogfood/fixtures');
 const { targetLane, finishReport, writeJson } = require('./dogfood/reporting');
 const { makeFixtureResult, classifyFailure, collectProcessTreeMetrics } = require('./dogfood/telemetry');
@@ -656,9 +657,9 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
       const warmSamples = Math.max(2, Math.min(20, Number(process.env.LGVS_TELEMETRY_WARM_SAMPLES || 5)));
       const phases = {
         sidebarReadyMs: [{ kind: 'cold', value: Date.now() - processStartedAtMs }],
-        panelReadyMs: []
+        panelRenderedReadyMs: []
       };
-      const input = { panelSwitchMs: [] };
+      const input = { dispatchAcknowledgedMs: [] };
       const memory = { rssBytes: [] };
       const dom = { nodeCount: [] };
       const subprocess = { childCount: [] };
@@ -671,12 +672,13 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
           phases.sidebarReadyMs.push({ kind, value: Date.now() - sidebarStarted });
         }
         const panel = index % 2 === 0 ? ['3', /-- BRANCHES · LG --/] : ['2', /-- FILES · LG --/];
-        const phaseStarted = Date.now();
+        const dispatchStarted = performance.now();
         await chord(Input, `ctrl+alt+${panel[0]}`);
+        const dispatchAcknowledged = performance.now();
         await waitForText(Runtime, panel[1], 10000);
-        const elapsed = Date.now() - phaseStarted;
-        phases.panelReadyMs.push({ kind, value: elapsed });
-        input.panelSwitchMs.push({ kind, value: elapsed });
+        const renderedReady = performance.now();
+        input.dispatchAcknowledgedMs.push({ kind, value: dispatchAcknowledged - dispatchStarted });
+        phases.panelRenderedReadyMs.push({ kind, value: renderedReady - dispatchStarted });
         const performanceMetrics = await Performance.getMetrics();
         const domMetric = performanceMetrics.metrics.find(metric => metric.name === 'Nodes')?.value;
         const fallbackDom = await Runtime.evaluate({ expression: 'document.getElementsByTagName("*").length', returnByValue: true });

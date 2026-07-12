@@ -44,9 +44,9 @@ function validReport(file = path.join(os.tmpdir(), 'lgvs-valid-telemetry.json'))
     fixture: { ...fixture, actualRepoCount: fixture.repoCount, manifest: { ...telemetry.expectedFixtureManifest(fixture), digest: require(path.join(root, 'scripts', 'dogfood', 'fixtures')).fixtureManifestDigest(telemetry.expectedFixtureManifest(fixture)) } },
     phases: {
       sidebarReadyMs: [{ kind: 'cold', value: 100 }, { kind: 'warm', value: 80 }, { kind: 'warm', value: 90 }],
-      panelReadyMs: [{ kind: 'cold', value: 30 }, { kind: 'warm', value: 20 }, { kind: 'warm', value: 25 }]
+      panelRenderedReadyMs: [{ kind: 'cold', value: 30 }, { kind: 'warm', value: 20 }, { kind: 'warm', value: 25 }]
     },
-    input: { panelSwitchMs: [{ kind: 'cold', value: 8 }, { kind: 'warm', value: 4 }, { kind: 'warm', value: 6 }] },
+    input: { dispatchAcknowledgedMs: [{ kind: 'cold', value: 8 }, { kind: 'warm', value: 4 }, { kind: 'warm', value: 6 }] },
     memory: { rssBytes: [{ kind: 'cold', value: 1025 }, { kind: 'warm', value: 1024 }, { kind: 'warm', value: 1026 }] },
     dom: { nodeCount: [{ kind: 'cold', value: 101 }, { kind: 'warm', value: 100 }, { kind: 'warm', value: 102 }] },
     subprocess: { childCount: [{ kind: 'cold', value: 4 }, { kind: 'warm', value: 3 }, { kind: 'warm', value: 3 }] },
@@ -127,6 +127,20 @@ test('selector accepts only omission or the exact canonical nine spelling', () =
   assert.strictEqual(telemetry.parseFixtureSelector(undefined).scope, 'full');
 });
 
+test('input acceptance rejects one-invariant budget and rendered-ready duplication mutations', () => {
+  const overBudget = validReport();
+  overBudget.runs[0].input.dispatchAcknowledgedMs = telemetry.summarizeSamples([
+    { kind: 'cold', value: 8 },
+    { kind: 'warm', value: telemetry.INPUT_DISPATCH_ACK_WARM_P95_BUDGET_MS + 1 },
+    { kind: 'warm', value: telemetry.INPUT_DISPATCH_ACK_WARM_P95_BUDGET_MS + 1 }
+  ]);
+  assert.match(telemetry.validateTelemetryReport(overBudget).join('\n'), /acceptance budget/);
+
+  const duplicated = validReport();
+  duplicated.runs[0].input.dispatchAcknowledgedMs = structuredClone(duplicated.runs[0].phases.panelRenderedReadyMs);
+  assert.match(telemetry.validateTelemetryReport(duplicated).join('\n'), /must not duplicate/);
+});
+
 test('checker rejects one-invariant mutations of valid exact-nine envelope evidence', () => {
   const executableMutations = ['node', 'vscode'].flatMap(executable => [
     ['realpath', '/foreign/code'],
@@ -194,7 +208,7 @@ test('checker rejects a mutated child copy and child freshness independently', (
     const { envelope, report } = validEnvelopeReport();
     const childPath = report.runs[0].identity.reportPath;
     const child = JSON.parse(fs.readFileSync(childPath, 'utf8'));
-    if (mutation === 'copy') child.telemetry.input.panelSwitchMs.warm.samples[0] += 1;
+    if (mutation === 'copy') child.telemetry.input.dispatchAcknowledgedMs.warm.samples[0] += 1;
     else child.generatedAt = new Date(Date.now() - 3600000).toISOString();
     fs.chmodSync(childPath, 0o600);
     fs.unlinkSync(childPath);

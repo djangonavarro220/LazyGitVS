@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, '..');
 const telemetry = require('../scripts/dogfood/telemetry');
 const fixtures = require('../scripts/dogfood/fixtures');
 const envelopeApi = require('../scripts/dogfood/run-envelope');
-const signals = { phases: ['sidebarReadyMs', 'panelReadyMs'], input: ['panelSwitchMs'], memory: ['rssBytes'], dom: ['nodeCount'], subprocess: ['childCount'] };
+const signals = { phases: ['sidebarReadyMs', 'panelRenderedReadyMs'], input: ['dispatchAcknowledgedMs'], memory: ['rssBytes'], dom: ['nodeCount'], subprocess: ['childCount'] };
 
 function stableJson(value) {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
@@ -30,7 +30,7 @@ function metric(seed) {
 function reportFor(envelope) {
   const aggregateIdentity = { runId: envelope.runId, lane: envelope.lane, source: envelope.provenance.head, build: envelope.provenance.digest, reportPath: envelope.paths.aggregateResult, executables: { node: envelope.provenance.node, vscode: envelope.provenance.vscode } };
   const runs = telemetry.requiredFixtures().map((fixture, fixtureIndex) => {
-    const groups = Object.fromEntries(Object.entries(signals).map(([group, names], groupIndex) => [group, Object.fromEntries(names.map((name, signalIndex) => [name, metric(10 + fixtureIndex + groupIndex + signalIndex)]))]));
+    const groups = Object.fromEntries(Object.entries(signals).map(([group, names], groupIndex) => [group, Object.fromEntries(names.map((name, signalIndex) => [name, metric(group === 'input' ? 1 : 20 + fixtureIndex + groupIndex + signalIndex)]))]));
     const manifest = telemetry.expectedFixtureManifest(fixture);
     return telemetry.makeFixtureResult({
       fixture: { ...fixture, actualRepoCount: fixture.repoCount, manifest: { ...manifest, digest: fixtures.fixtureManifestDigest(manifest) } },
@@ -78,7 +78,13 @@ cases.push(
   ['fixture.repository.trackedFileCount', run => run.fixture.manifest.repositories[0].trackedFileCount += 1],
   ['fixture.repository.changedFileCount', run => run.fixture.manifest.repositories[0].changedFileCount += 1],
   ['fixture.total', run => run.fixture.fileCount += 1],
-  ['fixture.manifest.digest', run => run.fixture.manifest.digest = '0'.repeat(64)]
+  ['fixture.manifest.digest', run => run.fixture.manifest.digest = '0'.repeat(64)],
+  ['input.dispatchAcknowledgedMs.budget', run => run.input.dispatchAcknowledgedMs = telemetry.summarizeSamples([
+    { kind: 'cold', value: 1 },
+    { kind: 'warm', value: telemetry.INPUT_DISPATCH_ACK_WARM_P95_BUDGET_MS + 1 },
+    { kind: 'warm', value: telemetry.INPUT_DISPATCH_ACK_WARM_P95_BUDGET_MS + 1 }
+  ])],
+  ['input.dispatchAcknowledgedMs.nonDuplication', run => run.input.dispatchAcknowledgedMs = structuredClone(run.phases.panelRenderedReadyMs)]
 );
 
 for (const [name, mutate] of cases) {

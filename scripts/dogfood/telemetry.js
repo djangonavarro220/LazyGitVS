@@ -4,14 +4,15 @@ const { assertImmutablePublishedFile, canonicalEqual, validateEnvelopeBinding } 
 const { fixtureManifestDigest } = require('./fixtures');
 
 const SIGNALS = {
-  phases: ['sidebarReadyMs', 'panelReadyMs'],
-  input: ['panelSwitchMs'],
+  phases: ['sidebarReadyMs', 'panelRenderedReadyMs'],
+  input: ['dispatchAcknowledgedMs'],
   memory: ['rssBytes'],
   dom: ['nodeCount'],
   subprocess: ['childCount']
 };
 
 const EXACT_FIXTURE_SELECTOR = '320x1,320x4,320x16,2000x1,2000x4,2000x16,10000x1,10000x4,10000x16';
+const INPUT_DISPATCH_ACK_WARM_P95_BUDGET_MS = 100;
 
 function requiredFixtures() {
   return [320, 2000, 10000].flatMap(fileCount => [1, 4, 16].map(repoCount => ({ fileCount, repoCount })));
@@ -155,6 +156,17 @@ function validateTelemetryReport(report, options = {}) {
         errors.push(...validateMetric(run[group]?.[signal], { label, group, signal, warmSamples }));
       }
     }
+    const dispatch = run.input?.dispatchAcknowledgedMs;
+    const rendered = run.phases?.panelRenderedReadyMs;
+    if (Number.isFinite(dispatch?.warm?.p95) && dispatch.warm.p95 > INPUT_DISPATCH_ACK_WARM_P95_BUDGET_MS) errors.push(`${label} input.dispatchAcknowledgedMs.warm.p95 exceeds ${INPUT_DISPATCH_ACK_WARM_P95_BUDGET_MS}ms acceptance budget`);
+    const dispatchAll = dispatch?.all?.samples;
+    const renderedAll = rendered?.all?.samples;
+    if (Array.isArray(dispatchAll) && Array.isArray(renderedAll)) {
+      if (JSON.stringify(dispatchAll) === JSON.stringify(renderedAll)) errors.push(`${label} input dispatch acknowledgement must not duplicate rendered-ready samples`);
+      for (let sampleIndex = 0; sampleIndex < Math.min(dispatchAll.length, renderedAll.length); sampleIndex++) {
+        if (dispatchAll[sampleIndex]?.value > renderedAll[sampleIndex]?.value) errors.push(`${label} input dispatch acknowledgement must precede rendered-ready sample ${sampleIndex}`);
+      }
+    }
   }
   const identityFields = ['runId', 'lane', 'source', 'build', 'reportPath'];
   for (const field of identityFields) if (typeof report?.identity?.[field] !== 'string' || !report.identity[field]) errors.push(`identity.${field} is required`);
@@ -239,4 +251,4 @@ function collectProcessTreeMetrics(rootPid) {
   return { rssBytes, childCount: Math.max(0, descendants.size - 1), processCount: descendants.size };
 }
 
-module.exports = { EXACT_FIXTURE_SELECTOR, requiredFixtures, fixtureKey, parseFixtureSelector, summarizeSamples, makeFixtureResult, makeTelemetryReport, expectedFixtureManifest, validateTelemetryReport, classifyFailure, collectProcessTreeMetrics };
+module.exports = { EXACT_FIXTURE_SELECTOR, INPUT_DISPATCH_ACK_WARM_P95_BUDGET_MS, requiredFixtures, fixtureKey, parseFixtureSelector, summarizeSamples, makeFixtureResult, makeTelemetryReport, expectedFixtureManifest, validateTelemetryReport, classifyFailure, collectProcessTreeMetrics };
