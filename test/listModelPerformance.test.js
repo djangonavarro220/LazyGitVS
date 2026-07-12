@@ -70,13 +70,15 @@ function build(variant, revision) {
       items: fixture,
       project: items => treeProject(items, variant),
       projectedRows: 'transfer',
-      identity: row => `${row.kind}:${row.path}`
+      identity: row => row.path
     })
   };
 }
 
 const results = [];
 for (const variant of variants) {
+  const projectedPaths = treeProject(fixture, variant).map(row => row.path);
+  assert.strictEqual(new Set(projectedPaths).size, projectedPaths.length, `${variant.name} paths must be unique reusable identities`);
   for (let warmup = 0; warmup < WARMUPS; warmup++) build(variant, warmup + 1);
   const samplesMs = [];
   let final;
@@ -97,7 +99,7 @@ for (const variant of variants) {
 const hitCache = new ListModelCache({ duplicateIdentity: 'error' });
 const hitRequest = {
   modelId: 'benchmark:hits', ownerGeneration: 1, sourceRevision: 1, projectionRevision: 1, treeRevision: 1, items: fixture,
-  project: items => treeProject(items, variants[1]), projectedRows: 'transfer', identity: row => `${row.kind}:${row.path}`
+  project: items => treeProject(items, variants[1]), projectedRows: 'transfer', identity: row => row.path
 };
 const hitSnapshot = hitCache.read(hitRequest);
 for (let index = 0; index < 100; index++) assert.strictEqual(hitCache.read({ ...hitRequest, selection: index }), hitSnapshot);

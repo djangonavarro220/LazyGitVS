@@ -40,7 +40,9 @@ export class FilePanelListModel {
       projectionRevision: this.generation, treeRevision: this.generation,
       items: request.files, selection: request.selection,
       project: files => buildTreeRows(request.project(files).map(file => ({ ...file })), request.options, new Set(request.collapsedDirs)),
-      projectedRows: 'transfer', identity: row => `${row.kind}:${row.path}`
+      // Tree paths are unique across directory and file rows; reuse the existing
+      // immutable path instead of allocating a prefixed identity for every row.
+      projectedRows: 'transfer', identity: row => row.path
     }).rows;
   }
 }
