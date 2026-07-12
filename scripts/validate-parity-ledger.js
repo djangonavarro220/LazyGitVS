@@ -43,6 +43,10 @@ function verifyEvidence(repo, commit, evidence, label, requiredCommit) {
     if (!Array.isArray(entry.tokens) || entry.tokens.length === 0 || entry.tokens.some(token => typeof token !== 'string' || !token)) {
       errors.push(`${item}: non-empty expected evidence tokens are required`); return;
     }
+    const evidenceCommit = requiredCommit || ledger.upstream.commit;
+    const evidenceRepository = requiredCommit ? ledger.reviewedLgvs.repository : ledger.upstream.repository;
+    const expectedUrl = `${evidenceRepository}/blob/${evidenceCommit}/${entry.path}#L${entry.startLine}-L${entry.endLine}`;
+    if (entry.url !== expectedUrl) errors.push(`${item}: evidence URL must bind the exact repository, commit, path, and range: ${expectedUrl}`);
     let contents;
     if (commit) {
       const object = git(repo, ['show', `${commit}:${entry.path}`]);
@@ -95,6 +99,7 @@ if (!isHash(ledger.upstream?.tree)) errors.push('upstream.tree must be a full im
 if (!/^[0-9a-f]{64}$/.test(ledger.upstream?.archiveSha256 || '')) errors.push('upstream.archiveSha256 must be an immutable SHA-256');
 if (isHash(ledger.upstream?.commit) && isHash(ledger.upstream?.tree) && /^[0-9a-f]{64}$/.test(ledger.upstream?.archiveSha256 || '')) provisionUpstreamArchive();
 if (!isHash(ledger.reviewedLgvs?.commit) || !isHash(ledger.reviewedLgvs?.tree)) errors.push('reviewedLgvs commit and tree must be full immutable Git hashes');
+else if (ledger.reviewedLgvs.repository !== 'https://github.com/djangonavarro220/LazyGitVS') errors.push('reviewedLgvs.repository must identify the canonical LazyGitVS repository');
 else if (commitExists(repositoryRoot, ledger.reviewedLgvs.commit, 'reviewedLgvs.commit')) {
   const reviewedTree = git(repositoryRoot, ['rev-parse', `${ledger.reviewedLgvs.commit}^{tree}`]);
   if (reviewedTree.status !== 0 || reviewedTree.stdout.trim() !== ledger.reviewedLgvs.tree) errors.push('reviewedLgvs tree does not belong to reviewedLgvs commit');
@@ -107,7 +112,7 @@ const ids = new Set();
 const claims = new Map();
 for (const [index, row] of (ledger.rows || []).entries()) {
   const label = row.id || `row ${index}`;
-  for (const field of ['id', 'surface', 'key', 'upstreamBehavior', 'lgvsBehavior', 'parity', 'upstreamCommit', 'lgvsCommit', 'reviewedAt']) {
+  for (const field of ['id', 'surface', 'key', 'upstreamBehavior', 'lgvsBehavior', 'parity', 'claim', 'upstreamCommit', 'lgvsCommit', 'reviewedAt']) {
     if (typeof row[field] !== 'string' || !row[field].trim()) errors.push(`${label}: missing ${field}`);
   }
   if (ids.has(row.id)) errors.push(`duplicate row id: ${row.id}`);
@@ -158,10 +163,10 @@ if (isIsoDate(ledger.reviewedAt) && fs.existsSync(claimsDir)) {
         if (typeof claim.claim !== 'string' || !claim.claim) { errors.push(`legacy unbound parity claim in ${location}: ${claim.id || 'missing id'}`); return; }
         if (seenMarkers.has(claim.id)) errors.push(`duplicate external parity claim for ${claim.id}: ${seenMarkers.get(claim.id)} and ${location}`);
         else seenMarkers.set(claim.id, location);
-        if (!canonical || claim.parity !== canonical.parity || claim.reviewedAt !== canonical.reviewedAt) errors.push(`contradictory external claim in ${location}: ${claim.id || 'missing id'}`);
+        if (!canonical || claim.parity !== canonical.parity || claim.reviewedAt !== canonical.reviewedAt || claim.claim !== canonical.claim) errors.push(`contradictory external claim in ${location}: ${claim.id || 'missing id'}`);
         let proseIndex = index + 1;
         while (proseIndex < lines.length && !lines[proseIndex].trim()) proseIndex += 1;
-        if (proseIndex >= lines.length || normalizedClaimLine(lines[proseIndex]) !== claim.claim) errors.push(`marker/prose disagreement in ${location}: ${claim.id || 'missing id'}`);
+        if (proseIndex >= lines.length || normalizedClaimLine(lines[proseIndex]) !== canonical?.claim) errors.push(`canonical marker/prose disagreement in ${location}: ${claim.id || 'missing id'}`);
       } catch (error) { errors.push(`invalid external parity claim in ${path.relative(process.cwd(), file)}:${index + 1}: ${error.message}`); }
     });
   }

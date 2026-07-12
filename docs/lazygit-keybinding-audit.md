@@ -1,6 +1,6 @@
 # LazyGit keybinding parity audit
 
-Source: upstream lazygit `docs/keybindings/Keybindings_en.md` from `jesseduffield/lazygit` at `146f00491820055f3a6c0d492447d7e2b9da7d83`, audited offline from the archive recorded in the canonical ledger.
+Source: upstream lazygit `docs/keybindings/Keybindings_en.md` from `jesseduffield/lazygit` at `bea025f5b7abbefe306a252826f1ccb2482baa00`, audited offline from the archive recorded in the canonical ledger.
 
 This is the behavior spec for LazyGitVS. If LGVS differs, it needs an explicit VS Code-native reason; otherwise it is a bug.
 

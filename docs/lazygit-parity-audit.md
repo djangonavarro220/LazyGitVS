@@ -4,7 +4,7 @@ Objetivo: LazyGitVS no debe ser “inspirado en lazygit”; debe copiar lazygit 
 
 ## Fuentes auditadas
 
-- Ledger canónico ejecutable: `docs/lazygit-parity-ledger.json` (auditado offline contra la revisión exacta preservada localmente `jesseduffield/lazygit@146f00491820055f3a6c0d492447d7e2b9da7d83` el 2026-07-11)
+- Ledger canónico ejecutable: `docs/lazygit-parity-ledger.json` (auditado offline contra la revisión exacta preservada localmente `jesseduffield/lazygit@bea025f5b7abbefe306a252826f1ccb2482baa00` el 2026-07-11)
 - Código lazygit: upstream lazygit checkout used for parity research
 - Keybindings generados: `docs/keybindings/Keybindings_en.md`
 - Config/schema: `pkg/config/user_config.go`, `pkg/config/app_config.go`, `docs/Config.md`

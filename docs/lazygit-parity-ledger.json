@@ -2,13 +2,14 @@
   "schemaVersion": 1,
   "upstream": {
     "repository": "https://github.com/jesseduffield/lazygit",
-    "commit": "146f00491820055f3a6c0d492447d7e2b9da7d83",
-    "tree": "adc104f8f8ecfff39534ac2df6d911d0f2b5479c",
-    "archive": "test/fixtures/lazygit-146f00491820055f3a6c0d492447d7e2b9da7d83.tar.gz",
-    "archiveSha256": "1222b60b5d5d8bd7a77fa548316cb58d33094cf6e399406d887a9d557de5f32e",
+    "commit": "bea025f5b7abbefe306a252826f1ccb2482baa00",
+    "tree": "d75186f512a0cb6e58914a6257be5db6293cc559",
+    "archive": "test/fixtures/lazygit-bea025f5b7abbefe306a252826f1ccb2482baa00.tar.gz",
+    "archiveSha256": "79f8949328b37c3cb380fc6ba5ad6e1315646f9de2bf0b8f53b03b5fca375cd2",
     "provenance": "The committed portable archive is verified byte-for-byte, by embedded Git commit ID, and by reconstructed Git tree before evidence is read"
   },
   "reviewedLgvs": {
+    "repository": "https://github.com/djangonavarro220/LazyGitVS",
     "commit": "9c2bd12a4780a6b68edf137383aa9ceb2fd3a39d",
     "tree": "ece8650ce5edcc05e4d154c9c3e4f8c7babe1bc1"
   },
@@ -21,15 +22,16 @@
       "upstreamBehavior": "View commits",
       "lgvsBehavior": "Open the Commits panel scoped to the selected branch",
       "parity": "exact",
-      "upstreamCommit": "146f00491820055f3a6c0d492447d7e2b9da7d83",
+      "claim": "`docs/keybindings/Keybindings_en.md` extract and this audit's generated keybinding dump list Local branches `<enter>` as **View commits** (`Local branches` lines in this file), matching LGVS `Branches` Enter routing to `enterBranchCommits()` / the `4 Commits` panel scoped to the selected branch. `Space` remains the checkout action.",
+      "upstreamCommit": "bea025f5b7abbefe306a252826f1ccb2482baa00",
       "lgvsCommit": "6b8a981c5d5dd4d081bad1405ccfba64a26b8eb8",
       "reviewedAt": "2026-07-11",
       "upstreamEvidence": [
-        { "path": "pkg/gui/controllers/switch_to_sub_commits_controller.go", "startLine": 45, "endLine": 52, "tokens": ["self.viewCommits", "opts.Config.Universal.GoInto", "self.c.Tr.ViewCommits"] },
-        { "path": "docs/keybindings/Keybindings_en.md", "startLine": 200, "endLine": 200, "tokens": ["View commits"] }
+        { "url": "https://github.com/jesseduffield/lazygit/blob/bea025f5b7abbefe306a252826f1ccb2482baa00/pkg/gui/controllers/switch_to_sub_commits_controller.go#L45-L52", "path": "pkg/gui/controllers/switch_to_sub_commits_controller.go", "startLine": 45, "endLine": 52, "tokens": ["self.viewCommits", "opts.Config.Universal.GoInto", "self.c.Tr.ViewCommits"] },
+        { "url": "https://github.com/jesseduffield/lazygit/blob/bea025f5b7abbefe306a252826f1ccb2482baa00/docs/keybindings/Keybindings_en.md#L200-L200", "path": "docs/keybindings/Keybindings_en.md", "startLine": 200, "endLine": 200, "tokens": ["View commits"] }
       ],
       "lgvsEvidence": [
-        { "commit": "6b8a981c5d5dd4d081bad1405ccfba64a26b8eb8", "path": "src/extension.ts", "startLine": 1670, "endLine": 1681, "tokens": ["enterBranchCommits", "commits(b.name)", "focusPanel('commits')"] }
+        { "url": "https://github.com/djangonavarro220/LazyGitVS/blob/6b8a981c5d5dd4d081bad1405ccfba64a26b8eb8/src/extension.ts#L1670-L1681", "commit": "6b8a981c5d5dd4d081bad1405ccfba64a26b8eb8", "path": "src/extension.ts", "startLine": 1670, "endLine": 1681, "tokens": ["enterBranchCommits", "commits(b.name)", "focusPanel('commits')"] }
       ]
     },
     {
@@ -39,18 +41,19 @@
       "upstreamBehavior": "Copy (cherry-pick)",
       "lgvsBehavior": "Store only the current commit hash for a later V paste/cherry-pick; selected ranges and copy-selection cancellation/reset are not implemented",
       "parity": "gap",
-      "upstreamCommit": "146f00491820055f3a6c0d492447d7e2b9da7d83",
+      "claim": "Commit `C` is **Copy (cherry-pick)** and invokes upstream's copy-range path. LGVS preserves delayed `V` paste but stores only the current hash; selected ranges and cancellation/reset semantics remain an explicit gap in the canonical ledger.",
+      "upstreamCommit": "bea025f5b7abbefe306a252826f1ccb2482baa00",
       "lgvsCommit": "6b8a981c5d5dd4d081bad1405ccfba64a26b8eb8",
       "reviewedAt": "2026-07-11",
       "upstreamEvidence": [
-        { "path": "pkg/gui/controllers/basic_commits_controller.go", "startLine": 103, "endLine": 119, "tokens": ["copyRange", "ResetCherryPick", "CherryPickCopy"] },
-        { "path": "pkg/config/user_config.go", "startLine": 1056, "endLine": 1061, "tokens": ["CherryPickCopy", "PasteCommits", "ResetCherryPick"] },
-        { "path": "docs/keybindings/Keybindings_en.md", "startLine": 88, "endLine": 88, "tokens": ["Reset copied"] },
-        { "path": "docs/keybindings/Keybindings_en.md", "startLine": 103, "endLine": 103, "tokens": ["Paste (cherry-pick)"] },
-        { "path": "docs/keybindings/Keybindings_en.md", "startLine": 117, "endLine": 117, "tokens": ["Copy (cherry-pick)", "cancel the selection"] }
+        { "url": "https://github.com/jesseduffield/lazygit/blob/bea025f5b7abbefe306a252826f1ccb2482baa00/pkg/gui/controllers/basic_commits_controller.go#L108-L123", "path": "pkg/gui/controllers/basic_commits_controller.go", "startLine": 108, "endLine": 123, "tokens": ["copyRange", "ResetCherryPick", "CherryPickCopy"] },
+        { "url": "https://github.com/jesseduffield/lazygit/blob/bea025f5b7abbefe306a252826f1ccb2482baa00/pkg/config/user_config.go#L1139-L1144", "path": "pkg/config/user_config.go", "startLine": 1139, "endLine": 1144, "tokens": ["CherryPickCopy", "PasteCommits", "ResetCherryPick"] },
+        { "url": "https://github.com/jesseduffield/lazygit/blob/bea025f5b7abbefe306a252826f1ccb2482baa00/docs/keybindings/Keybindings_en.md#L87-L87", "path": "docs/keybindings/Keybindings_en.md", "startLine": 87, "endLine": 87, "tokens": ["Reset copied"] },
+        { "url": "https://github.com/jesseduffield/lazygit/blob/bea025f5b7abbefe306a252826f1ccb2482baa00/docs/keybindings/Keybindings_en.md#L102-L102", "path": "docs/keybindings/Keybindings_en.md", "startLine": 102, "endLine": 102, "tokens": ["Paste (cherry-pick)"] },
+        { "url": "https://github.com/jesseduffield/lazygit/blob/bea025f5b7abbefe306a252826f1ccb2482baa00/docs/keybindings/Keybindings_en.md#L117-L117", "path": "docs/keybindings/Keybindings_en.md", "startLine": 117, "endLine": 117, "tokens": ["Copy (cherry-pick)", "cancel the selection"] }
       ],
       "lgvsEvidence": [
-        { "commit": "6b8a981c5d5dd4d081bad1405ccfba64a26b8eb8", "path": "src/extension.ts", "startLine": 1281, "endLine": 1282, "tokens": ["cherryPickCommitHashes = [c.hash]", "Paste copied commits", "git(['cherry-pick'"] }
+        { "url": "https://github.com/djangonavarro220/LazyGitVS/blob/6b8a981c5d5dd4d081bad1405ccfba64a26b8eb8/src/extension.ts#L1281-L1282", "commit": "6b8a981c5d5dd4d081bad1405ccfba64a26b8eb8", "path": "src/extension.ts", "startLine": 1281, "endLine": 1282, "tokens": ["cherryPickCommitHashes = [c.hash]", "Paste copied commits", "git(['cherry-pick'"] }
       ]
     },
     {
@@ -60,14 +63,15 @@
       "upstreamBehavior": "View files",
       "lgvsBehavior": "Drill into files changed by the selected commit",
       "parity": "exact",
-      "upstreamCommit": "146f00491820055f3a6c0d492447d7e2b9da7d83",
+      "claim": "Commits `<enter>` is listed as **View files**, matching LGVS `enterCommit()` drilling from the commit list into commit files and previewing the first file diff.",
+      "upstreamCommit": "bea025f5b7abbefe306a252826f1ccb2482baa00",
       "lgvsCommit": "c7604c36e6777b1f157266f7509543ad9461b062",
       "reviewedAt": "2026-07-11",
       "upstreamEvidence": [
-        { "path": "docs/keybindings/Keybindings_en.md", "startLine": 121, "endLine": 121, "tokens": ["View files"] }
+        { "url": "https://github.com/jesseduffield/lazygit/blob/bea025f5b7abbefe306a252826f1ccb2482baa00/docs/keybindings/Keybindings_en.md#L121-L121", "path": "docs/keybindings/Keybindings_en.md", "startLine": 121, "endLine": 121, "tokens": ["View files"] }
       ],
       "lgvsEvidence": [
-        { "commit": "c7604c36e6777b1f157266f7509543ad9461b062", "path": "src/extension.ts", "startLine": 1483, "endLine": 1494, "tokens": ["enterCommit", "commitFiles(c.hash)", "openCurrent('commits'"] }
+        { "url": "https://github.com/djangonavarro220/LazyGitVS/blob/c7604c36e6777b1f157266f7509543ad9461b062/src/extension.ts#L1483-L1494", "commit": "c7604c36e6777b1f157266f7509543ad9461b062", "path": "src/extension.ts", "startLine": 1483, "endLine": 1494, "tokens": ["enterCommit", "commitFiles(c.hash)", "openCurrent('commits'"] }
       ]
     },
     {
@@ -77,7 +81,8 @@
       "upstreamBehavior": "Enter file / Toggle directory collapsed for custom patch building",
       "lgvsBehavior": "Toggle directories; open file patches in a read-only HUNK/LINE view",
       "parity": "adapted",
-      "upstreamCommit": "146f00491820055f3a6c0d492447d7e2b9da7d83",
+      "claim": "Commit files `<enter>` is listed as **Enter file / Toggle directory collapsed** and is tied to lazygit custom patch-builder line entry. LGVS does not yet implement patch-building mode, so the audited/documented VS Code-native behavior is: file rows enter a read-only HUNK/LINE editor view for the selected commit-file patch, staging/discard mutations are blocked, and `Esc` returns to the commit-files subview. The remaining patch-builder parity work stays tracked under Commit files gaps.",
+      "upstreamCommit": "bea025f5b7abbefe306a252826f1ccb2482baa00",
       "lgvsCommit": "17ec3e6f87759d88fdbc7e19c894a95b27dfb1a1",
       "reviewedAt": "2026-07-11",
       "vscodeException": {
@@ -85,11 +90,11 @@
         "rationale": "LGVS adapts this flow to VS Code's real editor and has not implemented lazygit's custom patch builder"
       },
       "upstreamEvidence": [
-        { "path": "docs/keybindings/Keybindings_en.md", "startLine": 69, "endLine": 69, "tokens": ["Enter file / Toggle directory collapsed", "custom patch"] }
+        { "url": "https://github.com/jesseduffield/lazygit/blob/bea025f5b7abbefe306a252826f1ccb2482baa00/docs/keybindings/Keybindings_en.md#L68-L68", "path": "docs/keybindings/Keybindings_en.md", "startLine": 68, "endLine": 68, "tokens": ["Enter file / Toggle directory collapsed", "custom patch"] }
       ],
       "lgvsEvidence": [
-        { "commit": "17ec3e6f87759d88fdbc7e19c894a95b27dfb1a1", "path": "src/extension.ts", "startLine": 1523, "endLine": 1551, "tokens": ["enterCommitFileHunkMode", "readOnlyHunkMode = true", "setEditorHunkMode(true)"] },
-        { "commit": "17ec3e6f87759d88fdbc7e19c894a95b27dfb1a1", "path": "src/extension.ts", "startLine": 1278, "endLine": 1296, "tokens": ["editorToggleHunk", "editorDiscardHunk", "if (this.readOnlyHunkMode)"] }
+        { "url": "https://github.com/djangonavarro220/LazyGitVS/blob/17ec3e6f87759d88fdbc7e19c894a95b27dfb1a1/src/extension.ts#L1523-L1551", "commit": "17ec3e6f87759d88fdbc7e19c894a95b27dfb1a1", "path": "src/extension.ts", "startLine": 1523, "endLine": 1551, "tokens": ["enterCommitFileHunkMode", "readOnlyHunkMode = true", "setEditorHunkMode(true)"] },
+        { "url": "https://github.com/djangonavarro220/LazyGitVS/blob/17ec3e6f87759d88fdbc7e19c894a95b27dfb1a1/src/extension.ts#L1278-L1296", "commit": "17ec3e6f87759d88fdbc7e19c894a95b27dfb1a1", "path": "src/extension.ts", "startLine": 1278, "endLine": 1296, "tokens": ["editorToggleHunk", "editorDiscardHunk", "if (this.readOnlyHunkMode)"] }
       ]
     }
   ]

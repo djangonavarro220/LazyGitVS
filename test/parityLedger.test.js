@@ -36,6 +36,8 @@ assert.match(ledger.upstream.tree, /^[0-9a-f]{40}$/);
 assert.match(ledger.reviewedLgvs.commit, /^[0-9a-f]{40}$/);
 assert.match(ledger.reviewedLgvs.tree, /^[0-9a-f]{40}$/);
 assert(ledger.rows.every(row => row.upstreamEvidence.length && row.lgvsEvidence.length));
+assert(ledger.rows.every(row => typeof row.claim === 'string' && row.claim.length > 0));
+assert(ledger.rows.every(row => [...row.upstreamEvidence, ...row.lgvsEvidence].every(evidence => /^https:\/\/github\.com\/.+\/blob\/[0-9a-f]{40}\/.+#L\d+-L\d+$/.test(evidence.url))));
 assert(ledger.rows.filter(row => row.parity === 'adapted').every(row => row.vscodeException?.rationale));
 
 const stale = run(mutatedLedger(value => { value.rows[0].upstreamCommit = '0'.repeat(40); }));
@@ -91,15 +93,19 @@ assert.match(fakeReviewedTree.stderr, /reviewedLgvs tree/i);
 
 const impossibleRange = run(mutatedLedger(value => {
   const evidence = value.rows.find(row => row.id === 'commits.C').upstreamEvidence[1];
-  evidence.startLine = 1137;
-  evidence.endLine = 1141;
+  evidence.startLine = 99999;
+  evidence.endLine = 99999;
 }));
 assert.notStrictEqual(impossibleRange.status, 0);
 assert.match(impossibleRange.stderr, /impossible range/i);
 
 const wrongUpstreamPath = run(mutatedLedger(value => { value.rows[0].upstreamEvidence[0].path = 'README.md'; }));
 assert.notStrictEqual(wrongUpstreamPath.status, 0);
-assert.match(wrongUpstreamPath.stderr, /missing expected token|impossible range/i);
+assert.match(wrongUpstreamPath.stderr, /evidence URL|missing expected token|impossible range/i);
+
+const unboundEvidenceUrl = run(mutatedLedger(value => { value.rows[0].upstreamEvidence[0].url = 'https://github.com/jesseduffield/lazygit/blob/master/README.md'; }));
+assert.notStrictEqual(unboundEvidenceUrl.status, 0);
+assert.match(unboundEvidenceUrl.stderr, /evidence URL must bind/i);
 
 const unrelatedAncestor = run(mutatedLedger(value => { value.rows[0].lgvsCommit = '9c2bd12a4780a6b68edf137383aa9ceb2fd3a39d'; }));
 assert.notStrictEqual(unrelatedAncestor.status, 0);
@@ -133,6 +139,11 @@ fs.writeFileSync(path.join(claimsDir, 'claim.md'), '<!-- parity-claim: {"id":"co
 const markerProseDisagreement = run(ledgerPath, claimsDir);
 assert.notStrictEqual(markerProseDisagreement.status, 0);
 assert.match(markerProseDisagreement.stderr, /marker\/prose disagreement/i);
+
+fs.writeFileSync(path.join(claimsDir, 'claim.md'), '<!-- parity-claim: {"id":"commits.C","parity":"gap","reviewedAt":"2026-07-11","claim":"Commit C is fully implemented."} -->\n- Commit C is fully implemented.\n');
+const jointlyMutatedClaim = run(ledgerPath, claimsDir);
+assert.notStrictEqual(jointlyMutatedClaim.status, 0);
+assert.match(jointlyMutatedClaim.stderr, /contradictory external claim|canonical marker\/prose disagreement/i);
 
 fs.writeFileSync(path.join(claimsDir, 'claim.md'), '<!-- parity-claim: {"id":"commits.C","parity":"gap","reviewedAt":"2026-07-11"} -->\n- Historical prose.\n');
 const legacyMarker = run(ledgerPath, claimsDir);
