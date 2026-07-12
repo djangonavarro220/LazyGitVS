@@ -1,6 +1,6 @@
 # LazyGit keybinding parity audit
 
-Source: upstream lazygit `docs/keybindings/Keybindings_en.md` from `jesseduffield/lazygit` at `608c90a`.
+Source: upstream lazygit `docs/keybindings/Keybindings_en.md` from `jesseduffield/lazygit` at `bea025f5b7abbefe306a252826f1ccb2482baa00`, audited offline from the archive recorded in the canonical ledger.
 
 This is the behavior spec for LazyGitVS. If LGVS differs, it needs an explicit VS Code-native reason; otherwise it is a bug.
 
@@ -116,7 +116,8 @@ This is the behavior spec for LazyGitVS. If LGVS differs, it needs an explicit V
 
 ## Known LGVS parity gaps to close
 
-- Branch `<enter>` is still not true lazygit parity: upstream views commits for the selected branch.
-- Commit `C` should mark/copy for later paste; LGVS currently cherry-picks directly.
+- Canonical audited claims live in `docs/lazygit-parity-ledger.json`; CI rejects duplicate, stale, and contradictory rows.
+- Branch `<enter>` now matches upstream: it views commits for the selected branch.
+- Commit `C` matches upstream's delayed `V` paste for one commit, but selected-range copy and cancellation/reset semantics remain a canonical gap.
 - Several branch/commit/tag options are implemented as simplified direct Git commands rather than lazygit option menus.
 - File tree `-`/`=` collapse/expand and some filter/sort/worktree flows are incomplete.

@@ -2,7 +2,7 @@
 
 Tracked, committed parity status against upstream lazygit. Keep this file updated whenever a parity gap is closed or a new mismatch is found. Vibes are not a tracking system.
 
-Last reviewed after commit `e432187 feat: close next lazygit parity gaps`.
+Canonical disputed claims were re-audited offline against the locally preserved exact revision `jesseduffield/lazygit@bea025f5b7abbefe306a252826f1ccb2482baa00` on 2026-07-11 and live in `docs/lazygit-parity-ledger.json`.
 
 ## Done / usable parity
 
@@ -141,7 +141,7 @@ Last reviewed after commit `e432187 feat: close next lazygit parity gaps`.
 
 These are behaviours that currently work in LGVS but are not trusted enough to call lazygit parity. Re-check against upstream lazygit before polishing or documenting them as done.
 
-- No active Story 5 Enter-path suspects remain. Branches/Commits/commit-files Enter were re-audited on 2026-06-24; commit-file Enter is explicitly tracked as the VS Code-native read-only HUNK/LINE difference above and patch-builder parity remains in Commit files gaps.
+- No active Story 5 Enter-path suspects remain. Branches/Commits/commit-files Enter were re-audited on 2026-07-11; commit-file Enter is explicitly tracked as the VS Code-native read-only HUNK/LINE difference above and patch-builder parity remains in Commit files gaps.
 
 ## Remaining gaps
 
@@ -187,6 +187,7 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 - [ ] Merge/rebase option menus instead of simplified direct commands.
 
 ### Commit gaps
+- [ ] Commit `C` copies only the current commit; upstream copies a selected range and supports cancelling/resetting that selection before `V` paste.
 - [ ] Squash down `s`.
 - [ ] Autosquash/apply fixups `S`.
 - [ ] Drop commit `d`.
