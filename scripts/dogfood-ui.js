@@ -1460,5 +1460,6 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     if (closingClient) {
       await Promise.race([closingClient, sleep(5000)]);
     }
+    if (TELEMETRY) process.exit(process.exitCode || 0);
   }
 })();
