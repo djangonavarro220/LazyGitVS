@@ -1456,6 +1456,6 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
       try { process.kill(-proc.pid, 'SIGTERM'); } catch { proc.kill('SIGTERM'); }
       try { spawnSync('pkill', ['-f', `remote-debugging-port=${PORT}`]); } catch {}
     }
-    if (client) { try { await client.close(); } catch {} }
+    if (client && !TELEMETRY) { try { await client.close(); } catch {} }
   }
 })();

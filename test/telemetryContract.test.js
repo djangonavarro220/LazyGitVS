@@ -270,7 +270,7 @@ test('contract exposes exact matrix and run-scoped report identity wiring', () =
   assert.match(runner, /LGVS_DOGFOOD_REPORT_PATH/);
   assert.match(runner, /validateEnvelopeBinding/);
   assert.match(dogfood, /LGVS_TELEMETRY_ENVELOPE_DIGEST/);
-  assert.ok(dogfood.indexOf('terminateOwnedProcessGroup(rootProcessIdentity)') < dogfood.indexOf('await client.close()'), 'telemetry must terminate the owned VS Code process before awaiting CDP close');
+  assert.match(dogfood, /if \(client && !TELEMETRY\) \{ try \{ await client\.close\(\); \} catch \{\} \}/, 'telemetry must not wait for CDP close after terminating its owned VS Code process');
 });
 
 function runInjectedCoordinator(injection, message) {
