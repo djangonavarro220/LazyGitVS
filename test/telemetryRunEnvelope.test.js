@@ -1,4 +1,5 @@
 const assert = require('assert');
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -14,14 +15,33 @@ function git(cwd, ...args) {
   return result.stdout.trim();
 }
 
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(item => item === undefined ? 'null' : stableJson(item)).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.keys(value).filter(key => value[key] !== undefined).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
+  return JSON.stringify(value);
+}
+
+function validProvenance() {
+  const executable = { realpath: process.execPath, sha256: 'd'.repeat(64), stat: { dev: '1', ino: '2', size: 3, mode: 0o100755, mtimeNs: '5' } };
+  const body = { schemaVersion: 1, head: 'a'.repeat(40), tree: 'b'.repeat(40), extensionVersion: '1.2.3', platform: process.platform, arch: process.arch, node: executable, vscode: { ...executable, sha256: 'e'.repeat(64) } };
+  return { ...body, digest: crypto.createHash('sha256').update(stableJson(body)).digest('hex') };
+}
+
+function refreshProvenanceDigest(provenance) {
+  const body = { ...provenance };
+  delete body.digest;
+  provenance.digest = crypto.createHash('sha256').update(stableJson(body)).digest('hex');
+  return provenance;
+}
+
 function makeEnvelope() {
   const directory = temporaryDirectory();
-  return envelope.createRunEnvelope({ outputPath: path.join(directory, 'telemetry.json'), repoRoot: process.cwd(), runId: `run-${Date.now()}-${Math.random().toString(16).slice(2)}`, lane: 'telemetry-matrix' });
+  return envelope.createRunEnvelope({ outputPath: path.join(directory, 'telemetry.json'), repoRoot: process.cwd(), runId: `run-${Date.now()}-${Math.random().toString(16).slice(2)}`, lane: 'telemetry-matrix', provenance: validProvenance() });
 }
 
 test('createRunEnvelope creates confined canonical paths and rejects reuse, symlinks and escapes', () => {
   const directory = temporaryDirectory();
-  const args = { outputPath: path.join(directory, 'telemetry.json'), repoRoot: process.cwd(), runId: 'fixed-run', lane: 'telemetry-matrix' };
+  const args = { outputPath: path.join(directory, 'telemetry.json'), repoRoot: process.cwd(), runId: 'fixed-run', lane: 'telemetry-matrix', provenance: validProvenance() };
   const created = envelope.createRunEnvelope(args);
   assert.strictEqual(fs.statSync(created.paths.runRoot).mode & 0o777, 0o700);
   assert.strictEqual(fs.statSync(created.envelopePath).mode & 0o777, 0o400);
@@ -41,8 +61,55 @@ test('publishJsonOnce publishes complete JSON and never replaces terminal eviden
   const file = path.join(created.paths.childrenDir, 'result.json');
   envelope.publishJsonOnce(file, { status: 'success', value: 1 }, { runRoot: created.paths.runRoot });
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { status: 'success', value: 1 });
+  const stat = fs.lstatSync(file);
+  assert.strictEqual(stat.isFile(), true);
+  assert.strictEqual(stat.nlink, 1);
+  assert.strictEqual(stat.mode & 0o222, 0);
   assert.throws(() => envelope.publishJsonOnce(file, { status: 'failure' }, { runRoot: created.paths.runRoot }), /EEXIST/);
   assert.deepStrictEqual(fs.readdirSync(created.paths.childrenDir), ['result.json']);
+});
+
+test('provenance schema requires every canonical node and vscode executable field', () => {
+  const directory = temporaryDirectory();
+  const create = provenance => envelope.createRunEnvelope({ outputPath: path.join(directory, 'telemetry.json'), repoRoot: process.cwd(), runId: `schema-${crypto.randomUUID()}`, lane: 'telemetry-matrix', provenance });
+  assert.doesNotThrow(() => envelope.validateProvenance(validProvenance()));
+  const reordered = Object.fromEntries(Object.entries(validProvenance()).reverse());
+  assert.doesNotThrow(() => envelope.validateProvenance(reordered));
+  for (const executableName of ['node', 'vscode']) {
+    for (const field of ['realpath', 'sha256', 'stat']) {
+      const provenance = structuredClone(validProvenance());
+      delete provenance[executableName][field];
+      assert.throws(() => create(refreshProvenanceDigest(provenance)), /provenance|identity|stat/);
+    }
+    for (const field of ['dev', 'ino', 'size', 'mode', 'mtimeNs']) {
+      const provenance = structuredClone(validProvenance());
+      delete provenance[executableName].stat[field];
+      assert.throws(() => create(refreshProvenanceDigest(provenance)), /stat/);
+    }
+    for (const [field, malformed] of [['realpath', 'relative/code'], ['sha256', 'ABC'], ['stat', []]]) {
+      const provenance = structuredClone(validProvenance());
+      provenance[executableName][field] = malformed;
+      assert.throws(() => create(refreshProvenanceDigest(provenance)), /provenance|identity|stat/, `${executableName}.${field}`);
+    }
+    const malformedStatCases = [
+      ['dev.wrong-type', 'dev', 1],
+      ['dev.invalid-value', 'dev', '-1'],
+      ['ino.wrong-type', 'ino', 2],
+      ['ino.invalid-value', 'ino', '1.5'],
+      ['size.wrong-type', 'size', '3'],
+      ['size.invalid-value', 'size', -1],
+      ['mode.wrong-type', 'mode', '33261'],
+      ['mode.invalid-value', 'mode', 1.5],
+      ['mtimeNs.wrong-type', 'mtimeNs', 5],
+      ['mtimeNs.invalid-value', 'mtimeNs', '-1']
+    ];
+    for (const [label, field, malformed] of malformedStatCases) {
+      const provenance = structuredClone(validProvenance());
+      provenance[executableName].stat[field] = malformed;
+      refreshProvenanceDigest(provenance);
+      assert.throws(() => create(provenance), /stat fields/, `${executableName}.stat.${label}`);
+    }
+  }
 });
 
 test('publishJsonOnce leaves no evidence when publication is interrupted', () => {
@@ -119,6 +186,8 @@ test('terminal reports bind envelope, publication time, provenance, lane and own
   const report = {
     schemaVersion: 1,
     status: 'success',
+    ok: true,
+    classification: 'none',
     generatedAt: new Date().toISOString(),
     runId: created.runId,
     lane: 'telemetry-320f-1r',
@@ -142,6 +211,29 @@ test('terminal reports bind envelope, publication time, provenance, lane and own
     mutate(changed);
     assert.notDeepStrictEqual(envelope.validateEnvelopeBinding({ ...options, report: changed }), []);
   }
+});
+
+test('readEnvelopeForAggregate binds the canonical aggregate and envelope digest', () => {
+  const created = makeEnvelope();
+  assert.strictEqual(envelope.readEnvelopeForAggregate(created.paths.aggregateResult, created.digest).digest, created.digest);
+  assert.throws(() => envelope.readEnvelopeForAggregate(path.join(created.paths.runRoot, 'foreign.json'), created.digest), /aggregate path/);
+  assert.throws(() => envelope.readEnvelopeForAggregate(created.paths.aggregateResult, '0'.repeat(64)), /digest does not match/);
+  fs.chmodSync(created.envelopePath, 0o600);
+  assert.throws(() => envelope.readEnvelopeForAggregate(created.paths.aggregateResult, created.digest), /not an immutable/);
+});
+
+test('readRunEnvelope rejects deleted executable provenance fields', () => {
+  const created = makeEnvelope();
+  const stored = JSON.parse(fs.readFileSync(created.envelopePath, 'utf8'));
+  delete stored.provenance.node.stat.dev;
+  refreshProvenanceDigest(stored.provenance);
+  const body = { ...stored };
+  delete body.digest;
+  stored.digest = crypto.createHash('sha256').update(stableJson(body)).digest('hex');
+  fs.chmodSync(created.envelopePath, 0o600);
+  fs.writeFileSync(created.envelopePath, `${JSON.stringify(stored)}\n`);
+  fs.chmodSync(created.envelopePath, 0o400);
+  assert.throws(() => envelope.readRunEnvelope(created.envelopePath), /stat/);
 });
 
 (async () => {

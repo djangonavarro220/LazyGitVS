@@ -1,4 +1,5 @@
 const assert = require('assert');
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -8,6 +9,24 @@ const { spawnSync } = require('child_process');
 const root = path.resolve(__dirname, '..');
 const telemetry = require(path.join(root, 'scripts', 'dogfood', 'telemetry'));
 const runEnvelope = require(path.join(root, 'scripts', 'dogfood', 'run-envelope'));
+
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(item => item === undefined ? 'null' : stableJson(item)).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.keys(value).filter(key => value[key] !== undefined).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
+  return JSON.stringify(value);
+}
+
+function validProvenance() {
+  const executable = { realpath: process.execPath, sha256: 'd'.repeat(64), stat: { dev: '1', ino: '2', size: 3, mode: 0o100755, mtimeNs: '5' } };
+  const body = { schemaVersion: 1, head: 'a'.repeat(40), tree: 'b'.repeat(40), extensionVersion: '1.2.3', platform: process.platform, arch: process.arch, node: executable, vscode: { ...executable, sha256: 'e'.repeat(64) } };
+  return { ...body, digest: crypto.createHash('sha256').update(stableJson(body)).digest('hex') };
+}
+
+function reverseKeys(value) {
+  if (Array.isArray(value)) return value.map(reverseKeys);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).reverse().map(([key, item]) => [key, reverseKeys(item)]));
+  return value;
+}
 
 function test(name, fn) {
   Promise.resolve().then(fn).then(() => {
@@ -51,10 +70,10 @@ function validReport(file = path.join(os.tmpdir(), 'lgvs-valid-telemetry.json'))
 
 function validEnvelopeReport() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-envelope-contract-'));
-  const provenance = { head: 'a'.repeat(40), tree: 'b'.repeat(40), digest: 'c'.repeat(64) };
+  const provenance = validProvenance();
   const envelope = runEnvelope.createRunEnvelope({ outputPath: path.join(dir, 'telemetry.json'), repoRoot: root, runId: `run-${Date.now()}-${Math.random().toString(16).slice(2)}`, lane: 'telemetry-matrix', provenance });
   const report = validReport(envelope.paths.aggregateResult);
-  report.identity = { runId: envelope.runId, lane: envelope.lane, source: provenance.head, build: provenance.digest, reportPath: envelope.paths.aggregateResult };
+  report.identity = { runId: envelope.runId, lane: envelope.lane, source: provenance.head, build: provenance.digest, reportPath: envelope.paths.aggregateResult, executables: { node: provenance.node, vscode: provenance.vscode } };
   report.envelopeDigest = envelope.digest;
   report.provenance = provenance;
   const processIdentity = { pid: 100, ppid: 1, processGroup: 100, session: 100, startTicks: '1', executable: '/test/code' };
@@ -99,35 +118,48 @@ test('telemetry report validator requires exact unique canonical nine-fixture sc
   }
 });
 
-test('selector grammar rejects empty, comma-only, malformed, unknown and duplicate selectors', () => {
-  for (const selector of ['', ',', '320', '999x1', '320x1,320x1']) {
+test('selector accepts only omission or the exact canonical nine spelling', () => {
+  for (const selector of ['', ',', '320x1', `${telemetry.EXACT_FIXTURE_SELECTOR} `, telemetry.EXACT_FIXTURE_SELECTOR.replace('320x1,320x4', '320x4,320x1')]) {
     assert.throws(() => telemetry.parseFixtureSelector(selector), Error, selector);
   }
-  assert.strictEqual(telemetry.parseFixtureSelector('320x1').scope, 'partial');
+  assert.strictEqual(telemetry.parseFixtureSelector(telemetry.EXACT_FIXTURE_SELECTOR).scope, 'full');
   assert.strictEqual(telemetry.parseFixtureSelector(undefined).scope, 'full');
 });
 
-test('checker rejects one-at-a-time identity, path and freshness mutations', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-telemetry-test-'));
-  const file = path.join(dir, 'report.json');
-  const base = validReport(file);
+test('checker rejects one-invariant mutations of valid exact-nine envelope evidence', () => {
+  const executableMutations = ['node', 'vscode'].flatMap(executable => [
+    ['realpath', '/foreign/code'],
+    ['sha256', '0'.repeat(64)],
+    ['stat.dev', '10'],
+    ['stat.ino', '20'],
+    ['stat.size', 30],
+    ['stat.mode', 0o100644],
+    ['stat.mtimeNs', '50']
+  ].map(([fieldPath, value]) => [
+    `${executable}.${fieldPath}`,
+    report => {
+      const fields = fieldPath.split('.');
+      const target = fields.length === 1 ? report.identity.executables[executable] : report.identity.executables[executable][fields[0]];
+      target[fields.at(-1)] = value;
+    }
+  ]));
   const cases = [
     ['runId', report => report.identity.runId = 'foreign-run'],
     ['lane', report => report.identity.lane = 'foreign-lane'],
     ['source', report => report.identity.source = 'foreign-source'],
     ['build', report => report.identity.build = 'foreign-build'],
+    ...executableMutations,
     ['fixture', report => report.runs[0].identity.fixture = 'foreign-fixture'],
-    ['path', report => report.identity.reportPath = path.join(dir, 'foreign.json')],
+    ['aggregate path', report => report.identity.reportPath = path.join(path.dirname(report.identity.reportPath), 'foreign.json')],
+    ['child path', report => report.runs[0].identity.reportPath = path.join(path.dirname(report.runs[0].identity.reportPath), 'retained.json')],
     ['freshness', report => report.generatedAt = new Date(Date.now() - 3600000).toISOString()]
   ];
   for (const [name, mutate] of cases) {
+    const { envelope, report: base } = validEnvelopeReport();
     const report = structuredClone(base);
     mutate(report);
-    fs.writeFileSync(file, JSON.stringify(report));
-    const result = spawnSync(process.execPath, [path.join(root, 'scripts', 'check-dogfood-telemetry.js'), file], {
-      encoding: 'utf8',
-      env: { ...process.env, LGVS_TELEMETRY_RUN_ID: 'run-1', LGVS_TELEMETRY_LANE: 'telemetry-matrix', LGVS_TELEMETRY_SOURCE: 'source-1', LGVS_TELEMETRY_BUILD: 'build-1' }
-    });
+    runEnvelope.publishJsonOnce(envelope.paths.aggregateResult, report, { runRoot: envelope.paths.runRoot });
+    const result = spawnSync(process.execPath, [path.join(root, 'scripts', 'check-dogfood-telemetry.js'), envelope.paths.aggregateResult], { encoding: 'utf8' });
     assert.notStrictEqual(result.status, 0, `${name} mutation passed:\n${result.stdout}\n${result.stderr}`);
   }
 });
@@ -137,6 +169,29 @@ test('checker rejects a missing current report instead of consuming retained evi
   const result = spawnSync(process.execPath, [path.join(root, 'scripts', 'check-dogfood-telemetry.js'), missing], { encoding: 'utf8' });
   assert.notStrictEqual(result.status, 0);
   assert.match(result.stderr, /could not be read/);
+});
+
+test('checker accepts a valid immutable exact-nine envelope-backed aggregate', () => {
+  const { envelope, report } = validEnvelopeReport();
+  runEnvelope.publishJsonOnce(envelope.paths.aggregateResult, report, { runRoot: envelope.paths.runRoot });
+  const result = spawnSync(process.execPath, [path.join(root, 'scripts', 'check-dogfood-telemetry.js'), envelope.paths.aggregateResult], { encoding: 'utf8' });
+  assert.strictEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
+});
+
+test('checker rejects a mutated child copy and child freshness independently', () => {
+  for (const mutation of ['copy', 'freshness']) {
+    const { envelope, report } = validEnvelopeReport();
+    const childPath = report.runs[0].identity.reportPath;
+    const child = JSON.parse(fs.readFileSync(childPath, 'utf8'));
+    if (mutation === 'copy') child.telemetry.input.panelSwitchMs.warm.samples[0] += 1;
+    else child.generatedAt = new Date(Date.now() - 3600000).toISOString();
+    fs.chmodSync(childPath, 0o600);
+    fs.unlinkSync(childPath);
+    runEnvelope.publishJsonOnce(childPath, child, { runRoot: envelope.paths.runRoot });
+    runEnvelope.publishJsonOnce(envelope.paths.aggregateResult, report, { runRoot: envelope.paths.runRoot });
+    const result = spawnSync(process.execPath, [path.join(root, 'scripts', 'check-dogfood-telemetry.js'), envelope.paths.aggregateResult], { encoding: 'utf8' });
+    assert.notStrictEqual(result.status, 0, `${mutation} mutation passed`);
+  }
 });
 
 test('exact-nine aggregate rejects envelope, provenance and child-path mutations', () => {
@@ -154,6 +209,39 @@ test('exact-nine aggregate rejects envelope, provenance and child-path mutations
     const changed = structuredClone(report);
     mutate(changed);
     assert.notDeepStrictEqual(validate(changed), [], 'envelope mutation passed');
+  }
+});
+
+test('structured evidence comparisons ignore object key insertion order', () => {
+  const { envelope, report } = validEnvelopeReport();
+  const reordered = structuredClone(report);
+  reordered.provenance = reverseKeys(reordered.provenance);
+  reordered.identity.executables = reverseKeys(reordered.identity.executables);
+  assert.deepStrictEqual(telemetry.validateTelemetryReport(reordered, { envelope, reportPath: envelope.paths.aggregateResult }), []);
+});
+
+test('checker rejects stale, future, writable, symlink and hard-linked child evidence', () => {
+  for (const mutation of ['stale', 'future', 'future-mtime', 'writable', 'symlink', 'hardlink']) {
+    const { envelope, report } = validEnvelopeReport();
+    const childPath = report.runs[0].identity.reportPath;
+    const child = JSON.parse(fs.readFileSync(childPath, 'utf8'));
+    fs.chmodSync(childPath, 0o600);
+    fs.unlinkSync(childPath);
+    if (mutation === 'stale') child.generatedAt = new Date(Date.now() - 3600000).toISOString();
+    if (mutation === 'future') child.generatedAt = new Date(Date.now() + 3600000).toISOString();
+    if (mutation === 'symlink') {
+      const target = path.join(envelope.paths.tempDir, 'child.json');
+      fs.writeFileSync(target, JSON.stringify(child), { mode: 0o400 });
+      fs.symlinkSync(target, childPath);
+    } else {
+      runEnvelope.publishJsonOnce(childPath, child, { runRoot: envelope.paths.runRoot });
+      if (mutation === 'writable') fs.chmodSync(childPath, 0o600);
+      if (mutation === 'hardlink') fs.linkSync(childPath, path.join(envelope.paths.tempDir, 'linked.json'));
+      if (mutation === 'future-mtime') fs.utimesSync(childPath, new Date(Date.now() + 3600000), new Date(Date.now() + 3600000));
+    }
+    runEnvelope.publishJsonOnce(envelope.paths.aggregateResult, report, { runRoot: envelope.paths.runRoot });
+    const result = spawnSync(process.execPath, [path.join(root, 'scripts', 'check-dogfood-telemetry.js'), envelope.paths.aggregateResult], { encoding: 'utf8' });
+    assert.notStrictEqual(result.status, 0, `${mutation} child evidence passed`);
   }
 });
 
@@ -181,12 +269,12 @@ function runInjectedCoordinator(injection, message) {
     runTelemetryCoordinator({
       injection: ${JSON.stringify(injection)},
       codePath: process.execPath,
-      captureProvenance: ({ extensionVersion }) => ({ head: 'a'.repeat(40), tree: 'b'.repeat(40), digest: 'c'.repeat(64), extensionVersion })
+      captureProvenance: () => (${JSON.stringify(validProvenance())})
     }).catch(error => { console.error(error); process.exit(1); });
   `;
   const result = spawnSync(process.execPath, ['-e', script], {
     encoding: 'utf8',
-    env: { ...process.env, LGVS_TELEMETRY_OUTPUT: path.join(dir, 'telemetry.json'), LGVS_TELEMETRY_FIXTURES: '320x1', ...(message ? { LGVS_TELEMETRY_TEST_MESSAGE: message } : {}) }
+    env: { ...process.env, LGVS_TELEMETRY_OUTPUT: path.join(dir, 'telemetry.json'), LGVS_TELEMETRY_FIXTURES: telemetry.EXACT_FIXTURE_SELECTOR, ...(message ? { LGVS_TELEMETRY_TEST_MESSAGE: message } : {}) }
   });
   const runIds = fs.readdirSync(path.join(dir, 'runs'));
   assert.strictEqual(runIds.length, 1, `${injection}: expected one envelope`);
@@ -204,6 +292,17 @@ test('production entry point rejects arbitrary injection env values before prove
   });
   assert.notStrictEqual(result.status, 0);
   assert.match(result.stderr, /not accepted by the production entry point/);
+  assert.strictEqual(fs.existsSync(path.join(dir, 'runs')), false);
+});
+
+test('production entry point rejects non-exact selector before acquisition or envelope creation', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-selector-preflight-'));
+  const result = spawnSync(process.execPath, [path.join(root, 'scripts', 'run-dogfood-telemetry.js')], {
+    encoding: 'utf8',
+    env: { ...process.env, LGVS_TELEMETRY_OUTPUT: path.join(dir, 'telemetry.json'), LGVS_TELEMETRY_FIXTURES: '320x1' }
+  });
+  assert.notStrictEqual(result.status, 0);
+  assert.match(result.stderr, /must equal exactly/);
   assert.strictEqual(fs.existsSync(path.join(dir, 'runs')), false);
 });
 
@@ -253,7 +352,7 @@ test('child setup, spawn and process-identity failures publish once with conditi
   ];
   for (const [phase, code, identity] of phases) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-child-terminal-'));
-    const provenance = { head: 'a'.repeat(40), digest: 'b'.repeat(64) };
+    const provenance = validProvenance();
     const envelope = runEnvelope.createRunEnvelope({ outputPath: path.join(dir, 'telemetry.json'), repoRoot: root, runId: `child-${phase}`, lane: 'telemetry-matrix', provenance });
     const reportPath = path.join(envelope.paths.childrenDir, `${phase}.json`);
     const result = runForcedChildLifecycle({ envelope, reportPath, failPhase: phase, rootProcessIdentity: identity });
@@ -273,7 +372,7 @@ test('child setup, spawn and process-identity failures publish once with conditi
 
 test('structured child failure binding rejects authority mutations but ignores wording', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-child-binding-'));
-  const provenance = { head: 'a'.repeat(40), digest: 'b'.repeat(64) };
+  const provenance = validProvenance();
   const envelope = runEnvelope.createRunEnvelope({ outputPath: path.join(dir, 'telemetry.json'), repoRoot: root, runId: 'child-binding', lane: 'telemetry-matrix', provenance });
   const reportPath = path.join(envelope.paths.childrenDir, 'child.json');
   const report = runEnvelope.makeChildTerminalFailure({ envelope, lane: 'telemetry-child', phase: 'setup', error: new Error('original wording') });

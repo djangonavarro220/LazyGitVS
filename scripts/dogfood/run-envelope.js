@@ -6,13 +6,42 @@ const { execFileSync } = require('child_process');
 const SCHEMA_VERSION = 1;
 
 function stableJson(value) {
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
-  if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
+  if (Array.isArray(value)) return `[${value.map(item => item === undefined ? 'null' : stableJson(item)).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.keys(value).filter(key => value[key] !== undefined).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
   return JSON.stringify(value);
 }
 
 function digest(value) {
   return crypto.createHash('sha256').update(stableJson(value)).digest('hex');
+}
+
+function canonicalEqual(left, right) {
+  return stableJson(left) === stableJson(right);
+}
+
+function validateProvenance(provenance) {
+  const topLevelFields = ['arch', 'digest', 'extensionVersion', 'head', 'node', 'platform', 'schemaVersion', 'tree', 'vscode'];
+  if (!provenance || typeof provenance !== 'object' || Array.isArray(provenance) || Object.keys(provenance).sort().join(',') !== topLevelFields.join(',')) throw new Error('Telemetry provenance schema is invalid');
+  if (provenance.schemaVersion !== SCHEMA_VERSION || !/^[0-9a-f]{40}$/.test(provenance.head) || !/^[0-9a-f]{40}$/.test(provenance.tree)) throw new Error('Telemetry Git provenance is invalid');
+  if (typeof provenance.extensionVersion !== 'string' || !provenance.extensionVersion || typeof provenance.platform !== 'string' || !provenance.platform || typeof provenance.arch !== 'string' || !provenance.arch) throw new Error('Telemetry build provenance is invalid');
+  const body = { ...provenance };
+  delete body.digest;
+  if (!/^[0-9a-f]{64}$/.test(provenance.digest) || digest(body) !== provenance.digest) throw new Error('Telemetry provenance digest is invalid');
+  for (const name of ['node', 'vscode']) {
+    const executable = provenance[name];
+    if (!executable || typeof executable !== 'object' || Array.isArray(executable) || Object.keys(executable).sort().join(',') !== 'realpath,sha256,stat') throw new Error(`Telemetry ${name} executable provenance is invalid`);
+    if (typeof executable.realpath !== 'string' || !path.isAbsolute(executable.realpath) || path.normalize(executable.realpath) !== executable.realpath || fs.realpathSync(executable.realpath) !== executable.realpath || !/^[0-9a-f]{64}$/.test(executable.sha256)) throw new Error(`Telemetry ${name} executable identity is invalid`);
+    const stat = executable.stat;
+    if (!stat || typeof stat !== 'object' || Array.isArray(stat) || Object.keys(stat).sort().join(',') !== 'dev,ino,mode,mtimeNs,size') throw new Error(`Telemetry ${name} executable stat is invalid`);
+    if (typeof stat.dev !== 'string' || !/^\d+$/.test(stat.dev) || typeof stat.ino !== 'string' || !/^\d+$/.test(stat.ino) || typeof stat.mtimeNs !== 'string' || !/^\d+$/.test(stat.mtimeNs) || !Number.isSafeInteger(stat.size) || stat.size < 0 || !Number.isSafeInteger(stat.mode) || stat.mode < 0) throw new Error(`Telemetry ${name} executable stat fields are invalid`);
+  }
+  return provenance;
+}
+
+function assertImmutablePublishedFile(file) {
+  const stat = fs.lstatSync(file);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || (stat.mode & 0o222) !== 0) throw new Error('Telemetry evidence is not an immutable regular single-link file');
+  return stat;
 }
 
 function hashFile(file) {
@@ -108,6 +137,7 @@ function makeRunPaths(runRoot) {
 function createRunEnvelope({ outputPath, repoRoot, runId, lane, provenance }) {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(runId || '')) throw new Error('Invalid runId');
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(lane || '')) throw new Error('Invalid lane');
+  validateProvenance(provenance);
   const outputParent = canonicalExistingDirectory(path.dirname(path.resolve(outputPath)));
   rejectSymlinkComponents(outputParent);
   const runsDir = path.join(outputParent, 'runs');
@@ -130,18 +160,31 @@ function createRunEnvelope({ outputPath, repoRoot, runId, lane, provenance }) {
   const envelope = { ...body, digest: digest(body) };
   const envelopePath = path.join(runRoot, 'envelope.json');
   publishJsonOnce(envelopePath, envelope, { runRoot });
-  fs.chmodSync(envelopePath, 0o400);
   return Object.freeze({ ...envelope, envelopePath });
 }
 
 function readRunEnvelope(envelopePath, expectedDigest) {
+  assertImmutablePublishedFile(envelopePath);
   const envelope = JSON.parse(fs.readFileSync(envelopePath, 'utf8'));
   const body = { ...envelope };
   delete body.digest;
   if (envelope.schemaVersion !== SCHEMA_VERSION || envelope.contract !== 'lgvs-telemetry-run-envelope' || digest(body) !== envelope.digest) throw new Error('Telemetry run envelope is invalid');
+  validateProvenance(envelope.provenance);
   if (expectedDigest && envelope.digest !== expectedDigest) throw new Error('Telemetry run envelope digest does not match');
   if (path.resolve(envelopePath) !== path.join(envelope.paths.runRoot, 'envelope.json')) throw new Error('Telemetry run envelope path is invalid');
+  const expectedPaths = makeRunPaths(envelope.paths.runRoot);
+  for (const [name, expected] of Object.entries(expectedPaths)) {
+    if (envelope.paths[name] !== expected) throw new Error(`Telemetry run envelope ${name} path is invalid`);
+  }
+  if (fs.realpathSync(envelope.paths.runRoot) !== envelope.paths.runRoot) throw new Error('Telemetry run root is not canonical');
   return Object.freeze({ ...envelope, envelopePath: path.resolve(envelopePath) });
+}
+
+function readEnvelopeForAggregate(reportPath, expectedDigest) {
+  const aggregatePath = path.resolve(reportPath);
+  const envelope = readRunEnvelope(path.join(path.dirname(aggregatePath), 'envelope.json'), expectedDigest);
+  if (aggregatePath !== envelope.paths.aggregateResult) throw new Error('Checked aggregate path does not match its run envelope');
+  return envelope;
 }
 
 function publishJsonOnce(finalPath, value, { runRoot }) {
@@ -152,6 +195,7 @@ function publishJsonOnce(finalPath, value, { runRoot }) {
   try {
     fd = fs.openSync(temporary, 'wx', 0o600);
     fs.writeFileSync(fd, `${JSON.stringify(value, null, 2)}\n`);
+    fs.fchmodSync(fd, 0o400);
     fs.fsyncSync(fd);
     fs.closeSync(fd);
     fd = undefined;
@@ -301,7 +345,7 @@ function makeChildTerminalFailure({ envelope, lane, phase, error, rootProcessIde
   };
 }
 
-function validateEnvelopeBinding({ envelope, report, reportPath, stat, expectedLane }) {
+function validateEnvelopeBinding({ envelope, report, reportPath, stat, expectedLane, now = Date.now(), maxAgeMs = 5 * 60 * 1000 }) {
   const errors = [];
   const body = { ...envelope };
   delete body.digest;
@@ -309,10 +353,10 @@ function validateEnvelopeBinding({ envelope, report, reportPath, stat, expectedL
   if (envelope?.schemaVersion !== SCHEMA_VERSION || envelope?.contract !== 'lgvs-telemetry-run-envelope' || digest(body) !== envelope?.digest) errors.push('envelope digest is invalid');
   if (report?.schemaVersion !== SCHEMA_VERSION || !['success', 'failure'].includes(report?.status)) errors.push('report must have a terminal status');
   if (report?.runId !== envelope?.runId || report?.lane !== expectedLane || report?.envelopeDigest !== envelope?.digest) errors.push('report envelope identity is invalid');
-  if (stableJson(report?.provenance) !== stableJson(envelope?.provenance)) errors.push('report provenance does not match envelope');
+  if (!canonicalEqual(report?.provenance, envelope?.provenance)) errors.push('report provenance does not match envelope');
   try { assertOwnedPath(envelope.paths.runRoot, reportPath, envelope.paths.childrenDir); } catch (error) { errors.push(error.message); }
   const generatedAt = Date.parse(report?.generatedAt);
-  if (!Number.isFinite(generatedAt) || generatedAt < Date.parse(envelope?.createdAt) || generatedAt > stat.mtimeMs + 1000 || Math.abs(stat.mtimeMs - generatedAt) > 5000) errors.push('report publication time is outside the envelope');
+  if (!Number.isFinite(generatedAt) || generatedAt < Date.parse(envelope?.createdAt) || generatedAt > now + 1000 || now - generatedAt > maxAgeMs || stat.mtimeMs > now + 1000 || generatedAt > stat.mtimeMs + 1000 || Math.abs(stat.mtimeMs - generatedAt) > 5000) errors.push('report publication time is outside the envelope');
   if (report?.status === 'failure') {
     const phase = report?.failure?.phase;
     if (report?.ok !== false || report?.classification !== 'infrastructure') errors.push('failure report status is invalid');
@@ -333,16 +377,20 @@ function validateEnvelopeBinding({ envelope, report, reportPath, stat, expectedL
 
 module.exports = {
   SCHEMA_VERSION,
+  assertImmutablePublishedFile,
   assertOwnedDescendant,
   assertOwnedPath,
+  canonicalEqual,
   captureProvenance,
   createRunEnvelope,
   discoverOwnedCdp,
   makeChildTerminalFailure,
   publishJsonOnce,
+  readEnvelopeForAggregate,
   readRunEnvelope,
   readProcessIdentity,
   runChildPreRuntimeLifecycle,
   terminateOwnedProcessGroup,
-  validateEnvelopeBinding
+  validateEnvelopeBinding,
+  validateProvenance
 };

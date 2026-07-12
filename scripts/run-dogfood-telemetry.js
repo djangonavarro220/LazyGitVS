@@ -43,6 +43,7 @@ async function runTelemetryCoordinator(testOnly = undefined) {
   const injection = testOnly?.injection;
   const knownInjections = new Set(['post-envelope-exception', 'launch-failure', 'zero-result']);
   if (injection && !knownInjections.has(injection)) throw new Error(`Unknown test injection: ${injection}`);
+  const selection = parseFixtureSelector(process.env.LGVS_TELEMETRY_FIXTURES);
   fs.mkdirSync(path.dirname(output), { recursive: true });
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   const codePath = testOnly?.codePath || await require('@vscode/test-electron').downloadAndUnzipVSCode('stable');
@@ -59,7 +60,6 @@ async function runTelemetryCoordinator(testOnly = undefined) {
   };
   try {
   if (injection === 'post-envelope-exception') throw Object.assign(new Error(process.env.LGVS_TELEMETRY_TEST_MESSAGE || 'injected coordinator exception'), { coordinatorCode: 'COORDINATOR_EXCEPTION' });
-  const selection = parseFixtureSelector(process.env.LGVS_TELEMETRY_FIXTURES);
   const runs = [];
   const failures = [];
   for (const fixture of selection.fixtures) {
@@ -111,7 +111,7 @@ async function runTelemetryCoordinator(testOnly = undefined) {
     versions: { node: process.version, vscode: runs[0]?.launch?.vscodeVersion || 'stable', extension: pkg.version, platform: `${os.platform()} ${os.release()}` },
     runs,
     scope: selection.scope,
-    identity: { runId, lane: 'telemetry-matrix', source: provenance.head, build: provenance.digest, reportPath: runEnvelope.paths.aggregateResult },
+    identity: { runId, lane: 'telemetry-matrix', source: provenance.head, build: provenance.digest, reportPath: runEnvelope.paths.aggregateResult, executables: { node: provenance.node, vscode: provenance.vscode } },
     envelopeDigest: runEnvelope.digest,
     provenance,
     samples: { warm: Number(warmSamples), cold: 1 },

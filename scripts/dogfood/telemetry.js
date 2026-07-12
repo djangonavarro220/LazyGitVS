@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { validateEnvelopeBinding } = require('./run-envelope');
+const { assertImmutablePublishedFile, canonicalEqual, validateEnvelopeBinding } = require('./run-envelope');
 
 const SIGNALS = {
   phases: ['sidebarReadyMs', 'panelReadyMs'],
@@ -9,6 +9,8 @@ const SIGNALS = {
   dom: ['nodeCount'],
   subprocess: ['childCount']
 };
+
+const EXACT_FIXTURE_SELECTOR = '320x1,320x4,320x16,2000x1,2000x4,2000x16,10000x1,10000x4,10000x16';
 
 function requiredFixtures() {
   return [320, 2000, 10000].flatMap(fileCount => [1, 4, 16].map(repoCount => ({ fileCount, repoCount })));
@@ -20,18 +22,8 @@ function fixtureKey(fixture) {
 
 function parseFixtureSelector(selector) {
   if (selector === undefined) return { scope: 'full', fixtures: requiredFixtures() };
-  if (typeof selector !== 'string' || !selector.trim()) throw new Error('Telemetry fixture selector must not be empty');
-  const tokens = selector.split(',').map(value => value.trim());
-  if (tokens.some(token => !token)) throw new Error('Telemetry fixture selector contains an empty item');
-  const allowed = new Map(requiredFixtures().map(fixture => [fixtureKey(fixture), fixture]));
-  const seen = new Set();
-  const fixtures = tokens.map(token => {
-    if (!/^\d+x\d+$/.test(token) || !allowed.has(token)) throw new Error(`Unknown telemetry fixture selector: ${token}`);
-    if (seen.has(token)) throw new Error(`Duplicate telemetry fixture selector: ${token}`);
-    seen.add(token);
-    return allowed.get(token);
-  });
-  return { scope: fixtures.length === allowed.size ? 'full' : 'partial', fixtures };
+  if (selector !== EXACT_FIXTURE_SELECTOR) throw new Error(`LGVS_TELEMETRY_FIXTURES must equal exactly ${EXACT_FIXTURE_SELECTOR}`);
+  return { scope: 'full', fixtures: requiredFixtures() };
 }
 
 function percentile(values, percentileValue) {
@@ -126,8 +118,13 @@ function validateTelemetryReport(report, options = {}) {
   const envelope = options.envelope;
   if (envelope) {
     if (report?.envelopeDigest !== envelope.digest) errors.push('aggregate envelope digest does not match');
-    if (JSON.stringify(report?.provenance) !== JSON.stringify(envelope.provenance)) errors.push('aggregate provenance does not match envelope');
+    if (!canonicalEqual(report?.provenance, envelope.provenance)) errors.push('aggregate provenance does not match envelope');
     if (report?.identity?.runId !== envelope.runId || report?.identity?.lane !== envelope.lane) errors.push('aggregate envelope identity does not match');
+    if (report?.identity?.source !== envelope.provenance?.head || report?.identity?.build !== envelope.provenance?.digest) errors.push('aggregate source/build does not match envelope');
+    for (const executable of ['node', 'vscode']) {
+      if (!canonicalEqual(report?.identity?.executables?.[executable], envelope.provenance?.[executable])) errors.push(`aggregate ${executable} executable identity does not match envelope`);
+    }
+    if (path.resolve(report?.identity?.reportPath || '') !== envelope.paths.aggregateResult) errors.push('aggregate report path does not match envelope');
   }
   const childPaths = new Set();
   for (const [index, run] of report.runs.entries()) {
@@ -143,12 +140,12 @@ function validateTelemetryReport(report, options = {}) {
       const childPath = path.resolve(run.identity.reportPath);
       if (childPaths.has(childPath)) errors.push(`${expectedFixture} child report path is duplicated`);
       childPaths.add(childPath);
-      if (path.dirname(childPath) !== envelope.paths.childrenDir) errors.push(`${expectedFixture} child report path is not directly beneath childrenDir`);
+      if (childPath !== path.join(envelope.paths.childrenDir, `${expectedFixture}.json`)) errors.push(`${expectedFixture} child report path is not canonical`);
       try {
+        const stat = assertImmutablePublishedFile(childPath);
         const child = JSON.parse(fs.readFileSync(childPath, 'utf8'));
-        const stat = fs.statSync(childPath);
-        errors.push(...validateEnvelopeBinding({ envelope, report: child, reportPath: childPath, stat, expectedLane: run.identity.lane }).map(error => `${expectedFixture} ${error}`));
-        if (JSON.stringify(child.telemetry) !== JSON.stringify(run)) errors.push(`${expectedFixture} child telemetry does not match aggregate`);
+        errors.push(...validateEnvelopeBinding({ envelope, report: child, reportPath: childPath, stat, expectedLane: run.identity.lane, now, maxAgeMs }).map(error => `${expectedFixture} ${error}`));
+        if (!canonicalEqual(child.telemetry, run)) errors.push(`${expectedFixture} child telemetry does not match aggregate`);
       } catch (error) {
         errors.push(`${expectedFixture} child report is unavailable or invalid: ${error.message}`);
       }
@@ -189,4 +186,4 @@ function collectProcessTreeMetrics(rootPid) {
   return { rssBytes, childCount: Math.max(0, descendants.size - 1), processCount: descendants.size };
 }
 
-module.exports = { requiredFixtures, fixtureKey, parseFixtureSelector, summarizeSamples, makeFixtureResult, makeTelemetryReport, validateTelemetryReport, classifyFailure, collectProcessTreeMetrics };
+module.exports = { EXACT_FIXTURE_SELECTOR, requiredFixtures, fixtureKey, parseFixtureSelector, summarizeSamples, makeFixtureResult, makeTelemetryReport, validateTelemetryReport, classifyFailure, collectProcessTreeMetrics };
