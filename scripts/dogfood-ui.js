@@ -9,8 +9,11 @@ const os = require('os');
 const path = require('path');
 const http = require('http');
 const { spawn, spawnSync, execFileSync } = require('child_process');
-const { makeFixture, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write, startMergeOperation, mergeOperationInProgress } = require('./dogfood/fixtures');
+const { performance } = require('perf_hooks');
+const { makeFixture, fixtureRepos, telemetryFixtureManifest, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write, startMergeOperation, mergeOperationInProgress } = require('./dogfood/fixtures');
 const { targetLane, finishReport, writeJson } = require('./dogfood/reporting');
+const { makeFixtureResult, classifyFailure, collectProcessTreeMetrics } = require('./dogfood/telemetry');
+const { discoverOwnedCdp, makeChildTerminalFailure, publishJsonOnce, readProcessIdentity, readRunEnvelope, runChildPreRuntimeLifecycle, terminateOwnedProcessGroup } = require('./dogfood/run-envelope');
 const { writeNativeScreenshot, writeScreenshot } = require('./dogfood/screenshots');
 const CDP = require('chrome-remote-interface');
 const { downloadAndUnzipVSCode } = require('@vscode/test-electron');
@@ -22,10 +25,13 @@ const VARIANT = process.env.LGVS_DOGFOOD_VARIANT || '';
 const VARIANT_NAME = VARIANT || 'matrix';
 const TARGETED_LANE = targetLane(process.env);
 const REPORT_SLUG = `${VARIANT_NAME}-${TARGETED_LANE}`;
-const REPORT_JSON = path.join(OUT, `last-run-${REPORT_SLUG}.json`);
-const LANE_SHOTS = path.join(SHOTS, REPORT_SLUG);
-const PORT = Number(process.env.LGVS_DOGFOOD_CDP_PORT || 9322);
-const NATIVE_DISPLAY = process.env.DISPLAY || `:${PORT}`;
+const TELEMETRY = process.env.LGVS_DOGFOOD_TELEMETRY === '1';
+const RUN_ENVELOPE = TELEMETRY ? readRunEnvelope(process.env.LGVS_TELEMETRY_ENVELOPE_PATH, process.env.LGVS_TELEMETRY_ENVELOPE_DIGEST) : undefined;
+const TELEMETRY_CHILD_DIR = TELEMETRY ? path.resolve(process.env.LGVS_TELEMETRY_CHILD_DIR) : undefined;
+const REPORT_JSON = path.resolve(process.env.LGVS_DOGFOOD_REPORT_PATH || path.join(OUT, `last-run-${REPORT_SLUG}.json`));
+const LANE_SHOTS = TELEMETRY ? path.join(RUN_ENVELOPE.paths.screenshotsDir, TARGETED_LANE) : path.join(SHOTS, REPORT_SLUG);
+let PORT = Number(process.env.LGVS_DOGFOOD_CDP_PORT || 9322);
+const NATIVE_DISPLAY = process.env.DISPLAY || (TELEMETRY ? undefined : `:${PORT}`);
 const STEP_DELAY = Number(process.env.LGVS_DOGFOOD_STEP_DELAY || 900);
 const THEME = process.env.LGVS_DOGFOOD_THEME || 'Default Light Modern';
 const VIRTUAL_PREVIEW_URI_PREFIX = 'lazygitvs-preview:';
@@ -428,18 +434,39 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
 }
 (async () => {
   if (runMatrixIfNeeded()) return;
-  fs.rmSync(LANE_SHOTS, { recursive: true, force: true });
+  let lifecyclePhase = 'setup';
+  let rootProcessIdentity;
+  let proc;
+  let procOut = '';
+  let client;
+  let activePage;
+  let cdpOwnership;
+  let terminalPublished = false;
+  let fixture;
+  let useVim;
+  let vimExtension;
+  let started;
+  let checks = [];
+  let evidence = [];
+  try {
+  if (!TELEMETRY) fs.rmSync(LANE_SHOTS, { recursive: true, force: true });
   ensureDir(LANE_SHOTS);
-  const started = new Date().toISOString();
-  const fixture = makeFixture();
+  started = new Date().toISOString();
+  const fixtureStartedAtMs = Date.now();
+  fixture = makeFixture();
+  const fixtureReadyAtMs = Date.now();
+  const fixtureRepositories = fixtureRepos(fixture);
   const secondaryRepo = secondaryFixtureRepo(fixture);
   const deepRepo = deepNestedFixtureRepo(fixture);
   if (process.env.LGVS_DOGFOOD_OPERATION_STATUS) {
     startMergeOperation(fixture);
     startMergeOperation(secondaryRepo);
   }
-  const codePath = await downloadAndUnzipVSCode('stable');
-  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-code-user-'));
+  const codePath = TELEMETRY ? process.env.LGVS_TELEMETRY_VSCODE_PATH : await downloadAndUnzipVSCode('stable');
+  const vscodePreparedAtMs = Date.now();
+  const vscodeVersion = JSON.parse(fs.readFileSync(path.join(path.dirname(codePath), 'resources', 'app', 'package.json'), 'utf8')).version;
+  const userData = TELEMETRY ? path.join(TELEMETRY_CHILD_DIR, 'user-data') : fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-code-user-'));
+  if (TELEMETRY) fs.mkdirSync(userData, { mode: 0o700 });
   nativeXauthority = path.join(userData, 'Xauthority');
   const undoRedoConfig = path.join(userData, 'lazygit-undo-redo.yml');
   const undoRedoBoundaryReport = path.join(userData, 'lazygit-undo-redo-boundary.jsonl');
@@ -463,17 +490,17 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     { key: 'ctrl+alt+/', command: 'lazygitvs.helpCurrentPanel' },
     { key: 'ctrl+alt+h', command: 'lazygitvs.enterCurrentFileHunkMode' }
   ], null, 2));
-  const extensionsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-code-ext-'));
-  const useVim = VARIANT === 'vim';
-  const vimExtension = useVim ? installVSCodeVimExtension(extensionsDir) : undefined;
+  const extensionsDir = TELEMETRY ? path.join(TELEMETRY_CHILD_DIR, 'extensions') : fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-code-ext-'));
+  if (TELEMETRY) fs.mkdirSync(extensionsDir, { mode: 0o700 });
+  useVim = VARIANT === 'vim';
+  vimExtension = useVim ? installVSCodeVimExtension(extensionsDir) : undefined;
   const launchArgs = [
     codePath,
-    fixture,
-    ...(secondaryRepo ? [secondaryRepo] : []),
+    ...fixtureRepositories,
     `--extensionDevelopmentPath=${ROOT}`,
     `--user-data-dir=${userData}`,
     `--extensions-dir=${extensionsDir}`,
-    `--remote-debugging-port=${PORT}`,
+    `--remote-debugging-port=${TELEMETRY ? 0 : PORT}`,
     ...(process.env.LGVS_DOGFOOD_WINDOW_SIZE ? [`--window-size=${process.env.LGVS_DOGFOOD_WINDOW_SIZE}`] : []),
     '--disable-workspace-trust',
     '--skip-welcome',
@@ -487,13 +514,26 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
   ];
   const cmd = process.env.DISPLAY ? codePath : 'xvfb-run';
   const args = process.env.DISPLAY ? launchArgs.slice(1) : ['-n', String(PORT), '-f', nativeXauthority, ...launchArgs];
-  const proc = spawn(cmd, args, { cwd: ROOT, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: process.env.LGVS_DOGFOOD_UNDO_REDO ? { ...process.env, LG_CONFIG_FILE: undoRedoConfig, LGVS_DOGFOOD_BOUNDARY_REPORT: undoRedoBoundaryReport } : process.env });
-  let procOut = '';
+  const processStartedAtMs = Date.now();
+  const child = await runChildPreRuntimeLifecycle({
+    setup: () => undefined,
+    spawnChild: () => spawn(cmd, args, { cwd: ROOT, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: process.env.LGVS_DOGFOOD_UNDO_REDO ? { ...process.env, LG_CONFIG_FILE: undoRedoConfig, LGVS_DOGFOOD_BOUNDARY_REPORT: undoRedoBoundaryReport } : process.env }),
+    readIdentity: readProcessIdentity,
+    publishFailure: ({ phase, error, rootProcessIdentity: capturedIdentity }) => {
+      lifecyclePhase = phase;
+      if (TELEMETRY) {
+        publishJsonOnce(REPORT_JSON, makeChildTerminalFailure({ envelope: RUN_ENVELOPE, lane: process.env.LGVS_TELEMETRY_LANE, phase, error, rootProcessIdentity: capturedIdentity }), { runRoot: RUN_ENVELOPE.paths.runRoot });
+        terminalPublished = true;
+      }
+    },
+    cleanup: terminateOwnedProcessGroup
+  });
+  proc = child.proc;
+  rootProcessIdentity = child.rootProcessIdentity;
   proc.stdout.on('data', d => procOut += d.toString());
   proc.stderr.on('data', d => procOut += d.toString());
 
-  const evidence = [];
-  const checks = [];
+  lifecyclePhase = 'runtime';
   const finishDogfoodReport = (extra = {}) => finishReport({
     reportPath: REPORT_JSON,
     checks,
@@ -514,13 +554,16 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
       ...extra
     }
   });
-  let client;
-  let activePage;
-  try {
+    if (TELEMETRY) {
+      cdpOwnership = await waitFor(() => {
+        try { return discoverOwnedCdp({ userDataDir: userData, rootProcessIdentity }); } catch { return undefined; }
+      }, 45000, 100, 'owned CDP listener');
+      PORT = cdpOwnership.port;
+    }
     client = await cdpConnect();
-    const { Page, Input, Runtime, Browser, Emulation } = client;
+    const { Page, Input, Runtime, Browser, Emulation, Performance } = client;
     activePage = Page;
-    await Promise.all([Page.enable(), Runtime.enable()]);
+    await Promise.all([Page.enable(), Runtime.enable(), Performance.enable()]);
     async function exerciseCommitFileTree() {
       const expectedPath = 'commit-tree/routes/api/target.ts';
       const gitCommitFiles = git(fixture, 'show', '--format=', '--name-only', 'HEAD');
@@ -608,6 +651,78 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     await clickLgvsRoot(Runtime, Input);
     const sidebarText = await waitForText(Runtime, /2 FILES|1 STATUS/);
     evidence.push({ step: 'open-lgvs-scm-sidebar', screenshot: await screenshot(Page, '02-open-lgvs-scm-sidebar'), status: status(fixture), textSample: sidebarText });
+    if (process.env.LGVS_DOGFOOD_TELEMETRY) {
+      await key(Input, '0', { ctrl: true, alt: true });
+      await waitForText(Runtime, /-- FILES · LG --/, 20000);
+      const warmSamples = Math.max(2, Math.min(20, Number(process.env.LGVS_TELEMETRY_WARM_SAMPLES || 5)));
+      const phases = {
+        sidebarReadyMs: [{ kind: 'cold', value: Date.now() - processStartedAtMs }],
+        panelRenderedReadyMs: []
+      };
+      const input = { dispatchAcknowledgedMs: [] };
+      const memory = { rssBytes: [] };
+      const dom = { nodeCount: [] };
+      const subprocess = { childCount: [] };
+      for (let index = 0; index <= warmSamples; index++) {
+        const kind = index === 0 ? 'cold' : 'warm';
+        if (kind === 'warm') {
+          const sidebarStarted = Date.now();
+          await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
+          await waitForText(Runtime, /2 FILES|1 STATUS/, 10000);
+          phases.sidebarReadyMs.push({ kind, value: Date.now() - sidebarStarted });
+        }
+        const panel = index % 2 === 0 ? ['3', /-- BRANCHES · LG --/] : ['2', /-- FILES · LG --/];
+        const dispatchStarted = performance.now();
+        await chord(Input, `ctrl+alt+${panel[0]}`);
+        const dispatchAcknowledged = performance.now();
+        await waitForText(Runtime, panel[1], 10000);
+        const renderedReady = performance.now();
+        input.dispatchAcknowledgedMs.push({ kind, value: dispatchAcknowledged - dispatchStarted });
+        phases.panelRenderedReadyMs.push({ kind, value: renderedReady - dispatchStarted });
+        const performanceMetrics = await Performance.getMetrics();
+        const domMetric = performanceMetrics.metrics.find(metric => metric.name === 'Nodes')?.value;
+        const fallbackDom = await Runtime.evaluate({ expression: 'document.getElementsByTagName("*").length', returnByValue: true });
+        const processMetrics = collectProcessTreeMetrics(proc.pid);
+        memory.rssBytes.push({ kind, value: processMetrics.rssBytes });
+        dom.nodeCount.push({ kind, value: Number(domMetric ?? fallbackDom.result.value) });
+        subprocess.childCount.push({ kind, value: processMetrics.childCount });
+      }
+      const telemetry = makeFixtureResult({
+        fixture: { fileCount: Number(process.env.LGVS_TELEMETRY_FILE_COUNT), repoCount: Number(process.env.LGVS_TELEMETRY_REPO_COUNT), actualRepoCount: fixtureRepositories.length, manifest: telemetryFixtureManifest(fixtureRepositories) },
+        phases,
+        input,
+        memory,
+        dom,
+        subprocess,
+        infrastructure: { fixtureSetupMs: fixtureReadyAtMs - fixtureStartedAtMs, vscodePrepareMs: vscodePreparedAtMs - fixtureReadyAtMs },
+        launch: { cdpPort: PORT, processId: proc.pid, vscodeVersion },
+        identity: {
+          runId: RUN_ENVELOPE.runId,
+          lane: process.env.LGVS_TELEMETRY_LANE,
+          source: RUN_ENVELOPE.provenance.head,
+          build: RUN_ENVELOPE.provenance.digest,
+          fixture: `${process.env.LGVS_TELEMETRY_FILE_COUNT}x${process.env.LGVS_TELEMETRY_REPO_COUNT}`,
+          reportPath: REPORT_JSON
+        }
+      });
+      checks.push({ name: 'Telemetry fixture renders real changed files', ok: /bulk\/file-/.test(status(fixture)), fixture: telemetry.fixture });
+      for (const check of checks) if (!check.ok) throw new Error(`Dogfood check failed: ${check.name}`);
+      publishJsonOnce(REPORT_JSON, {
+        schemaVersion: 1,
+        status: 'success',
+        ok: true,
+        classification: 'none',
+        generatedAt: new Date().toISOString(),
+        runId: RUN_ENVELOPE.runId,
+        lane: process.env.LGVS_TELEMETRY_LANE,
+        envelopeDigest: RUN_ENVELOPE.digest,
+        provenance: RUN_ENVELOPE.provenance,
+        process: { root: rootProcessIdentity, listener: cdpOwnership.listenerIdentity },
+        telemetry
+      }, { runRoot: RUN_ENVELOPE.paths.runRoot });
+      terminalPublished = true;
+      return;
+    }
     addCheck(checks, { name: 'Light theme dogfood profile is active', ok: !!process.env.LGVS_DOGFOOD_FAST_THEME || THEME.toLowerCase().includes('light'), theme: THEME });
     addCheck(checks, { name: `${useVim ? 'VSCodeVim' : 'No Vim'} dogfood variant is active`, ok: true, variant: VARIANT, vimExtension: useVim, vimVersion: vimExtension?.version });
     checks.push({ name: 'SCM sidebar exposes default LazyGitVS panels while Status stays hidden until 1', ok: !sidebarText.includes('1 STATUS') && ['2 FILES', '3 BRANCHES', '4 COMMITS', '5 STASH', '6 CONFLICTS', '7 TAGS', '8 REMOTES'].every(label => sidebarText.includes(label)), textSample: sidebarText.slice(0, 1200) });
@@ -1317,13 +1432,36 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     if (activePage) {
       try { failureScreenshot = await screenshot(activePage, 'failure', { force: true }); } catch { /* best-effort only */ }
     }
-    const report = { ok: false, variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, failureScreenshot, error: String(error && error.stack || error), processOutput: procOut.slice(-8000) };
-    write(REPORT_JSON, JSON.stringify(report, null, 2));
+    const report = TELEMETRY && lifecyclePhase !== 'runtime' ? makeChildTerminalFailure({ envelope: RUN_ENVELOPE, lane: process.env.LGVS_TELEMETRY_LANE, phase: lifecyclePhase, error, rootProcessIdentity }) : TELEMETRY ? {
+      schemaVersion: 1,
+      status: 'failure',
+      ok: false,
+      classification: classifyFailure(error),
+      generatedAt: new Date().toISOString(),
+      runId: RUN_ENVELOPE.runId,
+      lane: process.env.LGVS_TELEMETRY_LANE,
+      envelopeDigest: RUN_ENVELOPE.digest,
+      provenance: RUN_ENVELOPE.provenance,
+      process: { root: rootProcessIdentity, listener: cdpOwnership?.listenerIdentity },
+      error: String(error && error.stack || error)
+    } : { ok: false, classification: classifyFailure(error), variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, failureScreenshot, error: String(error && error.stack || error), processOutput: procOut.slice(-8000) };
+    if (TELEMETRY && !terminalPublished) {
+      publishJsonOnce(REPORT_JSON, report, { runRoot: RUN_ENVELOPE.paths.runRoot });
+      terminalPublished = true;
+    } else if (!TELEMETRY) write(REPORT_JSON, JSON.stringify(report, null, 2));
     console.error(JSON.stringify(report, null, 2));
     process.exitCode = 1;
   } finally {
-    if (client) { try { await client.close(); } catch {} }
-    try { process.kill(-proc.pid, 'SIGTERM'); } catch { proc.kill('SIGTERM'); }
-    try { spawnSync('pkill', ['-f', `remote-debugging-port=${PORT}`]); } catch {}
+    const closingClient = client ? client.close().catch(() => undefined) : undefined;
+    if (TELEMETRY && rootProcessIdentity) {
+      try { terminateOwnedProcessGroup(rootProcessIdentity); } catch (error) { console.error(`Owned cleanup refused: ${error.message}`); }
+    } else if (!TELEMETRY && proc) {
+      try { process.kill(-proc.pid, 'SIGTERM'); } catch { proc.kill('SIGTERM'); }
+      try { spawnSync('pkill', ['-f', `remote-debugging-port=${PORT}`]); } catch {}
+    }
+    if (closingClient) {
+      await Promise.race([closingClient, sleep(5000)]);
+    }
+    if (TELEMETRY) process.exit(process.exitCode || 0);
   }
 })();

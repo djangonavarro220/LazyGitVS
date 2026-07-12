@@ -1,6 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 
 function sh(cmd, args, opts = {}) {
@@ -17,7 +18,51 @@ function ensureDir(p) { fs.mkdirSync(p, { recursive: true }); }
 function write(p, value) { ensureDir(path.dirname(p)); fs.writeFileSync(p, value); }
 function append(p, value) { ensureDir(path.dirname(p)); fs.appendFileSync(p, value); }
 
+const telemetryReposByFixture = new Map();
+
+function fixtureManifestDigest(manifest) {
+  const body = { repositories: manifest.repositories.map(repository => ({ path: repository.path, trackedFileCount: repository.trackedFileCount, changedFileCount: repository.changedFileCount })) };
+  return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
+}
+
+function telemetryFixtureManifest(repositories) {
+  const manifest = {
+    repositories: repositories.map((repository, index) => ({
+      path: `repo-${String(index + 1).padStart(2, '0')}`,
+      trackedFileCount: git(repository, 'ls-files').split('\n').filter(Boolean).length,
+      changedFileCount: git(repository, 'diff', '--name-only').split('\n').filter(Boolean).length
+    }))
+  };
+  return { ...manifest, digest: fixtureManifestDigest(manifest) };
+}
+
+function makeTelemetryFixture() {
+  const fileCount = Number(process.env.LGVS_TELEMETRY_FILE_COUNT);
+  const repoCount = Number(process.env.LGVS_TELEMETRY_REPO_COUNT);
+  if (![320, 2000, 10000].includes(fileCount) || ![1, 4, 16].includes(repoCount)) {
+    throw new Error(`Unsupported telemetry fixture ${fileCount} files / ${repoCount} repos`);
+  }
+  const primary = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-telemetry-'));
+  const repos = Array.from({ length: repoCount }, (_, index) => index === 0 ? primary : `${primary}-repo-${String(index + 1).padStart(2, '0')}`);
+  let remaining = fileCount;
+  repos.forEach((repo, repoIndex) => {
+    ensureDir(repo);
+    git(repo, 'init');
+    git(repo, 'config', 'user.email', 'lgvs@example.test');
+    git(repo, 'config', 'user.name', 'LGVS Telemetry');
+    const count = Math.ceil(remaining / (repoCount - repoIndex));
+    remaining -= count;
+    for (let i = 0; i < count; i++) write(path.join(repo, 'bulk', `file-${String(i).padStart(5, '0')}.txt`), `base ${repoIndex}/${i}\n`);
+    git(repo, 'add', '.');
+    git(repo, 'commit', '-m', 'telemetry baseline');
+    for (let i = 0; i < Math.min(count, 20); i++) append(path.join(repo, 'bulk', `file-${String(i).padStart(5, '0')}.txt`), `changed ${repoIndex}/${i}\n`);
+  });
+  telemetryReposByFixture.set(primary, repos);
+  return primary;
+}
+
 function makeFixture() {
+  if (process.env.LGVS_DOGFOOD_TELEMETRY) return makeTelemetryFixture();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-dogfood-'));
   git(dir, 'init');
   git(dir, 'config', 'user.email', 'lgvs@example.test');
@@ -113,8 +158,9 @@ function makeFixture() {
   // and mask the real HUNK/LINE staging path.
   return dir;
 }
-function secondaryFixtureRepo(fixture) { return `${fixture}-other-repo`; }
-function deepNestedFixtureRepo(fixture) { return path.join(fixture, 'workspace', 'level-one', 'level-two', 'deep-repo'); }
+function fixtureRepos(fixture) { return telemetryReposByFixture.get(fixture) || [fixture, `${fixture}-other-repo`, path.join(fixture, 'workspace', 'level-one', 'level-two', 'deep-repo')]; }
+function secondaryFixtureRepo(fixture) { return fixtureRepos(fixture)[1]; }
+function deepNestedFixtureRepo(fixture) { return fixtureRepos(fixture)[2]; }
 function status(cwd) { return git(cwd, 'status', '--short'); }
 function diffCachedNames(cwd) { return git(cwd, 'diff', '--cached', '--name-only'); }
 function diffNames(cwd) { return git(cwd, 'diff', '--name-only'); }
@@ -133,4 +179,4 @@ function startMergeOperation(cwd) {
 }
 function mergeOperationInProgress(cwd) { return fs.existsSync(path.join(cwd, '.git', 'MERGE_HEAD')); }
 
-module.exports = { makeFixture, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write, startMergeOperation, mergeOperationInProgress };
+module.exports = { makeFixture, fixtureRepos, telemetryFixtureManifest, fixtureManifestDigest, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write, startMergeOperation, mergeOperationInProgress };

@@ -13,6 +13,7 @@ function targetLane(env = process.env) {
     env.LGVS_DOGFOOD_CRAMPED_SIDEBAR && 'cramped-sidebar',
     env.LGVS_DOGFOOD_EDGE_FILES && 'edge-files',
     env.LGVS_DOGFOOD_BINARY_FILE && 'binary-file',
+    env.LGVS_DOGFOOD_TELEMETRY && `telemetry-${env.LGVS_TELEMETRY_FILE_COUNT}f-${env.LGVS_TELEMETRY_REPO_COUNT}r`,
     env.LGVS_DOGFOOD_LARGE_REPO && 'large-repo',
     env.LGVS_DOGFOOD_GIT_FAILURE && 'git-failure',
     env.LGVS_DOGFOOD_DESTRUCTIVE_CANCEL && 'destructive-cancel',

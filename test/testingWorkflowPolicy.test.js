@@ -37,8 +37,9 @@ test('testing policy is a hard agent rule and not just a forgotten doc', () => {
   assert.match(testingDoc, /If a behavior cannot be fully automated, document the gap/);
 });
 
-test('every feature has an automated performance acceptance gate', () => {
-  assert.strictEqual(pkg.scripts['verify:feature'], 'npm test && npm run dogfood:ui:large-repo && npm run package');
+test('every feature has an automated telemetry and performance acceptance gate', () => {
+  assert.strictEqual(pkg.scripts['verify:feature'], 'npm test && npm run verify:telemetry && npm run dogfood:ui:large-repo && npm run package');
+  assert.strictEqual(pkg.scripts['verify:telemetry'], 'node scripts/run-dogfood-telemetry.js --check');
   assert.match(agents, /Performance is an automatic acceptance gate/);
   assert.match(agents, /npm run verify:feature/);
   assert.match(testingDoc, /Automatic feature performance gate/);
@@ -64,7 +65,7 @@ test('dogfood lanes required by the playbook exist as npm scripts', () => {
 });
 
 test('test playbook names focused, full, dogfood and package verification commands', () => {
-  for (const command of ['npm test', 'npm run dogfood:ui', 'npm run package', 'npm run package:dist']) {
+  for (const command of ['npm test', 'npm run dogfood:ui', 'npm run verify:telemetry', 'npm run package', 'npm run package:dist']) {
     assert(testingDoc.includes(command), `testing playbook must include ${command}`);
   }
   assert.match(testingDoc, /node test\/<file>\.test\.js/);
