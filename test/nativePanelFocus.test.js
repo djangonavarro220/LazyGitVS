@@ -29,7 +29,7 @@ assert(!extension.includes("executeCommand('list.scrollDown')"), 'panel jumps mu
 assert(!extension.includes("executeCommand('workbench.action.focusSideBar')"), 'panel jumps must not steal keyboard focus into unrelated sidebar surfaces');
 assert(extension.includes('PANEL_ORDER.forEach((panel, index) => {'), 'all panels should be registered through one shared loop');
 assert(extension.includes('app.focusNumberPanel(index + 1)'), 'numeric panel commands must share focusNumberPanel/revealPanelView instead of special-casing 7/8');
-assert(extension.indexOf('this.renderAll();\n    await this.revealPanelView(panel);') > 0, 'render before native reveal so VS Code can target the contributed view after refresh');
+assert(extension.indexOf('this.renderFocusedPanels(previousViewPanel, panel);\n    await this.revealPanelView(panel);') > 0, 'render the previous and dispatched panels before native reveal so VS Code can target the contributed view without rebuilding the whole sidebar');
 assert(!extension.includes("executeCommand('workbench.action.openView', viewId)"), 'panel reveal must not call Open View: it flashes the Quick Open / command-palette picker on panel jumps');
 assert(extension.includes('if (!this.visible()) {\n        try { await vscode.commands.executeCommand(\'workbench.view.scm\'); }'), 'SCM container focus should only run when no LGVS view is already visible, otherwise panel jumps flash VS Code original SCM');
 assert(extension.includes('this.views.get(panel)?.show(false);'), 'panel reveal should use WebviewView.show(false) for the contributed view');

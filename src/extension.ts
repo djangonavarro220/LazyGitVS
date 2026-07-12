@@ -456,8 +456,8 @@ class LazyGitVSController {
     const snapshot = this.healthSnapshot();
     await showText('LazyGitVS Health', JSON.stringify(snapshot, null, 2), false, true);
   }
-
   private async focusPanel(panel: ViewPanel) {
+    const previousViewPanel = this.activeViewPanel();
     this.ownsModeStatus = true;
     this.webviewKeyboardOwner = true;
     this.setFocusArea('panel');
@@ -468,17 +468,16 @@ class LazyGitVSController {
     this.persistNavigationState();
     this.updateModeStatusBar();
     if (panel === 'status' || this.activeLength(panel) === 0) await this.refresh(false).catch(() => undefined);
-    this.renderAll();
+    this.renderFocusedPanels(previousViewPanel, panel);
     await this.revealPanelView(panel);
     if (panel === 'status') await this.revealCurrentStatusRepo().catch(() => undefined);
     this.ensureRuntimeInterval();
     await this.openCurrent(panel, true).catch(() => undefined);
     this.requestWebviewAutoFocus();
-    this.renderAll();
+    this.renderActivePanel(panel);
     await this.revealPanelView(panel);
     if (panel === 'status') await this.revealCurrentStatusRepo().catch(() => undefined);
   }
-
   private async restorePanelFocusAfterModal(viewPanel: ViewPanel) {
     if (this.editorHunkMode || this.editorEditMode) return;
     this.ownsModeStatus = true;
@@ -1638,6 +1637,7 @@ class LazyGitVSController {
     this.explosion = false; this.statusLine = '💥 Nuked working tree'; this.renderAll();
   }
   private renderAll() { this.persistNavigationState(); this.statusTreeProvider?.refresh(); for (const panel of PANEL_ORDER) this.render(panel); }
+  private renderFocusedPanels(previousViewPanel: ViewPanel, activeViewPanel: ViewPanel) { this.persistNavigationState(); if (previousViewPanel === 'status' || activeViewPanel === 'status') this.statusTreeProvider?.refresh(); if (previousViewPanel !== activeViewPanel && previousViewPanel !== 'status') this.render(previousViewPanel); if (activeViewPanel !== 'status') this.render(activeViewPanel); }
   private renderActivePanel(viewPanel: ViewPanel) { this.persistNavigationState(); if (viewPanel === 'status') this.statusTreeProvider?.refresh(); else this.render(viewPanel); }
   private render(viewPanel: ViewPanel) {
     const view = this.views.get(viewPanel);
