@@ -3,7 +3,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const { fixtureKey, parseFixtureSelector, makeTelemetryReport, validateTelemetryReport } = require('./dogfood/telemetry');
 const { captureProvenance, createRunEnvelope, publishJsonOnce, validateEnvelopeBinding } = require('./dogfood/run-envelope');
 
@@ -144,6 +144,7 @@ async function runTelemetryCoordinator(testOnly = undefined) {
     process.exit(1);
   }
   console.log(`Telemetry matrix passed: ${runs.length} fixtures -> ${runEnvelope.paths.aggregateResult}`);
+  return runEnvelope.paths.aggregateResult;
   } catch (error) {
     if (!published) publishTerminal(coordinatorFailure(runEnvelope, provenance, error.coordinatorCode || 'COORDINATOR_EXCEPTION', error.message || error));
     throw error;
@@ -153,7 +154,11 @@ async function runTelemetryCoordinator(testOnly = undefined) {
 module.exports = { runTelemetryCoordinator };
 
 if (require.main === module) {
-  runTelemetryCoordinator().catch(error => {
+  runTelemetryCoordinator().then(reportPath => {
+    if (!process.argv.includes('--check')) return;
+    const result = spawnSync(process.execPath, [path.join(__dirname, 'check-dogfood-telemetry.js'), reportPath], { cwd: root, stdio: 'inherit', env: process.env });
+    if (result.status !== 0) process.exit(result.status || 1);
+  }).catch(error => {
     console.error(error);
     process.exit(1);
   });

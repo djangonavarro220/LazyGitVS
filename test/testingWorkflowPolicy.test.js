@@ -39,7 +39,7 @@ test('testing policy is a hard agent rule and not just a forgotten doc', () => {
 
 test('every feature has an automated telemetry and performance acceptance gate', () => {
   assert.strictEqual(pkg.scripts['verify:feature'], 'npm test && npm run verify:telemetry && npm run dogfood:ui:large-repo && npm run package');
-  assert.strictEqual(pkg.scripts['verify:telemetry'], 'npm run dogfood:telemetry && npm run dogfood:telemetry:check');
+  assert.strictEqual(pkg.scripts['verify:telemetry'], 'node scripts/run-dogfood-telemetry.js --check');
   assert.match(agents, /Performance is an automatic acceptance gate/);
   assert.match(agents, /npm run verify:feature/);
   assert.match(testingDoc, /Automatic feature performance gate/);
