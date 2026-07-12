@@ -9,7 +9,7 @@ const os = require('os');
 const path = require('path');
 const http = require('http');
 const { spawn, spawnSync, execFileSync } = require('child_process');
-const { makeFixture, fixtureRepos, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write, startMergeOperation, mergeOperationInProgress } = require('./dogfood/fixtures');
+const { makeFixture, fixtureRepos, telemetryFixtureManifest, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write, startMergeOperation, mergeOperationInProgress } = require('./dogfood/fixtures');
 const { targetLane, finishReport, writeJson } = require('./dogfood/reporting');
 const { makeFixtureResult, classifyFailure, collectProcessTreeMetrics } = require('./dogfood/telemetry');
 const { discoverOwnedCdp, makeChildTerminalFailure, publishJsonOnce, readProcessIdentity, readRunEnvelope, runChildPreRuntimeLifecycle, terminateOwnedProcessGroup } = require('./dogfood/run-envelope');
@@ -686,7 +686,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
         subprocess.childCount.push({ kind, value: processMetrics.childCount });
       }
       const telemetry = makeFixtureResult({
-        fixture: { fileCount: Number(process.env.LGVS_TELEMETRY_FILE_COUNT), repoCount: Number(process.env.LGVS_TELEMETRY_REPO_COUNT), actualRepoCount: fixtureRepositories.length },
+        fixture: { fileCount: Number(process.env.LGVS_TELEMETRY_FILE_COUNT), repoCount: Number(process.env.LGVS_TELEMETRY_REPO_COUNT), actualRepoCount: fixtureRepositories.length, manifest: telemetryFixtureManifest(fixtureRepositories) },
         phases,
         input,
         memory,

@@ -41,15 +41,15 @@ function test(name, fn) {
 function validReport(file = path.join(os.tmpdir(), 'lgvs-valid-telemetry.json')) {
   const identity = { runId: 'run-1', lane: 'telemetry-matrix', source: 'source-1', build: 'build-1', reportPath: file };
   const runs = telemetry.requiredFixtures().map(fixture => telemetry.makeFixtureResult({
-    fixture,
+    fixture: { ...fixture, actualRepoCount: fixture.repoCount, manifest: { ...telemetry.expectedFixtureManifest(fixture), digest: require(path.join(root, 'scripts', 'dogfood', 'fixtures')).fixtureManifestDigest(telemetry.expectedFixtureManifest(fixture)) } },
     phases: {
-      sidebarReadyMs: [{ kind: 'cold', value: 100 }, { kind: 'warm', value: 80 }],
-      panelReadyMs: [{ kind: 'cold', value: 30 }, { kind: 'warm', value: 20 }]
+      sidebarReadyMs: [{ kind: 'cold', value: 100 }, { kind: 'warm', value: 80 }, { kind: 'warm', value: 90 }],
+      panelReadyMs: [{ kind: 'cold', value: 30 }, { kind: 'warm', value: 20 }, { kind: 'warm', value: 25 }]
     },
-    input: { panelSwitchMs: [{ kind: 'warm', value: 4 }, { kind: 'warm', value: 6 }] },
-    memory: { rssBytes: [{ kind: 'warm', value: 1024 }] },
-    dom: { nodeCount: [{ kind: 'warm', value: 100 }] },
-    subprocess: { childCount: [{ kind: 'warm', value: 3 }] },
+    input: { panelSwitchMs: [{ kind: 'cold', value: 8 }, { kind: 'warm', value: 4 }, { kind: 'warm', value: 6 }] },
+    memory: { rssBytes: [{ kind: 'cold', value: 1025 }, { kind: 'warm', value: 1024 }, { kind: 'warm', value: 1026 }] },
+    dom: { nodeCount: [{ kind: 'cold', value: 101 }, { kind: 'warm', value: 100 }, { kind: 'warm', value: 102 }] },
+    subprocess: { childCount: [{ kind: 'cold', value: 4 }, { kind: 'warm', value: 3 }, { kind: 'warm', value: 3 }] },
     identity: {
       runId: identity.runId,
       lane: `telemetry-${fixture.fileCount}f-${fixture.repoCount}r`,
@@ -63,6 +63,7 @@ function validReport(file = path.join(os.tmpdir(), 'lgvs-valid-telemetry.json'))
     versions: { node: 'test', vscode: 'test', extension: 'test', platform: 'test' },
     runs,
     scope: 'full',
+    samples: { cold: 1, warm: 2 },
     failures: [],
     identity
   });
@@ -96,8 +97,8 @@ test('summaries retain cold samples and compute warm p50/p95', () => {
     { kind: 'warm', value: 30 },
     { kind: 'warm', value: 40 }
   ]);
-  assert.deepStrictEqual(summary.cold, { samples: [90], p50: 90, p95: 90 });
-  assert.deepStrictEqual(summary.warm, { samples: [10, 20, 30, 40], p50: 25, p95: 38.5 });
+  assert.deepStrictEqual(summary.cold, { samples: [{ kind: 'cold', value: 90 }], p50: 90, p95: 90 });
+  assert.deepStrictEqual(summary.warm, { samples: [{ kind: 'warm', value: 10 }, { kind: 'warm', value: 20 }, { kind: 'warm', value: 30 }, { kind: 'warm', value: 40 }], p50: 25, p95: 38.5 });
   assert.strictEqual(summary.all.p50, 30);
 });
 

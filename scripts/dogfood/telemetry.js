@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { assertImmutablePublishedFile, canonicalEqual, validateEnvelopeBinding } = require('./run-envelope');
+const { fixtureManifestDigest } = require('./fixtures');
 
 const SIGNALS = {
   phases: ['sidebarReadyMs', 'panelReadyMs'],
@@ -38,7 +39,7 @@ function percentile(values, percentileValue) {
 
 function stats(samples) {
   const values = samples.map(sample => sample.value);
-  return { samples: values, p50: percentile(values, 0.5), p95: percentile(values, 0.95) };
+  return { samples: samples.map(sample => ({ kind: sample.kind, value: sample.value })), p50: percentile(values, 0.5), p95: percentile(values, 0.95) };
 }
 
 function summarizeSamples(samples) {
@@ -69,6 +70,61 @@ function makeTelemetryReport({ versions, runs, ...extra }) {
   return { schemaVersion: 1, contract: 'lgvs-telemetry', ok: true, classification: 'none', generatedAt: new Date().toISOString(), versions, runs, ...extra };
 }
 
+function expectedFixtureManifest(fixture) {
+  let remaining = fixture.fileCount;
+  return {
+    repositories: Array.from({ length: fixture.repoCount }, (_, index) => {
+      const trackedFileCount = Math.ceil(remaining / (fixture.repoCount - index));
+      remaining -= trackedFileCount;
+      return { path: `repo-${String(index + 1).padStart(2, '0')}`, trackedFileCount, changedFileCount: Math.min(trackedFileCount, 20) };
+    })
+  };
+}
+
+function validateMetric(metric, { label, group, signal, warmSamples }) {
+  const errors = [];
+  const metricLabel = `${label} ${group}.${signal}`;
+  if (!metric || typeof metric !== 'object') return [`${metricLabel} is required`];
+  const expectedKinds = { cold: 1, warm: warmSamples };
+  for (const [kind, count] of Object.entries(expectedKinds)) {
+    const samples = metric[kind]?.samples;
+    if (!Array.isArray(samples) || samples.length !== count) {
+      errors.push(`${metricLabel}.${kind}.samples must contain exactly ${count} samples`);
+      continue;
+    }
+    for (const [index, sample] of samples.entries()) {
+      if (!sample || sample.kind !== kind || !Number.isFinite(sample.value) || sample.value < 0) errors.push(`${metricLabel}.${kind}.samples[${index}] must be a finite non-negative ${kind} sample`);
+    }
+  }
+  const cold = metric.cold?.samples;
+  const warm = metric.warm?.samples;
+  const all = metric.all?.samples;
+  if (!Array.isArray(all) || !Array.isArray(cold) || !Array.isArray(warm) || JSON.stringify(all) !== JSON.stringify([...cold, ...warm])) errors.push(`${metricLabel}.all.samples must exactly equal cold followed by warm`);
+  for (const kind of ['cold', 'warm', 'all']) {
+    const samples = metric[kind]?.samples;
+    const values = Array.isArray(samples) ? samples.map(sample => sample?.value) : [];
+    for (const percentileName of ['p50', 'p95']) {
+      const expected = percentile(values, percentileName === 'p50' ? 0.5 : 0.95);
+      if (!Number.isFinite(metric[kind]?.[percentileName]) || metric[kind][percentileName] !== expected) errors.push(`${metricLabel}.${kind}.${percentileName} must equal the recomputed percentile`);
+    }
+  }
+  return errors;
+}
+
+function validateFixture(fixture, label) {
+  const errors = [];
+  const expected = expectedFixtureManifest(fixture || {});
+  if (!fixture || fixture.fileCount !== Number(label.split('/')[0]) || fixture.repoCount !== Number(label.split('/')[1])) return [`${label} fixture identity is invalid`];
+  if (fixture.actualRepoCount !== fixture.repoCount) errors.push(`${label} fixture actualRepoCount must equal repoCount`);
+  const manifest = fixture.manifest;
+  if (!manifest || !Array.isArray(manifest.repositories)) return [...errors, `${label} fixture manifest is required`];
+  if (manifest.repositories.length !== fixture.actualRepoCount) errors.push(`${label} fixture manifest repository count is invalid`);
+  if (JSON.stringify(manifest.repositories) !== JSON.stringify(expected.repositories)) errors.push(`${label} fixture manifest does not match the canonical observed repository matrix`);
+  if (manifest.repositories.reduce((total, repository) => total + repository.trackedFileCount, 0) !== fixture.fileCount) errors.push(`${label} fixture manifest tracked-file total is invalid`);
+  if (manifest.digest !== fixtureManifestDigest(manifest)) errors.push(`${label} fixture manifest digest is invalid`);
+  return errors;
+}
+
 function validateTelemetryReport(report, options = {}) {
   const errors = [];
   const fixtures = requiredFixtures();
@@ -78,6 +134,8 @@ function validateTelemetryReport(report, options = {}) {
   if (report?.classification !== 'none') errors.push('successful report classification must be none');
   if (report?.scope !== 'full') errors.push('acceptance report scope must be full');
   if (Array.isArray(report?.failures) && report.failures.length) errors.push('successful report must not contain failures');
+  const warmSamples = report?.samples?.warm;
+  if (!Number.isInteger(warmSamples) || warmSamples < 2 || warmSamples > 20 || report?.samples?.cold !== 1) errors.push('samples must declare exactly one cold and 2-20 warm samples');
   for (const field of ['node', 'vscode', 'extension', 'platform']) {
     if (!report?.versions?.[field]) errors.push(`versions.${field} is required`);
   }
@@ -91,15 +149,10 @@ function validateTelemetryReport(report, options = {}) {
     const label = `${fixture.fileCount}/${fixture.repoCount}`;
     const run = report.runs[index];
     if (!run) { errors.push(`missing fixture ${label}`); continue; }
+    errors.push(...validateFixture(run.fixture, label));
     for (const [group, signals] of Object.entries(SIGNALS)) {
       for (const signal of signals) {
-        const metric = run[group]?.[signal];
-        if (!metric) { errors.push(`${label} missing ${group}.${signal}`); continue; }
-        if (!metric.cold?.samples?.length && group === 'phases') errors.push(`${label} ${group}.${signal} requires cold samples`);
-        if (!metric.warm?.samples?.length) errors.push(`${label} ${group}.${signal} requires warm samples`);
-        for (const kind of ['all', 'warm']) {
-          if (!Number.isFinite(metric[kind]?.p50) || !Number.isFinite(metric[kind]?.p95)) errors.push(`${label} ${group}.${signal}.${kind} requires finite p50/p95`);
-        }
+        errors.push(...validateMetric(run[group]?.[signal], { label, group, signal, warmSamples }));
       }
     }
   }
@@ -186,4 +239,4 @@ function collectProcessTreeMetrics(rootPid) {
   return { rssBytes, childCount: Math.max(0, descendants.size - 1), processCount: descendants.size };
 }
 
-module.exports = { EXACT_FIXTURE_SELECTOR, requiredFixtures, fixtureKey, parseFixtureSelector, summarizeSamples, makeFixtureResult, makeTelemetryReport, validateTelemetryReport, classifyFailure, collectProcessTreeMetrics };
+module.exports = { EXACT_FIXTURE_SELECTOR, requiredFixtures, fixtureKey, parseFixtureSelector, summarizeSamples, makeFixtureResult, makeTelemetryReport, expectedFixtureManifest, validateTelemetryReport, classifyFailure, collectProcessTreeMetrics };

@@ -1,6 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 
 function sh(cmd, args, opts = {}) {
@@ -18,6 +19,22 @@ function write(p, value) { ensureDir(path.dirname(p)); fs.writeFileSync(p, value
 function append(p, value) { ensureDir(path.dirname(p)); fs.appendFileSync(p, value); }
 
 const telemetryReposByFixture = new Map();
+
+function fixtureManifestDigest(manifest) {
+  const body = { repositories: manifest.repositories.map(repository => ({ path: repository.path, trackedFileCount: repository.trackedFileCount, changedFileCount: repository.changedFileCount })) };
+  return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
+}
+
+function telemetryFixtureManifest(repositories) {
+  const manifest = {
+    repositories: repositories.map((repository, index) => ({
+      path: `repo-${String(index + 1).padStart(2, '0')}`,
+      trackedFileCount: git(repository, 'ls-files').split('\n').filter(Boolean).length,
+      changedFileCount: git(repository, 'diff', '--name-only').split('\n').filter(Boolean).length
+    }))
+  };
+  return { ...manifest, digest: fixtureManifestDigest(manifest) };
+}
 
 function makeTelemetryFixture() {
   const fileCount = Number(process.env.LGVS_TELEMETRY_FILE_COUNT);
@@ -162,4 +179,4 @@ function startMergeOperation(cwd) {
 }
 function mergeOperationInProgress(cwd) { return fs.existsSync(path.join(cwd, '.git', 'MERGE_HEAD')); }
 
-module.exports = { makeFixture, fixtureRepos, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write, startMergeOperation, mergeOperationInProgress };
+module.exports = { makeFixture, fixtureRepos, telemetryFixtureManifest, fixtureManifestDigest, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write, startMergeOperation, mergeOperationInProgress };
