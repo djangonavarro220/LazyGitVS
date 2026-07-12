@@ -1450,12 +1450,15 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     console.error(JSON.stringify(report, null, 2));
     process.exitCode = 1;
   } finally {
+    const closingClient = client ? client.close().catch(() => undefined) : undefined;
     if (TELEMETRY && rootProcessIdentity) {
       try { terminateOwnedProcessGroup(rootProcessIdentity); } catch (error) { console.error(`Owned cleanup refused: ${error.message}`); }
     } else if (!TELEMETRY && proc) {
       try { process.kill(-proc.pid, 'SIGTERM'); } catch { proc.kill('SIGTERM'); }
       try { spawnSync('pkill', ['-f', `remote-debugging-port=${PORT}`]); } catch {}
     }
-    if (client && !TELEMETRY) { try { await client.close(); } catch {} }
+    if (closingClient) {
+      await Promise.race([closingClient, sleep(5000)]);
+    }
   }
 })();
