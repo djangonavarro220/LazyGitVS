@@ -179,6 +179,16 @@ test('checker accepts a valid immutable exact-nine envelope-backed aggregate', (
   assert.strictEqual(result.status, 0, `${result.stdout}\n${result.stderr}`);
 });
 
+test('aggregate validation keeps immutable early child evidence valid after a long matrix', () => {
+  const { envelope, report } = validEnvelopeReport();
+  assert.deepStrictEqual(telemetry.validateTelemetryReport(report, {
+    envelope,
+    reportPath: envelope.paths.aggregateResult,
+    now: Date.now() + 6 * 60 * 1000,
+    maxAgeMs: Infinity
+  }), []);
+});
+
 test('checker rejects a mutated child copy and child freshness independently', () => {
   for (const mutation of ['copy', 'freshness']) {
     const { envelope, report } = validEnvelopeReport();
@@ -260,6 +270,7 @@ test('contract exposes exact matrix and run-scoped report identity wiring', () =
   assert.match(runner, /LGVS_DOGFOOD_REPORT_PATH/);
   assert.match(runner, /validateEnvelopeBinding/);
   assert.match(dogfood, /LGVS_TELEMETRY_ENVELOPE_DIGEST/);
+  assert.ok(dogfood.indexOf('terminateOwnedProcessGroup(rootProcessIdentity)') < dogfood.indexOf('await client.close()'), 'telemetry must terminate the owned VS Code process before awaiting CDP close');
 });
 
 function runInjectedCoordinator(injection, message) {

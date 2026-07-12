@@ -345,7 +345,7 @@ function makeChildTerminalFailure({ envelope, lane, phase, error, rootProcessIde
   };
 }
 
-function validateEnvelopeBinding({ envelope, report, reportPath, stat, expectedLane, now = Date.now(), maxAgeMs = 5 * 60 * 1000 }) {
+function validateEnvelopeBinding({ envelope, report, reportPath, stat, expectedLane, now = Date.now(), maxAgeMs = Infinity }) {
   const errors = [];
   const body = { ...envelope };
   delete body.digest;
@@ -356,7 +356,7 @@ function validateEnvelopeBinding({ envelope, report, reportPath, stat, expectedL
   if (!canonicalEqual(report?.provenance, envelope?.provenance)) errors.push('report provenance does not match envelope');
   try { assertOwnedPath(envelope.paths.runRoot, reportPath, envelope.paths.childrenDir); } catch (error) { errors.push(error.message); }
   const generatedAt = Date.parse(report?.generatedAt);
-  if (!Number.isFinite(generatedAt) || generatedAt < Date.parse(envelope?.createdAt) || generatedAt > now + 1000 || now - generatedAt > maxAgeMs || stat.mtimeMs > now + 1000 || generatedAt > stat.mtimeMs + 1000 || Math.abs(stat.mtimeMs - generatedAt) > 5000) errors.push('report publication time is outside the envelope');
+  if (!Number.isFinite(generatedAt) || generatedAt < Date.parse(envelope?.createdAt) || generatedAt > now + 1000 || (Number.isFinite(maxAgeMs) && now - generatedAt > maxAgeMs) || stat.mtimeMs > now + 1000 || generatedAt > stat.mtimeMs + 1000 || Math.abs(stat.mtimeMs - generatedAt) > 5000) errors.push('report publication time is outside the envelope');
   if (report?.status === 'failure') {
     const phase = report?.failure?.phase;
     if (report?.ok !== false || report?.classification !== 'infrastructure') errors.push('failure report status is invalid');

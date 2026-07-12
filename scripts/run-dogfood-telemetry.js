@@ -95,7 +95,7 @@ async function runTelemetryCoordinator(testOnly = undefined) {
       reportStat = fs.statSync(reportPath);
     } catch {}
     const bindingErrors = dogfoodReport && reportStat
-      ? validateEnvelopeBinding({ envelope: runEnvelope, report: dogfoodReport, reportPath, stat: reportStat, expectedLane: lane })
+      ? validateEnvelopeBinding({ envelope: runEnvelope, report: dogfoodReport, reportPath, stat: reportStat, expectedLane: lane, maxAgeMs: 5 * 60 * 1000 })
       : ['child did not atomically publish a current terminal result'];
     if (result.status !== 0 || dogfoodReport?.status !== 'success' || !dogfoodReport?.telemetry || bindingErrors.length) {
       const error = bindingErrors.join('; ') || dogfoodReport?.error || result.error || result.stderr || `dogfood exited ${result.status}${result.signal ? ` (${result.signal})` : ''}`;
