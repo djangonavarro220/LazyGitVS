@@ -49,41 +49,73 @@ export class FilePanelListModel {
 
 export function buildTreeRows<T extends { path: string }>(files: T[], options: TreeSortOptions, collapsedDirs: Set<string>): TreeRow<T>[] {
   if (!options.showFileTree) return files.map(file => ({ kind: 'file', path: file.path, label: file.path, depth: 0, file }));
-  type Node = { path: string; part: string; file?: T; children: Node[] };
-  const root: Node = { path: '', part: '', children: [] };
-  const child = (parent: Node, part: string, pathValue: string) => {
-    let node = parent.children.find(c => c.part === part);
-    if (!node) { node = { path: pathValue, part, children: [] }; parent.children.push(node); }
-    return node;
-  };
+  type Node = { path: string; part: string; sortKey: string; file?: T; children?: Node[]; childrenByPart?: Map<string, Node> };
+  const normalize = options.fileTreeSortCaseSensitive
+    ? (value: string) => value
+    : (value: string) => {
+        for (let index = 0; index < value.length; index++) {
+          const code = value.charCodeAt(index);
+          if ((code >= 65 && code <= 90) || code >= 128) return value.toLocaleLowerCase();
+        }
+        return value;
+      };
+  const root: Node = { path: '', part: '', sortKey: '', children: [], childrenByPart: new Map() };
   for (const file of files) {
     let node = root;
-    const parts = file.path.split('/');
-    parts.forEach((part, index) => {
-      node = child(node, part, parts.slice(0, index + 1).join('/'));
-      if (index === parts.length - 1) node.file = file;
-    });
+    let segmentStart = 0;
+    while (segmentStart <= file.path.length) {
+      const slash = file.path.indexOf('/', segmentStart);
+      const isFile = slash === -1;
+      const part = file.path.slice(segmentStart, isFile ? file.path.length : slash);
+      const childrenByPart = node.childrenByPart ??= new Map();
+      let next = childrenByPart.get(part);
+      if (!next) {
+        // Slice the original prefix instead of rebuilding from truthy parent paths:
+        // empty segments (including a leading slash) are semantic tree identity.
+        const pathValue = file.path.slice(0, isFile ? file.path.length : slash);
+        next = isFile
+          ? { path: pathValue, part, sortKey: normalize(pathValue), file }
+          : { path: pathValue, part, sortKey: normalize(pathValue), children: [], childrenByPart: new Map() };
+        childrenByPart.set(part, next);
+        (node.children ??= []).push(next);
+      }
+      node = next;
+      if (isFile) {
+        node.file = file;
+        break;
+      }
+      segmentStart = slash + 1;
+    }
   }
   const cmp = (a: Node, b: Node) => {
-    const normalize = (value: string) => options.fileTreeSortCaseSensitive ? value : value.toLocaleLowerCase();
     if (options.fileTreeSortOrder === 'foldersFirst' && Boolean(a.file) !== Boolean(b.file)) return a.file ? 1 : -1;
     if (options.fileTreeSortOrder === 'filesFirst' && Boolean(a.file) !== Boolean(b.file)) return a.file ? -1 : 1;
-    return normalize(a.path).localeCompare(normalize(b.path));
+    return a.sortKey.localeCompare(b.sortKey);
   };
-  const sort = (node: Node) => { node.children.sort(cmp); node.children.forEach(sort); };
+  const sort = (node: Node) => {
+    if (!node.children) return;
+    node.children.sort(cmp);
+    for (const child of node.children) sort(child);
+  };
   sort(root);
   const rows: TreeRow<T>[] = [];
-  const labelFromDepth = (node: Node, treeDepth: number) => node.path.split('/').slice(treeDepth).join('/');
-  const render = (node: Node, treeDepth: number, visualDepth: number) => {
-    if (node.file) { rows.push({ kind: 'file', path: node.path, label: labelFromDepth(node, treeDepth), depth: visualDepth, file: node.file }); return; }
+  const render = (node: Node, visualDepth: number) => {
+    if (node.file) { rows.push({ kind: 'file', path: node.path, label: node.part, depth: visualDepth, file: node.file }); return; }
     let visible = node;
-    let compressedDepth = treeDepth;
-    while (visible.children.length === 1 && !visible.children[0].file) { visible = visible.children[0]; compressedDepth++; }
+    let label = node.part;
+    while (visible.children?.length === 1 && !visible.children[0].file) {
+      visible = visible.children[0];
+      label += `/${visible.part}`;
+    }
     const collapsed = collapsedDirs.has(visible.path);
-    rows.push({ kind: 'dir', path: visible.path, label: labelFromDepth(visible, treeDepth), depth: visualDepth, collapsed });
-    if (!collapsed) visible.children.forEach(childNode => render(childNode, compressedDepth + 1, visualDepth + 1));
+    rows.push({ kind: 'dir', path: visible.path, label, depth: visualDepth, collapsed });
+    if (!collapsed && visible.children) {
+      for (const child of visible.children) render(child, visualDepth + 1);
+    }
   };
-  root.children.forEach(node => render(node, 0, 0));
+  if (root.children) {
+    for (const node of root.children) render(node, 0);
+  }
   return rows;
 }
 
