@@ -219,6 +219,25 @@ async function runExactCommand(Runtime, Input, commandText, waitForHide = true) 
   if (!picked) throw new Error(`Command Palette did not expose exact command: ${commandText}`);
   await sleep(STEP_DELAY);
 }
+async function dispatchTelemetryPanelCommand(Runtime, Input, panelNumber) {
+  const commands = {
+    '2': 'LazyGitVS: Focus 2 Files',
+    '3': 'LazyGitVS: Focus 3 Branches'
+  };
+  const commandText = commands[String(panelNumber)];
+  if (!commandText) throw new Error(`Unsupported telemetry panel ${panelNumber}`);
+  await key(Input, 'F1');
+  await sleep(450);
+  await key(Input, 'a', { ctrl: true });
+  await key(Input, 'Backspace');
+  await typeText(Input, `>${commandText}`);
+  await sleep(600);
+  const startedAt = performance.now();
+  const picked = await clickQuickPickRowEndingWith(Runtime, Input, commandText, false);
+  const acknowledgedAt = performance.now();
+  if (!picked) throw new Error(`Command Palette did not expose exact telemetry command: ${commandText}`);
+  return { startedAt, acknowledgedAt };
+}
 async function pageText(Runtime) {
   const r = await Runtime.evaluate({ expression: `document.body.innerText`, returnByValue: true });
   return r.result.value || '';
@@ -672,13 +691,11 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
           phases.sidebarReadyMs.push({ kind, value: Date.now() - sidebarStarted });
         }
         const panel = index % 2 === 0 ? ['3', /-- BRANCHES · LG --/] : ['2', /-- FILES · LG --/];
-        const dispatchStarted = performance.now();
-        await chord(Input, `ctrl+alt+${panel[0]}`);
-        const dispatchAcknowledged = performance.now();
+        const dispatch = await dispatchTelemetryPanelCommand(Runtime, Input, panel[0]);
         await waitForText(Runtime, panel[1], 10000);
         const renderedReady = performance.now();
-        input.dispatchAcknowledgedMs.push({ kind, value: dispatchAcknowledged - dispatchStarted });
-        phases.panelRenderedReadyMs.push({ kind, value: renderedReady - dispatchStarted });
+        input.dispatchAcknowledgedMs.push({ kind, value: dispatch.acknowledgedAt - dispatch.startedAt });
+        phases.panelRenderedReadyMs.push({ kind, value: renderedReady - dispatch.startedAt });
         const performanceMetrics = await Performance.getMetrics();
         const domMetric = performanceMetrics.metrics.find(metric => metric.name === 'Nodes')?.value;
         const fallbackDom = await Runtime.evaluate({ expression: 'document.getElementsByTagName("*").length', returnByValue: true });
