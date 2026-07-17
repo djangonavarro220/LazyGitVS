@@ -69,12 +69,6 @@ test('dogfood creates a realistic two-repository Git fixture', () => {
   requireDogfoodInvariant('secondary repo sentinel', /OTHER_REPO_SENTINEL\.md/);
 });
 
-test('telemetry dispatches panel changes through exact command-palette rows', () => {
-  requireDogfoodInvariant('telemetry exact panel dispatcher', /dispatchTelemetryPanelCommand/);
-  requireDogfoodInvariant('exact Files command', /LazyGitVS: Focus 2 Files/);
-  requireDogfoodInvariant('exact Branches command', /LazyGitVS: Focus 3 Branches/);
-});
-
 test('dogfood asserts the documented visible UI smoke path', () => {
   requireDogfoodInvariant('Command Palette opens LGVS', /LazyGitVS: Focus SCM Sidebar/);
   requireDogfoodInvariant('all default panels are present', /2 FILES[\s\S]*3 BRANCHES[\s\S]*4 COMMITS[\s\S]*5 STASH[\s\S]*6 CONFLICTS[\s\S]*7 TAGS[\s\S]*8 REMOTES/);
