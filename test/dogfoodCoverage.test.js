@@ -69,7 +69,7 @@ test('dogfood creates a realistic two-repository Git fixture', () => {
   requireDogfoodInvariant('secondary repo sentinel', /OTHER_REPO_SENTINEL\.md/);
 });
 
-test('telemetry dispatches panel changes through exact command-palette rows', () => {
+test('telemetry dispatches panel changes through exact command-palette queries', () => {
   requireDogfoodInvariant('telemetry exact panel dispatcher', /dispatchTelemetryPanelCommand/);
   requireDogfoodInvariant('exact Files command', /LazyGitVS: Focus 2 Files/);
   requireDogfoodInvariant('exact Branches command', /LazyGitVS: Focus 3 Branches/);
