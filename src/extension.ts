@@ -10,7 +10,6 @@ import { hunkBodyLines, hunkChangedEditorLine, hunkSelectableLineIndexes, hunkSt
 import { EMPTY_PREVIEW_SCHEME, EmptyProvider, VIRTUAL_PREVIEW_SCHEME, VirtualPreviewProvider } from './previewDocuments';
 import { buildTreeRows, FilePanelListModel, FocusArea, isPanel, isViewPanel, PANEL_ORDER, REFRESH_INTERVAL_MS, STATE_KEY, VIEW_IDS, type FileTreeRow, type TreeRow, type Panel, type ViewPanel } from './panels';
 import { RefreshCoordinator } from './refreshCoordinator';
-import { createGitRepositoryRefreshWatcher } from './gitRepositoryRefreshWatcher';
 import { branchRow, commitRow, dirRow, escapeHtml, fileRow, fileStateLabel, fileStatusHtml, row, treeFileRow } from './panelRows';
 import { originCommitUrl, pickGitAction, runGitAction, executeGitMenuItem, showCommitCopyMenu, showCommitResetMenu, showDiscardFileMenu, showDiscardHunkMenu, showPullMenu, showPushMenu, showResetMenu, showStashCreateMenu, type GitMenuItem } from './gitMenus';
 import { findMenuItemByKey } from './lazygitMenu';
@@ -106,7 +105,6 @@ class LazyGitVSController {
   private intervalTimer?: NodeJS.Timeout;
   private pendingFilesPreviewTimer?: ReturnType<typeof setTimeout>; private filesPreviewEpoch = 0;
   private readonly refreshCoordinator = new RefreshCoordinator();
-  private readonly gitRepositoryRefreshWatcher = createGitRepositoryRefreshWatcher(() => this.scheduleRefresh(), vscode.extensions);
   private readonly filePanelListModel = new FilePanelListModel();
   private windowFocused = vscode.window.state.focused; private refreshDirtyWhileUnfocused = false;
   private selectionEpoch = 0;
@@ -146,7 +144,11 @@ class LazyGitVSController {
     this.loadLazyGitConfig();
     this.restoreNavigationState();
     void this.updateActiveViewContext();
-    context.subscriptions.push(this.gitRepositoryRefreshWatcher);
+    const watcher = vscode.workspace.createFileSystemWatcher('**/*');
+    watcher.onDidChange(() => this.scheduleRefresh(), null, context.subscriptions);
+    watcher.onDidCreate(() => this.scheduleRefresh(), null, context.subscriptions);
+    watcher.onDidDelete(() => this.scheduleRefresh(), null, context.subscriptions);
+    context.subscriptions.push(watcher);
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
       if (event.affectsConfiguration('lazygitvs.showStatusBarMode')) this.updateModeStatusBar();
     }));
