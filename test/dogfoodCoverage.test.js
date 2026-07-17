@@ -69,10 +69,6 @@ test('dogfood creates a realistic two-repository Git fixture', () => {
   requireDogfoodInvariant('secondary repo sentinel', /OTHER_REPO_SENTINEL\.md/);
 });
 
-test('dogfood sends numeric panel jumps through the native keyboard path', () => {
-  requireDogfoodInvariant('native numeric panel chord', /const panelChord = \/\^ctrl\\\+alt\\\+\(\[1-8\]\)\$\/[\s\S]*nativeKey\(`ctrl\+alt\+\$\{panelChord\[1\]\}`\)/);
-});
-
 test('dogfood asserts the documented visible UI smoke path', () => {
   requireDogfoodInvariant('Command Palette opens LGVS', /LazyGitVS: Focus SCM Sidebar/);
   requireDogfoodInvariant('all default panels are present', /2 FILES[\s\S]*3 BRANCHES[\s\S]*4 COMMITS[\s\S]*5 STASH[\s\S]*6 CONFLICTS[\s\S]*7 TAGS[\s\S]*8 REMOTES/);

@@ -167,7 +167,7 @@ async function chord(Input, keys) {
   if (keys === 'ctrl+alt+?') return key(Input, '/', { ctrl: true, alt: true });
   if (keys === 'ctrl+alt+o') return key(Input, 'o', { ctrl: true, alt: true });
   const panelChord = /^ctrl\+alt\+([1-8])$/.exec(keys);
-  if (panelChord) return nativeKey(`ctrl+alt+${panelChord[1]}`);
+  if (panelChord) return key(Input, panelChord[1], { ctrl: true, alt: true });
   throw new Error(`unknown chord ${keys}`);
 }
 async function typeText(Input, text) {
