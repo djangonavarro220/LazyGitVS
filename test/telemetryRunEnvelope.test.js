@@ -7,8 +7,13 @@ const { spawn, spawnSync } = require('child_process');
 
 const envelope = require('../scripts/dogfood/run-envelope');
 const tests = [];
+const temporaryDirectories = new Set();
 function test(name, fn) { tests.push([name, fn]); }
-function temporaryDirectory(prefix = 'lgvs-envelope-') { return fs.mkdtempSync(path.join(os.tmpdir(), prefix)); }
+function temporaryDirectory(prefix = 'lgvs-envelope-') {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  temporaryDirectories.add(directory);
+  return directory;
+}
 function git(cwd, ...args) {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
   if (result.status !== 0) throw new Error(result.stderr);
@@ -237,8 +242,14 @@ test('readRunEnvelope rejects deleted executable provenance fields', () => {
 });
 
 (async () => {
-  for (const [name, fn] of tests) {
-    try { await fn(); console.log(`ok - ${name}`); }
-    catch (error) { console.error(`not ok - ${name}`); console.error(error); process.exitCode = 1; }
+  try {
+    for (const [name, fn] of tests) {
+      try { await fn(); console.log(`ok - ${name}`); }
+      catch (error) { console.error(`not ok - ${name}`); console.error(error); process.exitCode = 1; }
+    }
+  } finally {
+    for (const directory of [...temporaryDirectories].reverse()) {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
   }
 })();
