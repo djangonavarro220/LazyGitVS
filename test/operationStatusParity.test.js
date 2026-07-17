@@ -34,7 +34,7 @@ assert(operation.includes('Deliberately do not stage anything'), 'operation acti
 assert(parity.includes('- [x] Show merge/rebase/cherry-pick state in Status as `(operation) repo → branch`.'), 'parity tracker must record the completed Status-row behavior');
 assert(parity.includes('- [x] Open operation options with `m`: `c` continue, `a` abort, and `s` skip where applicable.'), 'parity tracker must record the completed operation actions');
 assert(parity.includes('Bisect remains a Commits-panel gap'), 'parity tracker must keep bisect out of Status and name its real owner');
-assert(parity.includes('Revert operation status/options'), 'parity tracker must explicitly retain upstream revert as an operation-status gap');
+assert(parity.includes('- [x] Detect revert operation status and expose `c` continue, `a` abort, and `s` skip options.'), 'parity tracker must record completed upstream revert operation status/options');
 
 assert(dogfood.includes("name: 'Status operation row and m options match lazygit'"), 'real UI dogfood must cover the Status operation label and m options menu');
 assert(dogfood.includes("name: 'Status operation abort exposes a native confirmation before mutation'"), 'real UI dogfood must prove abort cannot mutate Git before modal confirmation');

@@ -36,6 +36,15 @@ function createConflictBranches(dir) {
   write(path.join(dir, 'file.txt'), 'master\n');
   git(dir, 'commit', '-am', 'master');
 }
+function createRevertConflict(dir) {
+  write(path.join(dir, 'file.txt'), 'target\n');
+  git(dir, 'commit', '-am', 'target');
+  const target = git(dir, 'rev-parse', 'HEAD').trim();
+  write(path.join(dir, 'file.txt'), 'later\n');
+  git(dir, 'commit', '-am', 'later');
+  try { git(dir, 'revert', target); } catch (_) {}
+  return target;
+}
 function resolveAndStage(dir) { write(path.join(dir, 'file.txt'), 'resolved\n'); git(dir, 'add', 'file.txt'); }
 function runOperationAction(dir, action) {
   return cp.execFileSync('git', action.args, {
@@ -94,6 +103,33 @@ test('cherry-pick Status state exposes c/a/s and keeps bisect out of Status', di
   git(dir, 'bisect', 'start');
   assert.equal(detectGitOperationState(dir), undefined, 'bisect belongs to lazygit Commits/BisectController, never Status WorkingTreeState');
   git(dir, 'bisect', 'reset');
+});
+
+test('revert Status state exposes real c/a/s actions and each clears the real sequencer safely', dir => {
+  const target = createRevertConflict(dir);
+  const state = detectGitOperationState(dir);
+  assert.equal(state.kind, 'revert');
+  assert.equal(state.label, 'reverting');
+  assert.equal(state.menuTitle, 'Revert options');
+  assert.deepEqual(state.actions.map(action => [action.key, action.label, action.args]), [
+    ['c', 'continue', ['revert', '--continue']],
+    ['a', 'abort', ['revert', '--abort']],
+    ['s', 'skip', ['revert', '--skip']]
+  ]);
+  assert.equal(state.actions[1].requiresConfirmation, true);
+  runOperationAction(dir, state.actions[1]);
+  assert.equal(detectGitOperationState(dir), undefined, 'revert abort must clear REVERT_HEAD');
+
+  try { git(dir, 'revert', target); } catch (_) {}
+  runOperationAction(dir, detectGitOperationState(dir).actions.find(action => action.command === 'skip'));
+  assert.equal(detectGitOperationState(dir), undefined, 'revert skip must advance and clear the real sequencer');
+
+  try { git(dir, 'revert', target); } catch (_) {}
+  const continueAction = detectGitOperationState(dir).actions.find(action => action.command === 'continue');
+  assert.throws(() => runOperationAction(dir, continueAction), /unmerged|conflict|resolved/i);
+  resolveAndStage(dir);
+  runOperationAction(dir, continueAction);
+  assert.equal(detectGitOperationState(dir), undefined, 'revert continue must finish after explicit conflict resolution');
 });
 
 test('rebase state wins over its matching internal CHERRY_PICK_HEAD', dir => {

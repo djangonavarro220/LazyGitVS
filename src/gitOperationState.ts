@@ -3,9 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // This deliberately mirrors lazygit's Status.WorkingTreeState. Bisect belongs
-// to the commits/bisect controller, not Status. Revert is documented as a gap
-// until LGVS can expose its full upstream flow safely.
-export type GitOperationKind = 'merge' | 'rebase' | 'cherry-pick';
+// to the commits/bisect controller, not Status.
+export type GitOperationKind = 'merge' | 'rebase' | 'cherry-pick' | 'revert';
 export type GitOperationActionCommand = 'continue' | 'abort' | 'skip';
 
 export type GitOperationAction = {
@@ -19,8 +18,8 @@ export type GitOperationAction = {
 export type GitOperationState = {
   kind: GitOperationKind;
   // lazygit's LowerCaseTitle: this is the Status text inside parentheses.
-  label: 'merging' | 'rebasing' | 'cherry-picking';
-  menuTitle: 'Merge options' | 'Rebase options' | 'Cherry-pick options';
+  label: 'merging' | 'rebasing' | 'cherry-picking' | 'reverting';
+  menuTitle: 'Merge options' | 'Rebase options' | 'Cherry-pick options' | 'Revert options';
   identity: string;
   actions: GitOperationAction[];
 };
@@ -73,9 +72,12 @@ function actions(operation: GitOperationKind, canSkip: boolean): GitOperationAct
   return result;
 }
 
-// Keep source precedence: cherry-pick > merge > rebase. This matters when a
-// sequencer operation is nested inside an interactive rebase.
+// Keep upstream precedence: revert > cherry-pick > merge > rebase. This
+// matters when a sequencer operation is nested inside an interactive rebase.
 export function detectGitOperationState(cwd: string): GitOperationState | undefined {
+  if (existsGitPath(cwd, 'REVERT_HEAD')) {
+    return { kind: 'revert', label: 'reverting', menuTitle: 'Revert options', identity: operationIdentity(cwd, ['REVERT_HEAD']), actions: actions('revert', true) };
+  }
   if (existsGitPath(cwd, 'CHERRY_PICK_HEAD') && !cherryPickIsPartOfRebase(cwd)) {
     return { kind: 'cherry-pick', label: 'cherry-picking', menuTitle: 'Cherry-pick options', identity: operationIdentity(cwd, ['CHERRY_PICK_HEAD']), actions: actions('cherry-pick', true) };
   }

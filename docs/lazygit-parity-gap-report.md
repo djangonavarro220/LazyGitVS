@@ -158,7 +158,7 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 - [x] Model merge/rebase/cherry-pick in-progress states in a tested Git detector with safe action metadata.
 - [x] Show merge/rebase/cherry-pick state in Status as `(operation) repo → branch`.
 - [x] Open operation options with `m`: `c` continue, `a` abort, and `s` skip where applicable.
-- [ ] Revert operation status/options remain missing from upstream's `WorkingTreeState` parity.
+- [x] Detect revert operation status and expose `c` continue, `a` abort, and `s` skip options.
 - [ ] Bisect remains a Commits-panel gap (`b` / bisect controller); it is intentionally not a Status operation.
 - [ ] Conflict follow-up prompts matching lazygit.
 
@@ -272,7 +272,7 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 
 ## Recommended next order
 
-1. Operation-state follow-up for revert, plus bisect options in Commits.
+1. Bisect options in Commits.
 2. Commit workflows: squash/drop/edit/rebase/move/autosquash.
 3. Files missing keys: `g`, `<ctrl+f>`, `<ctrl+t>`, `M`.
 4. Worktrees/Reflog/Submodules panels.
