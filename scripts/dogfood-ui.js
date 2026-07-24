@@ -11,7 +11,7 @@ const http = require('http');
 const { spawn, spawnSync, execFileSync } = require('child_process');
 const { performance } = require('perf_hooks');
 const { makeFixture, fixtureRepos, telemetryFixtureManifest, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write, startMergeOperation, mergeOperationInProgress } = require('./dogfood/fixtures');
-const { targetLane, finishReport, writeJson } = require('./dogfood/reporting');
+const { targetLane, panelNavigationBoundaryMatches, finishReport, writeJson } = require('./dogfood/reporting');
 const { makeFixtureResult, classifyFailure, collectProcessTreeMetrics } = require('./dogfood/telemetry');
 const { discoverOwnedCdp, makeChildTerminalFailure, publishJsonOnce, readProcessIdentity, readRunEnvelope, runChildPreRuntimeLifecycle, terminateOwnedProcessGroup } = require('./dogfood/run-envelope');
 const { writeNativeScreenshot, writeScreenshot } = require('./dogfood/screenshots');
@@ -470,6 +470,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
   nativeXauthority = path.join(userData, 'Xauthority');
   const undoRedoConfig = path.join(userData, 'lazygit-undo-redo.yml');
   const undoRedoBoundaryReport = path.join(userData, 'lazygit-undo-redo-boundary.jsonl');
+  const panelNavigationBoundaryReport = process.env.LGVS_DOGFOOD_UNDO_REDO ? undoRedoBoundaryReport : path.join(userData, 'lazygit-panel-navigation-boundary.jsonl');
   if (process.env.LGVS_DOGFOOD_UNDO_REDO) write(undoRedoConfig, 'keybinding:\n  universal:\n    undo: x\n    redo: X\n');
   write(path.join(userData, 'User', 'settings.json'), JSON.stringify({
     'workbench.colorTheme': THEME,
@@ -517,7 +518,14 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
   const processStartedAtMs = Date.now();
   const child = await runChildPreRuntimeLifecycle({
     setup: () => undefined,
-    spawnChild: () => spawn(cmd, args, { cwd: ROOT, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: process.env.LGVS_DOGFOOD_UNDO_REDO ? { ...process.env, LG_CONFIG_FILE: undoRedoConfig, LGVS_DOGFOOD_BOUNDARY_REPORT: undoRedoBoundaryReport } : process.env }),
+    spawnChild: () => spawn(cmd, args, {
+      cwd: ROOT,
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: process.env.LGVS_DOGFOOD_UNDO_REDO
+        ? { ...process.env, LG_CONFIG_FILE: undoRedoConfig, LGVS_DOGFOOD_BOUNDARY_REPORT: undoRedoBoundaryReport }
+        : { ...process.env, LGVS_DOGFOOD_BOUNDARY_REPORT: panelNavigationBoundaryReport }
+    }),
     readIdentity: readProcessIdentity,
     publishFailure: ({ phase, error, rootProcessIdentity: capturedIdentity }) => {
       lifecyclePhase = phase;
@@ -763,6 +771,45 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     const primarySelectedText = (await pageText(Runtime)).slice(0, 3000);
     evidence.push({ step: 'status-select-primary-repo-before-main-flow', screenshot: await screenshot(Page, '02-status-select-primary-repo-before-main-flow'), status: status(fixture), pickedPrimary, textSample: primarySelectedText });
     checks.push({ name: 'Dogfood explicitly selects the primary repo before file actions', ok: !!pickedPrimary && /2 FILES/.test(primarySelectedText) && /README\.md|settings\.json|src\/app\.ts/.test(primarySelectedText), pickedPrimary, textSample: primarySelectedText.slice(0, 1200) });
+
+    await chord(Input, 'ctrl+alt+2');
+    await waitForText(Runtime, /-- FILES · LG --/);
+    assert(await focusWorkbenchPanelBody(Runtime, Input, '2 FILES'), 'Visible Files panel body was not found for circular navigation');
+    const circularPanelKeys = [
+      { name: 'left/right', previous: ['ArrowLeft'], next: ['ArrowRight'] },
+      { name: 'h/l', previous: ['h'], next: ['l'] },
+      { name: 'Shift+Tab/Tab', previous: ['Tab', { shift: true }], next: ['Tab'] }
+    ];
+    const circularPanelEvidence = [];
+    let panelNavigationBoundaryCursor = 0;
+    const waitForPanelNavigationBoundary = expected => waitFor(() => {
+      if (!fs.existsSync(panelNavigationBoundaryReport)) return undefined;
+      const events = fs.readFileSync(panelNavigationBoundaryReport, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line));
+      const nextEventIndex = events.findIndex((event, index) => index >= panelNavigationBoundaryCursor && panelNavigationBoundaryMatches(event, expected));
+      if (nextEventIndex < 0) return undefined;
+      panelNavigationBoundaryCursor = nextEventIndex + 1;
+      return events[nextEventIndex];
+    }, 10000, 100);
+    for (const family of circularPanelKeys) {
+      const previousExpected = { from: 'files', to: 'status', activeView: 'status' };
+      await key(Input, ...family.previous);
+      const statusFocus = await waitForPanelNavigationBoundary(previousExpected);
+      circularPanelEvidence.push({ family: family.name, step: `${family.name}:previous`, expected: previousExpected, focus: statusFocus });
+      const nextExpected = { from: 'status', to: 'files', activeView: 'files' };
+      await key(Input, ...family.next);
+      const filesFocus = await waitForPanelNavigationBoundary(nextExpected);
+      circularPanelEvidence.push({ family: family.name, step: `${family.name}:next`, expected: nextExpected, focus: filesFocus });
+      const familyChecks = [
+        { name: `${family.name}: Files previous physically focuses Status`, ok: panelNavigationBoundaryMatches(statusFocus, previousExpected), focus: statusFocus },
+        { name: `${family.name}: Status next physically focuses Files`, ok: panelNavigationBoundaryMatches(filesFocus, nextExpected), focus: filesFocus }
+      ];
+      checks.push(...familyChecks);
+    }
+    evidence.push({ step: 'status-files-circular-panel-navigation', screenshot: await screenshot(Page, '03-status-files-circular-panel-navigation', { force: true }), keys: circularPanelEvidence });
+    if (process.env.LGVS_DOGFOOD_PANEL_NAVIGATION) {
+      finishDogfoodReport({ expectedTransitionChecks: circularPanelKeys.length * 2, transitionCheckCount: circularPanelEvidence.length });
+      return;
+    }
 
     if (process.env.LGVS_DOGFOOD_UNDO_REDO) {
       git(fixture, 'add', '-A');

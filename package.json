@@ -629,16 +629,6 @@
         "key": "m",
         "command": "lazygitvs.openOperationOptions",
         "when": "focusedView == lazygitvs.statusView && lazygitvs.statusViewVisible && !editorTextFocus"
-      },
-      {
-        "key": "tab",
-        "command": "lazygitvs.focusPanel2",
-        "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
-      },
-      {
-        "key": "shift+tab",
-        "command": "lazygitvs.focusPanel8",
-        "when": "focusedView == lazygitvs.statusView && !editorTextFocus"
       }
     ]
   },
@@ -662,6 +652,7 @@
     "dogfood:ui:reset-state": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_RESET_STATE=1 node scripts/dogfood-ui.js",
     "dogfood:ui:command-palette": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_COMMAND_PALETTE=1 node scripts/dogfood-ui.js",
     "dogfood:ui:hunk-escape": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_HUNK_ESCAPE=1 node scripts/dogfood-ui.js",
+    "dogfood:ui:panel-navigation": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_PANEL_NAVIGATION=1 node scripts/dogfood-ui.js",
     "dogfood:ui:commit-file-tree": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_FAST_COMMIT_FILE_TREE=1 node scripts/dogfood-ui.js",
     "dogfood:ui:deep-tree": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_DEEP_TREE=1 node scripts/dogfood-ui.js",
     "dogfood:ui:cramped": "LGVS_DOGFOOD_VARIANT=no-vim LGVS_DOGFOOD_CRAMPED_SIDEBAR=1 LGVS_DOGFOOD_WINDOW_SIZE=900,260 node scripts/dogfood-ui.js",

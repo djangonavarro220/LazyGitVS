@@ -8,6 +8,7 @@ function targetLane(env = process.env) {
     env.LGVS_DOGFOOD_FAST_RESET_STATE && 'reset-state',
     env.LGVS_DOGFOOD_FAST_COMMAND_PALETTE && 'command-palette',
     env.LGVS_DOGFOOD_FAST_HUNK_ESCAPE && 'hunk-escape',
+    env.LGVS_DOGFOOD_PANEL_NAVIGATION && 'panel-navigation',
     env.LGVS_DOGFOOD_FAST_COMMIT_FILE_TREE && 'commit-file-tree',
     env.LGVS_DOGFOOD_DEEP_TREE && 'deep-tree',
     env.LGVS_DOGFOOD_CRAMPED_SIDEBAR && 'cramped-sidebar',
@@ -21,6 +22,13 @@ function targetLane(env = process.env) {
     env.LGVS_DOGFOOD_UNDO_REDO && 'undo-redo',
     env.LGVS_DOGFOOD_FAST_THEME && `${env.LGVS_DOGFOOD_FAST_THEME}-theme`
   ].filter(Boolean).join('-') || 'full';
+}
+
+function panelNavigationBoundaryMatches(event, expected) {
+  return event?.event === 'panelFocus'
+    && event.from === expected.from
+    && event.to === expected.to
+    && event.activeView === expected.activeView;
 }
 
 function assertChecks(checks) {
@@ -50,4 +58,4 @@ function finishReport({ reportPath, checks, report }) {
   return report;
 }
 
-module.exports = { targetLane, assertChecks, assertScreenshotEvidence, finishReport, writeJson };
+module.exports = { targetLane, panelNavigationBoundaryMatches, assertChecks, assertScreenshotEvidence, finishReport, writeJson };

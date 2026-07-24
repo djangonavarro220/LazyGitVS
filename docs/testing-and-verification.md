@@ -149,6 +149,7 @@ npm run dogfood:ui:vim-escape
 npm run dogfood:ui:reset-state
 npm run dogfood:ui:command-palette
 npm run dogfood:ui:hunk-escape
+npm run dogfood:ui:panel-navigation
 npm run dogfood:ui:deep-tree
 npm run dogfood:ui:cramped
 npm run dogfood:ui:edge-files

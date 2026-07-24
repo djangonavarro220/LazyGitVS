@@ -20,7 +20,7 @@ Canonical disputed claims were re-audited offline against the locally preserved 
 - [x] LazyGit-style numbered panels: Status, Files, Branches, Commits, Stash, Conflicts, Tags, Remotes.
 - [x] `j/k`, arrows, page movement, top/bottom movement.
 - [x] `/` panel text search.
-- [x] `<tab>` / block movement between panels.
+- [x] Circular block movement between panels with left/right, `h`/`l`, and Shift+Tab/Tab, including the Status ↔ Files webview boundary and first/last-panel wrap.
 - [x] Status dashboard with workspace repository selector.
 - [x] Multi-root/workspace repository switching.
 

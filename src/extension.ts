@@ -18,6 +18,7 @@ import { showGitOperationOptions } from './statusGitOperation';
 import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, openPath, previewCommitFileDiff, previewDiff, previewStashFileDiff, revealVisibleEditorLine, showCommitPreview, showStashPreview } from './workspaceActions';
 import { deletedGhostDecorations, editorLineRange, excludeRangeLines, hunkChangedEditorRanges, rangeLineSet } from './hunkEditorDecorations';
 import { planAndPerformReflogAction, type ReflogDirection } from './undoRedo';
+import { panelBlockNavigationBindings } from './panelKeyboardRouter';
 function gutterBadge(letter: 'S' | 'U', fill: string) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="12" rx="3" fill="${fill}"/><text x="8" y="11.5" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="10" font-weight="700" fill="#ffffff">${letter}</text></svg>`;
   return vscode.Uri.parse(`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
@@ -126,7 +127,7 @@ class LazyGitVSController {
   private lazygitConfigFiles: string[] = [];
   private suppressWebviewAutoFocusUntil = 0;
   private pendingWebviewAutoFocus = false;
-  private defaultPanelsRevealed = false;
+  private pendingPanelFocusTransition?: { from: ViewPanel; to: ViewPanel }; private defaultPanelsRevealed = false;
   constructor(private readonly context: vscode.ExtensionContext) {
     this.unstagedHunkDecoration = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: 'rgba(210, 153, 34, 0.13)', borderWidth: '0 0 0 2px', borderStyle: 'solid', borderColor: '#d29922' });
     this.stagedHunkDecoration = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: 'rgba(46, 160, 67, 0.13)', borderWidth: '0 0 0 2px', borderStyle: 'solid', borderColor: '#2ea043' });
@@ -172,7 +173,7 @@ class LazyGitVSController {
         if (!message) return;
         const type = message.type;
         if (type === 'dogfoodBoundary') recordDogfoodBoundary(String(message.event ?? 'unknown'), { panel, key: String(message.key ?? '') });
-        if (type === 'focusArea') this.setFocusArea(message.area === 'panel' ? 'panel' : 'none');
+        if (type === 'focusArea') { this.setFocusArea(message.area === 'panel' ? 'panel' : 'none'); const transition = this.pendingPanelFocusTransition; if (message.area === 'panel' && transition?.to === panel) { recordDogfoodBoundary('panelFocus', { ...transition, activeView: this.activeViewPanel() }); this.pendingPanelFocusTransition = undefined; } }
         if (type === 'commandPalette') await this.openCommandPalette();
         if (type === 'move') await this.move(panel, message.delta);
         if (type === 'moveTo') await this.moveTo(panel, message.position);
@@ -452,12 +453,11 @@ class LazyGitVSController {
       }
     };
   }
-
   async dumpHealth() {
     const snapshot = this.healthSnapshot();
     await showText('LazyGitVS Health', JSON.stringify(snapshot, null, 2), false, true);
   }
-  private async focusPanel(panel: ViewPanel) {
+  private async focusPanel(panel: ViewPanel, transition?: { from: ViewPanel; to: ViewPanel }) {
     const previousViewPanel = this.activeViewPanel();
     this.ownsModeStatus = true;
     this.webviewKeyboardOwner = true;
@@ -478,6 +478,8 @@ class LazyGitVSController {
     this.renderActivePanel(panel);
     await this.revealPanelView(panel);
     if (panel === 'status') await this.revealCurrentStatusRepo().catch(() => undefined);
+    if (transition) this.pendingPanelFocusTransition = transition;
+    await new Promise(resolve => setTimeout(resolve, 50)); await this.views.get(panel)?.webview.postMessage({ type: 'focusBody' });
   }
   private async restorePanelFocusAfterModal(viewPanel: ViewPanel) {
     if (this.editorHunkMode || this.editorEditMode) return;
@@ -497,7 +499,6 @@ class LazyGitVSController {
     this.setWebviewKeyboardEnabled(true);
     this.renderAll();
   }
-
   private async revealPanelView(panel: ViewPanel) {
     const viewId = VIEW_IDS[panel];
     const reveal = async () => {
@@ -509,7 +510,6 @@ class LazyGitVSController {
     };
     await reveal();
   }
-
   private async revealCurrentStatusRepo() {
     this.statusTreeProvider?.refresh();
     const items = this.statusTreeItems();
@@ -858,8 +858,7 @@ class LazyGitVSController {
     const current = this.activeViewPanel() || viewPanel;
     const currentIndex = PANEL_ORDER.indexOf(current);
     const next = PANEL_ORDER[((currentIndex >= 0 ? currentIndex : 0) + delta + PANEL_ORDER.length) % PANEL_ORDER.length];
-    this.ownsModeStatus = true;
-    await this.focusPanel(next);
+    this.ownsModeStatus = true; await this.focusPanel(next, { from: current, to: next });
   }
   private async toggle(viewPanel: ViewPanel) {
     const panel = this.panelForView(viewPanel);
@@ -1637,8 +1636,8 @@ class LazyGitVSController {
     this.explosion = false; this.statusLine = '💥 Nuked working tree'; this.renderAll();
   }
   private renderAll() { this.persistNavigationState(); this.statusTreeProvider?.refresh(); for (const panel of PANEL_ORDER) this.render(panel); }
-  private renderFocusedPanels(previousViewPanel: ViewPanel, activeViewPanel: ViewPanel) { this.persistNavigationState(); if (previousViewPanel === 'status' || activeViewPanel === 'status') this.statusTreeProvider?.refresh(); if (previousViewPanel !== activeViewPanel && previousViewPanel !== 'status') this.render(previousViewPanel); if (activeViewPanel !== 'status') this.render(activeViewPanel); }
-  private renderActivePanel(viewPanel: ViewPanel) { this.persistNavigationState(); if (viewPanel === 'status') this.statusTreeProvider?.refresh(); else this.render(viewPanel); }
+  private renderFocusedPanels(previousViewPanel: ViewPanel, activeViewPanel: ViewPanel) { this.persistNavigationState(); if (previousViewPanel === 'status' || activeViewPanel === 'status') this.statusTreeProvider?.refresh(); if (previousViewPanel !== activeViewPanel) this.render(previousViewPanel); this.render(activeViewPanel); }
+  private renderActivePanel(viewPanel: ViewPanel) { this.persistNavigationState(); if (viewPanel === 'status') this.statusTreeProvider?.refresh(); this.render(viewPanel); }
   private render(viewPanel: ViewPanel) {
     const view = this.views.get(viewPanel);
     if (!view) return;
@@ -1661,8 +1660,9 @@ class LazyGitVSController {
       .status-pair{display:grid;grid-template-columns:12px 12px;column-gap:2px;align-items:center;font-family:var(--vscode-editor-font-family);font-size:10px}.slot{display:inline-grid;place-items:center;width:12px;height:14px;border-radius:2px;font-size:10px;font-weight:700;line-height:1;box-sizing:border-box;color:var(--vscode-button-foreground,#fff)}.slot.empty{visibility:hidden;background:transparent;border-color:transparent;box-shadow:none}.slot.index{background:var(--vscode-gitDecoration-addedResourceForeground,#6a9955)}.slot.worktree{background:var(--vscode-gitDecoration-modifiedResourceForeground,#e06c75)}.slot.deleted,.slot.conflict{background:var(--vscode-errorForeground,#f85149)}.slot.untracked{background:var(--vscode-gitDecoration-untrackedResourceForeground,#d7ba7d);color:var(--vscode-sideBar-background,#1e1e1e)}.row.dir,.row.file.tree{grid-template-columns:7px minmax(0,1fr);}.tree-line{display:inline-flex;align-items:center;gap:2px;min-width:0;overflow:hidden;text-overflow:ellipsis;}.tree-indent{display:inline-block;flex:0 0 auto;width:var(--tree-indent,0ch)}.tree-name{overflow:hidden;text-overflow:ellipsis;}.tree-arrow{color:var(--vscode-descriptionForeground);}.status-dashboard{padding:7px 9px 10px;display:flex;flex-direction:column;gap:5px;min-width:0}.lg-logo{font-family:var(--vscode-editor-font-family);font-size:20px;font-weight:800;letter-spacing:.5px;color:var(--vscode-foreground);line-height:1.05}.lg-sub{color:var(--vscode-descriptionForeground);font-size:11px;margin-bottom:4px}.lg-link{display:flex;align-items:center;gap:5px;min-height:19px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.lg-link span{overflow:hidden;text-overflow:ellipsis}.lg-repo{margin-top:6px;padding-top:6px;border-top:1px solid var(--vscode-sideBarSectionHeader-border);color:var(--vscode-descriptionForeground);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.current .path,.current .status{font-weight:700}.danger .status{color:var(--vscode-errorForeground)}.hint{color:var(--vscode-descriptionForeground);font-size:11px;line-height:1.35;padding:4px 8px 5px;border-top:1px solid var(--vscode-sideBarSectionHeader-border);background:var(--vscode-sideBar-background);}kbd{font-family:var(--vscode-editor-font-family);font-size:10px;color:var(--vscode-keybindingLabel-foreground);background:var(--vscode-keybindingLabel-background);border:1px solid var(--vscode-keybindingLabel-border);border-bottom-color:var(--vscode-keybindingLabel-bottomBorder);border-radius:3px;padding:0 3px;margin-right:2px;}.statusline{color:var(--vscode-descriptionForeground);padding-top:3px;}
       .boom{position:absolute;inset:0;display:grid;place-items:center;background:color-mix(in srgb,var(--vscode-sideBar-background) 55%,transparent);z-index:5;pointer-events:none;}.bomb{font-size:46px;animation:bomb .45s ease-in forwards}.blast{position:absolute;font-size:76px;opacity:0;animation:blast .5s ease-out .35s forwards}@keyframes bomb{to{transform:scale(.35) rotate(20deg);opacity:0}}@keyframes blast{0%{transform:scale(.2);opacity:0}35%{opacity:1}100%{transform:scale(1.6);opacity:0}}
     </style></head><body tabindex="0"><div class="root ${this.lazygitGui.wrapLinesInStagingView ? 'wrap-staging' : ''}">${boom}<div class="title">${title}</div><div class="rows" role="listbox" aria-label="${escapeHtml(title)}">${rows}</div>${footer}</div><script nonce="${nonce}">
-      const vscode=acquireVsCodeApi(); const panel='${viewPanel}'; const shouldFocus=${shouldFocus ? 'true' : 'false'}; let keyboardEnabled=${this.focusArea === 'panel' && this.ownsModeStatus && !this.editorHunkMode && !this.editorEditMode ? 'true' : 'false'}; window.addEventListener('message',event=>{if(event.data&&event.data.type==='keyboardEnabled')keyboardEnabled=!!event.data.enabled;}); function markPanelFocus(){keyboardEnabled=true;vscode.postMessage({type:'focusArea',area:'panel'});} window.addEventListener('focus',markPanelFocus); document.body.addEventListener('focus',markPanelFocus); setTimeout(()=>{document.querySelector('.row.sel')?.scrollIntoView({block:'nearest'}); if(shouldFocus){ document.body.focus(); markPanelFocus(); }},0);
+      const vscode=acquireVsCodeApi(); const panel='${viewPanel}'; const shouldFocus=${shouldFocus ? 'true' : 'false'}; let keyboardEnabled=${this.focusArea === 'panel' && this.ownsModeStatus && !this.editorHunkMode && !this.editorEditMode ? 'true' : 'false'}; window.addEventListener('message',event=>{if(event.data&&event.data.type==='keyboardEnabled')keyboardEnabled=!!event.data.enabled;if(event.data&&event.data.type==='focusBody'){document.body.focus();markPanelFocus();}}); function markPanelFocus(){keyboardEnabled=true;vscode.postMessage({type:'focusArea',area:'panel'});} window.addEventListener('focus',markPanelFocus); document.body.addEventListener('focus',markPanelFocus); setTimeout(()=>{document.querySelector('.row.sel')?.scrollIntoView({block:'nearest'}); if(shouldFocus){ document.body.focus(); markPanelFocus(); }},0);
       const keymap=${scriptJson(this.lazygitKeymap)};
+      const blockNavigation=${scriptJson(panelBlockNavigationBindings(this.lazygitKeymap.universal))};
       const panels={1:'status',2:'files',3:'branches',4:'commits',5:'stash',6:'conflicts',7:'tags',8:'remotes'};
       function norm(e){ let key=e.key; if(key===' ')key='<space>'; else if(key==='Enter')key='<enter>'; else if(key==='Escape')key='<esc>'; else if(key==='Tab')key=e.shiftKey?'<backtab>':'<tab>'; else if(key==='Backspace')key='<backspace>'; else if(key==='ArrowDown')key='<down>'; else if(key==='ArrowUp')key='<up>'; else if(key==='ArrowLeft')key='<left>'; else if(key==='ArrowRight')key='<right>'; const mods=[]; if(e.ctrlKey)mods.push('ctrl'); if(e.altKey)mods.push('alt'); if(e.metaKey)mods.push('meta'); return mods.length?'<'+mods.join('+')+'+'+String(key).replace(/^<|>$/g,'')+'>':key; }
       function keysEqual(expected,typed){ if(expected.startsWith('<')&&expected.endsWith('>'))return expected.toLowerCase()===typed.toLowerCase(); return expected===typed; }
@@ -1671,7 +1671,7 @@ class LazyGitVSController {
       document.querySelector('.rows')?.addEventListener('dblclick',e=>{ const row=e.target.closest('.row[data-index]'); if(!row)return; document.body.focus(); vscode.postMessage({type:'select',index:Number(row.dataset.index)}); vscode.postMessage({type:'enter'}); });
       window.addEventListener('keydown',e=>{ if(!keyboardEnabled)return; if((e.ctrlKey||e.metaKey)&&e.shiftKey&&String(e.key).toLowerCase()==='p'){e.preventDefault();vscode.postMessage({type:'commandPalette'});return;} if(e.key==='F1'){e.preventDefault();vscode.postMessage({type:'commandPalette'});return;} const u=keymap.universal, f=keymap.files, m=keymap.main; const jump=Array.isArray(u.jumpToBlock)?u.jumpToBlock:[]; const jumpIndex=jump.indexOf(e.key); const jumpPanel = jumpIndex>=0 ? panels[String(jumpIndex+1)] : panels[e.key]; if(jumpPanel){e.preventDefault();vscode.postMessage({type:'switchPanel',panel:jumpPanel});return;}
         if(e.key==='?'){e.preventDefault();vscode.postMessage({type:'helpMenu'});return;} if(panel!=='conflicts'&&hit(e,u.undo)){e.preventDefault();vscode.postMessage({type:'dogfoodBoundary',event:'reflogUndo',key:norm(e)});vscode.postMessage({type:'reflogUndo'});return;} if(panel!=='conflicts'&&hit(e,u.redo)){e.preventDefault();vscode.postMessage({type:'reflogRedo'});return;} if(hit(e,u.focusMainView)){e.preventDefault();vscode.postMessage({type:'focusMainView'});return;} if(e.shiftKey&&e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:1});return;} if(e.shiftKey&&e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:-1});return;} if(e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;} if(hit(e,u.prevPage)){e.preventDefault();vscode.postMessage({type:'move',delta:-10});return;} if(hit(e,u.nextPage)){e.preventDefault();vscode.postMessage({type:'move',delta:10});return;} if(hit(e,u.gotoTop,u.gotoTopAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'top'});return;} if(hit(e,u.gotoBottom,u.gotoBottomAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'bottom'});return;} if(hit(e,u.toggleRangeSelect)){e.preventDefault();vscode.postMessage({type:'rangeToggle'});return;} if(hit(e,u.startSearch)){e.preventDefault();vscode.postMessage({type:'search'});return;} if(panel==='files'&&hit(e,f.openStatusFilter)){e.preventDefault();vscode.postMessage({type:'statusFilter'});return;} if(panel==='files'&&hit(e,f.toggleTreeView)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='files'&&hit(e,f.collapseAll)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='files'&&hit(e,f.expandAll)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(hit(e,u.nextItem,u.nextItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(hit(e,u.prevItem,u.prevItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;}
-        if(hit(e,u.createRebaseOptionsMenu)){e.preventDefault();vscode.postMessage({type:'operationOptions'});return;} if(hit(e,u.diffingMenu,u.diffingMenuAlt)){e.preventDefault();vscode.postMessage({type:'diffingMenu'});return;} if(hit(e,u.nextBlock,u.nextBlockAlt,u.nextBlockAlt2)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:1});return;} if(hit(e,u.prevBlock,u.prevBlockAlt,u.prevBlockAlt2)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:-1});return;}
+        if(hit(e,u.createRebaseOptionsMenu)){e.preventDefault();vscode.postMessage({type:'operationOptions'});return;} if(hit(e,u.diffingMenu,u.diffingMenuAlt)){e.preventDefault();vscode.postMessage({type:'diffingMenu'});return;} if(hit(e,blockNavigation.next)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:1});return;} if(hit(e,blockNavigation.previous)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:-1});return;}
         const c=keymap.commits; if(panel==='commits'&&hit(e,c.checkoutCommit,c.copyCommitAttributeToClipboard,c.newBranch,c.renameCommit,c.amendToCommit,c.createFixupCommit,c.markCommitAsFixup,c.cherryPickCopy,c.pasteCommits,c.revertCommit,c.createTag,c.tagCommit,c.viewResetOptions,c.openInBrowser,c.openLogMenu)){e.preventDefault();vscode.postMessage({type:'commitAction',key:norm(e)});return;}
         const b=keymap.branches, st=keymap.stash; if(panel==='status'&&['o','e','a','A','u','<enter>'].includes(norm(e))){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='hunks'&&hit(e,u.select,u.togglePanel,u.remove,m.toggleSelectHunk)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='branches'&&hit(e,u.select,u.new,u.remove,b.checkoutBranchByName,b.checkoutPreviousBranch,b.renameBranch,b.mergeIntoCurrentBranch,b.rebaseBranch,b.forceCheckoutBranch,b.setUpstream,b.fastForward,b.createTag,b.sortOrder)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='stash'&&hit(e,u.goInto,st.apply,st.popStash,st.newBranch,st.renameStash,u.remove)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='tags'&&hit(e,u.select,u.new,u.remove,b.createTag,b.pushTag)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='remotes'&&hit(e,u.new,u.edit,u.remove,b.fetchRemote,b.addForkRemote)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='conflicts'&&(hit(e,u.goInto,u.openFile)||['1','2','b','m'].includes(norm(e)))){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;}
         if(hit(e,u.select)){e.preventDefault();vscode.postMessage({type:'toggle'});return;} if(panel==='status'&&hit(e,u.goInto)){e.preventDefault();vscode.postMessage({type:'repoMenu'});return;} if(hit(e,u.goInto)){e.preventDefault();vscode.postMessage({type:'enter'});return;} if(hit(e,u.openFile)){e.preventDefault();vscode.postMessage({type:'openFile'});return;} if(hit(e,u.edit)){e.preventDefault();vscode.postMessage({type:'editFile'});return;} if(panel==='files'&&hit(e,f.copyFileInfoToClipboard)){e.preventDefault();vscode.postMessage({type:'copyInfo'});return;} if(panel==='files'&&hit(e,f.copyPath,u.copyToClipboard)){e.preventDefault();vscode.postMessage({type:'copyPath'});return;} if(panel!=='files'&&hit(e,u.copyToClipboard)){e.preventDefault();vscode.postMessage({type:'copyInfo'});return;} if(panel==='files'&&hit(e,f.ignoreFile)){e.preventDefault();vscode.postMessage({type:'ignoreMenu'});return;} if(panel==='files'&&hit(e,f.fetch)){e.preventDefault();vscode.postMessage({type:'fetch'});return;}
