@@ -1103,17 +1103,31 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
           return waitFor(panelText, 10000, 250, `panel ${panelKey} ${panelTitle} reveal after retry`);
         });
       evidence.push({ step: `panel-jump-${panelKey}`, screenshot: await screenshot(Page, `02-panel-jump-${panelKey}`), status: status(fixture), textSample: jumpText.slice(0, 1200) });
+      if ((panelKey === '4' || panelKey === '5') && process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS) {
+        await key(Input, 'ArrowDown');
+        await sleep(STEP_DELAY);
+      }
+      if (panelKey === '4' && process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS) await waitFor(async () => {
+        if (!fs.existsSync(panelNavigationBoundaryReport)) return null;
+        return fs.readFileSync(panelNavigationBoundaryReport, 'utf8').split('\n').some(line => line.includes('"event":"richPreviewPanel"') && line.includes('"action":"created"')) || null;
+      }, 10000, 100, 'commit preview panel creation before reuse');
       if (panelKey === '1') checks.push({ name: 'Focus 1 keeps LGVS ownership or reveals Status panel', ok: /-- (STATUS|HUNK)\b/.test(jumpText) || jumpText.includes('1 STATUS') || /master\s*·\s*current/i.test(jumpText), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '2') checks.push({ name: 'Moving from 1 Status to 2 Files hides Status again', ok: !jumpText.includes('1 STATUS') && /-- FILES · LG --/.test(jumpText), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '7') checks.push({ name: 'Focus 7 reveals Tags in the SCM sidebar', ok: jumpText.includes('7 TAGS'), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '8') checks.push({ name: 'Focus 8 reveals Remotes in the SCM sidebar', ok: jumpText.includes('8 REMOTES'), textSample: jumpText.slice(0, 1200) });
     }
 
+    const previewPanelLifecycle = await waitFor(async () => {
+      if (!fs.existsSync(panelNavigationBoundaryReport)) return null;
+      const events = fs.readFileSync(panelNavigationBoundaryReport, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(event => event.event === 'richPreviewPanel');
+      return events.filter(event => event.action === 'created').length === 1 && events.some(event => event.action === 'reused') ? events : null;
+    }, 10000, 100, 'commit/stash preview panel reuse');
     const allEditorTabs = await editorTabLabels(Runtime);
     const dynamicPreviewTabs = allEditorTabs.filter(label => /^LazyGitVS\b/.test(label));
     const untitledPreviewTabs = allEditorTabs.filter(label => /Untitled/i.test(label));
-    evidence.push({ step: 'single-dynamic-preview-tab-after-navigation', screenshot: await screenshot(Page, '02-single-dynamic-preview-tab-after-navigation'), status: status(fixture), previewTabs: dynamicPreviewTabs });
+    evidence.push({ step: 'single-dynamic-preview-tab-after-navigation', screenshot: await screenshot(Page, '02-single-dynamic-preview-tab-after-navigation'), status: status(fixture), previewTabs: dynamicPreviewTabs, previewPanelLifecycle });
     checks.push({ name: 'Default preview tab policy keeps only one dynamic LazyGitVS tab while navigating previews', ok: dynamicPreviewTabs.length <= 1, previewTabs: dynamicPreviewTabs });
+    checks.push({ name: 'Commit/stash previews reuse one webview instance without history churn', ok: previewPanelLifecycle.filter(event => event.action === 'created').length === 1 && previewPanelLifecycle.some(event => event.action === 'reused'), previewPanelLifecycle });
     checks.push({ name: `Generated previews use named ${VIRTUAL_PREVIEW_URI_PREFIX} virtual documents, not Untitled buffers`, ok: dynamicPreviewTabs.every(label => /^LazyGitVS\b/.test(label)) && untitledPreviewTabs.length === 0, previewTabs: dynamicPreviewTabs, allEditorTabs, untitledPreviewTabs });
     if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS) {
       finishDogfoodReport();

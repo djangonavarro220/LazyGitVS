@@ -1,10 +1,12 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { cloneGitConfig } from './lazygitConfig';
 import { git, workspaceRoot, type ChangedFile, type Commit, type CommitFile, type ConflictFile, type LazyGitGitRuntimeConfig, type Stash, type StashFile } from './gitService';
 import { gitDiffConfigArgs } from './gitActions';
 import { EMPTY_PREVIEW_SCHEME, VIRTUAL_PREVIEW_SCHEME } from './previewDocuments';
 import { commitPatchPreviewHtml } from './richPreview';
+import { PreviewRequestGate } from './previewRequestGate';
 
 function shellWords(command: string): string[] {
   const words: string[] = [];
@@ -83,28 +85,103 @@ export async function previewStashFileDiff(stash: Stash, file: StashFile, preser
   await vscode.commands.executeCommand('vscode.diff', left, right, `LazyGitVS: ${file.path}`, { preview: preserveFocus, preserveFocus, viewColumn: vscode.ViewColumn.Active });
 }
 
-export async function showCommitPreview(commit: Commit, gitConfig: LazyGitGitRuntimeConfig = cloneGitConfig(), preserveFocus = true) {
-  await closeLazyGitVSPreviewTabsIfSingle();
-  const patch = await git(['show', ...gitDiffConfigArgs(gitConfig, true), '--stat', '--patch', commit.hash]);
+const richPreviewRequests = new PreviewRequestGate();
+
+function currentRichPreviewMode(): 'single' | 'multiple' {
+  return vscode.workspace.getConfiguration('lazygitvs').get<'single' | 'multiple'>('previewTabs', 'single');
+}
+
+function richPreviewShouldOpen(key: string): () => boolean {
+  const mode = currentRichPreviewMode();
+  if (mode !== 'single') return () => currentRichPreviewMode() === 'multiple';
+  const request = richPreviewRequests.begin(key);
+  return () => currentRichPreviewMode() === 'single' && richPreviewRequests.isCurrent(request);
+}
+
+let richPreviewMode: 'single' | 'multiple' | undefined;
+let singleModeTransition: Promise<void> | undefined;
+let singleRichPreviewPanel: vscode.WebviewPanel | undefined;
+let singleRichPreviewCreation: Promise<void> | undefined;
+
+function recordRichPreviewPanelLifecycle(action: 'created' | 'reused', title: string) {
+  const report = process.env.LGVS_DOGFOOD_BOUNDARY_REPORT;
+  if (!report) return;
+  try { fs.appendFileSync(report, `${JSON.stringify({ at: new Date().toISOString(), event: 'richPreviewPanel', action, title })}\n`, { mode: 0o600 }); } catch { /* dogfood diagnostics must not affect product behavior */ }
+}
+
+function createRichPreviewPanel(title: string, html: string, preserveFocus: boolean) {
   const panel = vscode.window.createWebviewPanel(
     'lazygitvs.preview',
-    `LazyGitVS: Commit ${commit.hash}`,
+    title,
     { viewColumn: vscode.ViewColumn.Active, preserveFocus },
     { enableScripts: false, retainContextWhenHidden: false }
   );
-  panel.webview.html = commitPatchPreviewHtml({ title: `Commit ${commit.hash}`, hash: commit.hash, subject: commit.subject, author: commit.author, relativeDate: commit.relativeDate }, patch);
+  panel.webview.html = html;
+  recordRichPreviewPanelLifecycle('created', title);
+  return panel;
+}
+
+function reuseRichPreviewPanel(panel: vscode.WebviewPanel, title: string, html: string, preserveFocus: boolean) {
+  panel.title = title;
+  panel.webview.html = html;
+  panel.reveal(vscode.ViewColumn.Active, preserveFocus);
+  recordRichPreviewPanelLifecycle('reused', title);
+  return panel;
+}
+
+async function showRichPreviewPanel(title: string, html: string, preserveFocus: boolean, shouldOpen: () => boolean) {
+  if (!shouldOpen()) return;
+  const mode = currentRichPreviewMode();
+  if (mode !== 'single') {
+    richPreviewMode = 'multiple';
+    return createRichPreviewPanel(title, html, preserveFocus);
+  }
+  if (richPreviewMode === 'multiple' && !singleModeTransition) {
+    richPreviewMode = 'single';
+    const transition = (async () => {
+      await closeLazyGitVSPreviewTabsIfSingle();
+      singleRichPreviewPanel = undefined;
+    })();
+    singleModeTransition = transition;
+  }
+  richPreviewMode = 'single';
+  if (singleModeTransition) {
+    const transition = singleModeTransition;
+    try { await transition; } finally { if (singleModeTransition === transition) singleModeTransition = undefined; }
+    if (!shouldOpen()) return;
+  }
+  if (singleRichPreviewPanel) return reuseRichPreviewPanel(singleRichPreviewPanel, title, html, preserveFocus);
+  if (singleRichPreviewCreation) {
+    await singleRichPreviewCreation;
+    if (!shouldOpen()) return;
+    if (singleRichPreviewPanel) return reuseRichPreviewPanel(singleRichPreviewPanel, title, html, preserveFocus);
+    return showRichPreviewPanel(title, html, preserveFocus, shouldOpen);
+  }
+
+  const creation = (async () => {
+    await closeLazyGitVSPreviewTabsIfSingle();
+    if (!shouldOpen()) return;
+    const panel = createRichPreviewPanel(title, html, preserveFocus);
+    singleRichPreviewPanel = panel;
+    panel.onDidDispose(() => { if (singleRichPreviewPanel === panel) singleRichPreviewPanel = undefined; });
+  })();
+  singleRichPreviewCreation = creation;
+  try { await creation; } finally { if (singleRichPreviewCreation === creation) singleRichPreviewCreation = undefined; }
+  return singleRichPreviewPanel;
+}
+
+export async function showCommitPreview(commit: Commit, gitConfig: LazyGitGitRuntimeConfig = cloneGitConfig(), preserveFocus = true) {
+  const shouldOpen = richPreviewShouldOpen(`commit:${commit.hash}`);
+  const patch = await git(['show', ...gitDiffConfigArgs(gitConfig, true), '--stat', '--patch', commit.hash]);
+  if (!shouldOpen()) return;
+  await showRichPreviewPanel(`LazyGitVS: Commit ${commit.hash}`, commitPatchPreviewHtml({ title: `Commit ${commit.hash}`, hash: commit.hash, subject: commit.subject, author: commit.author, relativeDate: commit.relativeDate }, patch), preserveFocus, shouldOpen);
 }
 
 export async function showStashPreview(stash: Stash, gitConfig: LazyGitGitRuntimeConfig = cloneGitConfig(), preserveFocus = true) {
-  await closeLazyGitVSPreviewTabsIfSingle();
+  const shouldOpen = richPreviewShouldOpen(`stash:${stash.ref}`);
   const patch = await git(['stash', 'show', ...gitDiffConfigArgs(gitConfig, true), '--stat', '--patch', stash.ref]);
-  const panel = vscode.window.createWebviewPanel(
-    'lazygitvs.preview',
-    `LazyGitVS: ${stash.ref}`,
-    { viewColumn: vscode.ViewColumn.Active, preserveFocus },
-    { enableScripts: false, retainContextWhenHidden: false }
-  );
-  panel.webview.html = commitPatchPreviewHtml({ title: stash.ref, subject: stash.message, subtitle: stash.ref }, patch);
+  if (!shouldOpen()) return;
+  await showRichPreviewPanel(`LazyGitVS: ${stash.ref}`, commitPatchPreviewHtml({ title: stash.ref, subject: stash.message, subtitle: stash.ref }, patch), preserveFocus, shouldOpen);
 }
 
 export function revealVisibleEditorLine(filePath: string, line: number) {

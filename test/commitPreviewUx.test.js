@@ -17,6 +17,31 @@ assert(richPreview.includes('.diff-add') && richPreview.includes('.diff-del'), '
 assert(richPreview.includes('class="file-card"'), 'Rich preview should split file diffs into readable file cards');
 assert(richPreview.includes('class="stat-file"') && richPreview.includes('class="stat-bar"'), 'Summary stats should render as structured rows with visual bars, not monospaced raw git --stat text');
 
+const workspaceActions = fs.readFileSync(path.join(root, 'src', 'workspaceActions.ts'), 'utf8');
+assert(workspaceActions.includes('let singleRichPreviewPanel'), 'single-preview mode must retain one reusable commit/stash webview instead of recreating history entries');
+assert(workspaceActions.includes('let singleRichPreviewCreation'), 'concurrent commit refreshes must share one in-flight panel creation');
+assert(workspaceActions.includes('await singleRichPreviewCreation'), 'a second preview request must await and reuse the in-flight webview');
+assert(workspaceActions.includes('panel.title = title') && workspaceActions.includes('panel.webview.html = html'), 'moving over commits must update the existing rich preview in place');
+assert(workspaceActions.includes('panel.reveal(vscode.ViewColumn.Active, preserveFocus)'), 'reused rich preview must reveal the existing tab without creating another editor-history entry');
+assert((workspaceActions.match(/createWebviewPanel\(/g) || []).length === 1, 'commit and stash previews must share one panel factory instead of recreating separate webviews');
+assert(workspaceActions.includes("await showRichPreviewPanel(`LazyGitVS: Commit ${commit.hash}`"), 'commit previews must use the reusable panel host');
+assert(workspaceActions.includes("await showRichPreviewPanel(`LazyGitVS: ${stash.ref}`"), 'stash previews must use the same reusable panel host');
+
+assert(workspaceActions.includes("import { PreviewRequestGate } from './previewRequestGate'"), 'rich previews must use the tested latest-request-wins gate');
+assert(workspaceActions.includes('richPreviewShouldOpen(`commit:${commit.hash}`)') && workspaceActions.includes('richPreviewShouldOpen(`stash:${stash.ref}`)'), 'commit and stash preview requests must claim keyed single-mode guards before awaiting Git');
+assert((workspaceActions.match(/if \(!shouldOpen\(\)\) return;/g) || []).length >= 4, 'stale rich-preview work must be rejected both after Git and around asynchronous panel creation');
+assert(workspaceActions.includes('async function showRichPreviewPanel(title: string, html: string, preserveFocus: boolean, shouldOpen: () => boolean)'), 'panel publication must accept a latest-request guard');
+assert(workspaceActions.includes('await closeLazyGitVSPreviewTabsIfSingle();\n    if (!shouldOpen()) return;'), 'the request must be revalidated after asynchronous tab cleanup and immediately before panel creation');
+assert((workspaceActions.match(/preserveFocus, shouldOpen\);/g) || []).length >= 2, 'commit and stash previews must carry their generation guard through final publication');
+assert(workspaceActions.includes("let richPreviewMode: 'single' | 'multiple' | undefined"), 'rich preview host must track preview mode transitions');
+assert(workspaceActions.includes('let singleModeTransition: Promise<void> | undefined'), 'multiple-to-single cleanup must be serialized across concurrent preview requests');
+assert(workspaceActions.includes("if (richPreviewMode === 'multiple' && !singleModeTransition)"), 'returning to single mode must close preserved multiple previews before singleton reuse');
+assert(workspaceActions.includes("if (mode !== 'single') return () => currentRichPreviewMode() === 'multiple';"), 'multiple preview mode must preserve every requested panel only while the setting remains multiple');
+assert(workspaceActions.includes("recordRichPreviewPanelLifecycle('created'"), 'real dogfood must observe exactly when a rich preview panel is created');
+assert(workspaceActions.includes("recordRichPreviewPanelLifecycle('reused'"), 'real dogfood must observe in-place preview reuse');
+const dogfood = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
+assert(dogfood.includes('Commit/stash previews reuse one webview instance without history churn'), 'preview-tabs dogfood must verify create-vs-reuse lifecycle, not only visible tab count');
+
 const { commitPatchPreviewHtml } = require('../out/richPreview.js');
 const html = commitPatchPreviewHtml({ title: 'Commit abc123', hash: 'abc123', subject: 'Pretty summary' }, `commit abc123
 Author: Test <t@example.test>
