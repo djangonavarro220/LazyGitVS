@@ -259,7 +259,7 @@
             "multiple"
           ],
           "default": "single",
-          "description": "Controls LazyGitVS preview tabs. 'single' keeps one dynamic LazyGitVS: <file> viewer; 'multiple' preserves the old behavior of leaving each preview tab open."
+          "description": "Controls file and diff preview cleanup. 'single' closes the previous LazyGitVS preview; 'multiple' lets VS Code preserve native file/diff previews. Commit and stash hover previews always reuse one transient viewer."
         }
       }
     },

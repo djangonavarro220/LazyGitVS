@@ -46,6 +46,14 @@ export async function closeLazyGitVSPreviewTabsIfSingle() {
   if (tabs.length) await vscode.window.tabGroups.close(tabs, true);
 }
 
+async function closeRichPreviewPanels() {
+  const tabs = vscode.window.tabGroups.all.flatMap(group => group.tabs).filter(tab => {
+    const input = tab.input as { viewType?: string } | undefined;
+    return input?.viewType === 'lazygitvs.preview';
+  });
+  if (tabs.length) await vscode.window.tabGroups.close(tabs, true);
+}
+
 export async function previewDiff(file: ChangedFile | ConflictFile, preserveFocus = true, shouldOpen = () => true) {
   await closeLazyGitVSPreviewTabsIfSingle();
   if (!shouldOpen()) return false;
@@ -87,19 +95,11 @@ export async function previewStashFileDiff(stash: Stash, file: StashFile, preser
 
 const richPreviewRequests = new PreviewRequestGate();
 
-function currentRichPreviewMode(): 'single' | 'multiple' {
-  return vscode.workspace.getConfiguration('lazygitvs').get<'single' | 'multiple'>('previewTabs', 'single');
-}
-
 function richPreviewShouldOpen(key: string): () => boolean {
-  const mode = currentRichPreviewMode();
-  if (mode !== 'single') return () => currentRichPreviewMode() === 'multiple';
   const request = richPreviewRequests.begin(key);
-  return () => currentRichPreviewMode() === 'single' && richPreviewRequests.isCurrent(request);
+  return () => richPreviewRequests.isCurrent(request);
 }
 
-let richPreviewMode: 'single' | 'multiple' | undefined;
-let singleModeTransition: Promise<void> | undefined;
 let singleRichPreviewPanel: vscode.WebviewPanel | undefined;
 let singleRichPreviewCreation: Promise<void> | undefined;
 
@@ -131,25 +131,6 @@ function reuseRichPreviewPanel(panel: vscode.WebviewPanel, title: string, html: 
 
 async function showRichPreviewPanel(title: string, html: string, preserveFocus: boolean, shouldOpen: () => boolean) {
   if (!shouldOpen()) return;
-  const mode = currentRichPreviewMode();
-  if (mode !== 'single') {
-    richPreviewMode = 'multiple';
-    return createRichPreviewPanel(title, html, preserveFocus);
-  }
-  if (richPreviewMode === 'multiple' && !singleModeTransition) {
-    richPreviewMode = 'single';
-    const transition = (async () => {
-      await closeLazyGitVSPreviewTabsIfSingle();
-      singleRichPreviewPanel = undefined;
-    })();
-    singleModeTransition = transition;
-  }
-  richPreviewMode = 'single';
-  if (singleModeTransition) {
-    const transition = singleModeTransition;
-    try { await transition; } finally { if (singleModeTransition === transition) singleModeTransition = undefined; }
-    if (!shouldOpen()) return;
-  }
   if (singleRichPreviewPanel) return reuseRichPreviewPanel(singleRichPreviewPanel, title, html, preserveFocus);
   if (singleRichPreviewCreation) {
     await singleRichPreviewCreation;
@@ -159,7 +140,7 @@ async function showRichPreviewPanel(title: string, html: string, preserveFocus: 
   }
 
   const creation = (async () => {
-    await closeLazyGitVSPreviewTabsIfSingle();
+    await closeRichPreviewPanels();
     if (!shouldOpen()) return;
     const panel = createRichPreviewPanel(title, html, preserveFocus);
     singleRichPreviewPanel = panel;

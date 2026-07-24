@@ -478,6 +478,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     'workbench.secondarySideBar.defaultVisibility': 'hidden',
     'git.repositoryScanMaxDepth': 4,
     'git.repositoryScanIgnoredFolders': ['node_modules'],
+    'lazygitvs.previewTabs': process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS ? 'multiple' : 'single',
     'telemetry.telemetryLevel': 'off'
   }, null, 2));
   write(path.join(userData, 'User', 'keybindings.json'), JSON.stringify([
@@ -1124,10 +1125,11 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     }, 10000, 100, 'commit/stash preview panel reuse');
     const allEditorTabs = await editorTabLabels(Runtime);
     const dynamicPreviewTabs = allEditorTabs.filter(label => /^LazyGitVS\b/.test(label));
+    const richPreviewTabs = allEditorTabs.filter(label => /^LazyGitVS:/.test(label));
     const untitledPreviewTabs = allEditorTabs.filter(label => /Untitled/i.test(label));
-    evidence.push({ step: 'single-dynamic-preview-tab-after-navigation', screenshot: await screenshot(Page, '02-single-dynamic-preview-tab-after-navigation'), status: status(fixture), previewTabs: dynamicPreviewTabs, previewPanelLifecycle });
-    checks.push({ name: 'Default preview tab policy keeps only one dynamic LazyGitVS tab while navigating previews', ok: dynamicPreviewTabs.length <= 1, previewTabs: dynamicPreviewTabs });
-    checks.push({ name: 'Commit/stash previews reuse one webview instance without history churn', ok: previewPanelLifecycle.filter(event => event.action === 'created').length === 1 && previewPanelLifecycle.some(event => event.action === 'reused'), previewPanelLifecycle });
+    evidence.push({ step: 'multiple-mode-single-dynamic-preview-after-navigation', screenshot: await screenshot(Page, '02-multiple-mode-single-dynamic-preview-after-navigation'), status: status(fixture), previewTabs: dynamicPreviewTabs, richPreviewTabs, previewPanelLifecycle });
+    checks.push({ name: 'previewTabs multiple still keeps one transient rich preview while navigating commits and stash', ok: richPreviewTabs.length === 1, richPreviewTabs, allEditorTabs });
+    checks.push({ name: 'Commit/stash previews keep one webview even when previewTabs is multiple', ok: previewPanelLifecycle.filter(event => event.action === 'created').length === 1 && previewPanelLifecycle.some(event => event.action === 'reused'), previewPanelLifecycle });
     checks.push({ name: `Generated previews use named ${VIRTUAL_PREVIEW_URI_PREFIX} virtual documents, not Untitled buffers`, ok: dynamicPreviewTabs.every(label => /^LazyGitVS\b/.test(label)) && untitledPreviewTabs.length === 0, previewTabs: dynamicPreviewTabs, allEditorTabs, untitledPreviewTabs });
     if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS) {
       finishDogfoodReport();
