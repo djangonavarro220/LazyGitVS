@@ -1140,18 +1140,18 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
           return clickFirstCommit();
         });
         richPreviewSnapshots.push(await waitFor(async () => {
-          const tabs = (await editorTabLabels(Runtime)).filter(label => /^LazyGitVS:/.test(label));
+          const tabs = (await editorTabLabels(Runtime)).filter(label => /^LazyGitVS: (?:Commit\b|stash@\{)/.test(label));
           return tabs.length === 1 ? { selection: 'dogfood comm', tabs } : null;
         }, 10000, 100, 'one rich-preview tab after the first commit'));
         assert(await clickWorkbenchPaneRow(Runtime, Input, '4 COMMITS', 1), 'Targeted preview dogfood could not click the second commit row');
         richPreviewSnapshots.push(await waitFor(async () => {
-          const tabs = (await editorTabLabels(Runtime)).filter(label => /^LazyGitVS:/.test(label));
+          const tabs = (await editorTabLabels(Runtime)).filter(label => /^LazyGitVS: (?:Commit\b|stash@\{)/.test(label));
           return tabs.length === 1 ? { selection: 'initial', tabs } : null;
         }, 10000, 100, 'one rich-preview tab after the second commit'));
       } else if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS && panelKey === '5') {
         assert(await clickWorkbenchPaneRow(Runtime, Input, '5 STASH', 0), 'Targeted preview dogfood could not click the stash row');
         richPreviewSnapshots.push(await waitFor(async () => {
-          const tabs = (await editorTabLabels(Runtime)).filter(label => /^LazyGitVS:/.test(label));
+          const tabs = (await editorTabLabels(Runtime)).filter(label => /^LazyGitVS: (?:Commit\b|stash@\{)/.test(label));
           return tabs.length === 1 ? { selection: 'stash@{0}', tabs } : null;
         }, 10000, 100, 'one rich-preview tab after the stash'));
       }
@@ -1164,7 +1164,7 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
     if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS) {
       const allEditorTabs = await editorTabLabels(Runtime);
       const dynamicPreviewTabs = allEditorTabs.filter(label => /^LazyGitVS\b/.test(label));
-      const richPreviewTabs = allEditorTabs.filter(label => /^LazyGitVS:/.test(label));
+      const richPreviewTabs = allEditorTabs.filter(label => /^LazyGitVS: (?:Commit\b|stash@\{)/.test(label));
       const untitledPreviewTabs = allEditorTabs.filter(label => /Untitled/i.test(label));
       evidence.push({ step: 'multiple-mode-single-dynamic-preview-after-navigation', screenshot: await screenshot(Page, '02-multiple-mode-single-dynamic-preview-after-navigation'), status: status(fixture), previewTabs: dynamicPreviewTabs, richPreviewTabs, richPreviewSnapshots });
       checks.push({ name: 'previewTabs multiple still keeps one transient rich preview while navigating commits and stash', ok: richPreviewTabs.length === 1, richPreviewTabs, allEditorTabs });
