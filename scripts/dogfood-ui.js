@@ -74,7 +74,11 @@ function addCheck(checks, check) {
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
 function nativeKey(keyName) {
-  const result = spawnSync('xdotool', ['search', '--onlyvisible', '--class', 'code', 'windowfocus', '--sync', 'key', '--clearmodifiers', keyName], { encoding: 'utf8', env: { ...process.env, DISPLAY: NATIVE_DISPLAY, XAUTHORITY: nativeXauthority } });
+  const options = { encoding: 'utf8', env: { ...process.env, DISPLAY: NATIVE_DISPLAY, XAUTHORITY: nativeXauthority } };
+  const focus = spawnSync('xdotool', ['getwindowfocus'], options);
+  const focusedWindow = (focus.stdout || '').trim();
+  if (focus.status !== 0 || !/^\d+$/.test(focusedWindow)) throw new Error(`xdotool could not resolve the focused X11 window: ${(focus.stderr || focus.stdout || '').trim()}`);
+  const result = spawnSync('xdotool', ['key', '--clearmodifiers', keyName], options);
   if (result.status !== 0) throw new Error(`xdotool could not send ${keyName}: ${(result.stderr || result.stdout || '').trim()}`);
 }
 
