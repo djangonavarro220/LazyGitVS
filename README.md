@@ -23,7 +23,7 @@ It is **not** a terminal wrapper. It uses VS Code-native surfaces where they are
   <img src="docs/assets/readme-hunk-mode.png" alt="LazyGitVS showing compact SCM sidebar panels and editor HUNK mode in a full VS Code window" />
 </p>
 
-Current preview: **0.1.102**
+Current preview: **0.1.103**
 
 ## Why this exists
 

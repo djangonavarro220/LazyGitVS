@@ -4,9 +4,16 @@ All notable changes to LazyGitVS will be documented here.
 
 ## Unreleased
 
+## 0.1.103 - Panel parity, transient previews, and large-repo performance
+
 - Restored default visibility for LGVS panels `2 Files` through `8 Remotes`; they stay visible instead of being hidden/materialized one at a time.
 - Paused the 10-second LGVS refresh ticker and file-watcher refresh scheduling while the VS Code window is unfocused/minimized, then run one catch-up refresh when focus returns.
 - Stopped idle refresh timers when the LGVS sidebar is closed and routed webview attach refreshes through the same background-aware scheduler.
+- Restored circular lazygit-style panel navigation with `←/→`, `h/l`, and `Shift+Tab/Tab`, including `Status ↔ Files` and `Status ↔ Remotes` wraparound with dynamic user keymaps.
+- Commit and stash hover previews now reuse one transient rich-preview editor in both `single` and `multiple` preview modes, clean up older rich previews, and prevent stale Git responses from publishing.
+- Added safe reflog-based undo/redo and operation-status parity for supported Git actions.
+- Added an immutable list-model core and faster file-tree construction, keeping navigation responsive in large repositories and avoiding unrelated full-panel rerenders.
+- Added executable lazygit parity tracking and stricter telemetry provenance/evidence gates for release verification.
 
 ## 0.1.102 - Navigation performance
 
