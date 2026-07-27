@@ -224,11 +224,11 @@ async function pageText(Runtime) {
   return r.result.value || '';
 }
 async function lazyGitPreviewTabLabels(Runtime) {
-  const r = await Runtime.evaluate({ expression: `Array.from(document.querySelectorAll('.tabs-container .tab, .tabs-and-actions-container .tab')).map(el => el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '').map(s => s.replace(/\s+/g, ' ').trim()).filter(s => /^LazyGitVS\b/.test(s) || s.includes(' LazyGitVS'))`, returnByValue: true });
+  const r = await Runtime.evaluate({ expression: `Array.from(document.querySelectorAll('.tabs-container > .tab, .tabs-and-actions-container > .tab')).map(el => el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '').map(s => s.replace(/\s+/g, ' ').trim()).filter(s => /^LazyGitVS\b/.test(s) || s.includes(' LazyGitVS'))`, returnByValue: true });
   return Array.from(new Set(r.result.value || []));
 }
 async function editorTabLabels(Runtime) {
-  const r = await Runtime.evaluate({ expression: `Array.from(document.querySelectorAll('.tabs-container .tab, .tabs-and-actions-container .tab')).map(el => el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '').map(s => s.replace(/\s+/g, ' ').trim()).filter(Boolean)`, returnByValue: true });
+  const r = await Runtime.evaluate({ expression: `Array.from(document.querySelectorAll('.tabs-container > .tab, .tabs-and-actions-container > .tab')).map(el => el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '').map(s => s.replace(/\s+/g, ' ').trim()).filter(Boolean)`, returnByValue: true });
   return Array.from(new Set(r.result.value || []));
 }
 function richPreviewHostLabels(labels) {
@@ -1156,7 +1156,7 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
         richPreviewSnapshots.push(await waitFor(async () => {
           const tabs = richPreviewHostLabels(await editorTabLabels(Runtime));
           return tabs.length === 1 ? { selection: 'stash@{0}', tabs } : null;
-        }, 20000, 100, 'one rich-preview tab after the stash'));
+        }, 10000, 100, 'one rich-preview tab after the stash'));
       }
       if (panelKey === '1') checks.push({ name: 'Focus 1 keeps LGVS ownership or reveals Status panel', ok: /-- (STATUS|HUNK)\b/.test(jumpText) || jumpText.includes('1 STATUS') || /master\s*·\s*current/i.test(jumpText), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '2') checks.push({ name: 'Moving from 1 Status to 2 Files hides Status again', ok: !jumpText.includes('1 STATUS') && /-- FILES · LG --/.test(jumpText), textSample: jumpText.slice(0, 1200) });
