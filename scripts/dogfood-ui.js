@@ -76,7 +76,7 @@ function assert(cond, msg) { if (!cond) throw new Error(msg); }
 function nativeModalAction(action) {
   const options = { encoding: 'utf8', env: { ...process.env, DISPLAY: NATIVE_DISPLAY, XAUTHORITY: nativeXauthority } };
   const point = action === 'confirm' ? [352, 64] : [117, 64];
-  const result = spawnSync('xdotool', ['mousemove', '--sync', String(point[0]), String(point[1]), 'click', '1'], options);
+  const result = spawnSync('xdotool', ['mousemove', String(point[0]), String(point[1]), 'click', '1'], options);
   if (result.status !== 0) throw new Error(`xdotool could not click native modal ${action}: ${(result.stderr || result.stdout || '').trim()}`);
 }
 
