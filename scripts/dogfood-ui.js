@@ -1112,6 +1112,7 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
     if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS) {
       await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
       await key(Input, '0', { ctrl: true, alt: true });
+      await sleep(500);
       await key(Input, 'Escape');
       await sleep(STEP_DELAY);
     }
@@ -1138,6 +1139,7 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
         await clickFirstCommit().catch(async () => {
           await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
           await key(Input, '0', { ctrl: true, alt: true });
+          await sleep(500);
           await key(Input, 'Escape');
           await chord(Input, 'ctrl+alt+4');
           return clickFirstCommit();
@@ -1239,6 +1241,7 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
     // Regression: nearby staged settings edits in the same file must remain navigable as separate hunks.
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
     await key(Input, '0', { ctrl: true, alt: true });
+    await sleep(500);
     await key(Input, 'Escape');
     await chord(Input, 'ctrl+alt+2');
     await waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '2 FILES', 1), 10000, 200, 'physical settings.json row in the primary repo');
