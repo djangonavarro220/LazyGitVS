@@ -1550,9 +1550,9 @@ async function main() {
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
     await key(Input, '1');
     await sleep(STEP_DELAY);
-    const secondaryOperationLabel = `(merging) ${path.basename(secondaryRepo)} → master`;
-    const selectedSecondaryStatusRow = await waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '1 STATUS', secondaryOperationLabel), 10000, 200, 'physical other-repo Status row');
-    assert(selectedSecondaryStatusRow, 'Status selection did not focus/select the exact other-repo operation row');
+    const secondaryRepoBasename = path.basename(secondaryRepo);
+    const selectedSecondaryStatusRow = await waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '1 STATUS', secondaryRepoBasename), 10000, 200, 'physical other-repo Status row');
+    assert(selectedSecondaryStatusRow, 'Status selection did not focus/select the exact other-repo basename row');
     await chord(Input, 'ctrl+alt+enter');
     const secondaryStatusPageText = await waitFor(async () => {
       const text = await pageText(Runtime);
