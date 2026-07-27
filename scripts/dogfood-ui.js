@@ -231,6 +231,9 @@ async function editorTabLabels(Runtime) {
   const r = await Runtime.evaluate({ expression: `Array.from(document.querySelectorAll('.tabs-container .tab, .tabs-and-actions-container .tab, .tab')).map(el => el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '').map(s => s.replace(/\s+/g, ' ').trim()).filter(Boolean)`, returnByValue: true });
   return Array.from(new Set(r.result.value || []));
 }
+function richPreviewHostLabels(labels) {
+  return Array.from(new Set(labels.map(label => label.match(/LazyGitVS: (?:Commit\s+[0-9a-f]+|stash@\{\d+\})/i)?.[0]).filter(Boolean)));
+}
 async function quickInputState(Runtime) {
   const r = await Runtime.evaluate({ expression: `(() => { const widget = document.querySelector('.quick-input-widget'); const input = widget?.querySelector('input'); const style = widget ? getComputedStyle(widget) : undefined; return { visible: !!widget && style?.display !== 'none' && style?.visibility !== 'hidden' && widget.getBoundingClientRect().height > 0, focused: document.activeElement === input, text: input?.value || '', placeholder: input?.getAttribute('aria-label') || input?.getAttribute('placeholder') || '' }; })()`, returnByValue: true });
   return r.result.value || { visible: false, focused: false, text: '', placeholder: '' };
@@ -1140,18 +1143,18 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
           return clickFirstCommit();
         });
         richPreviewSnapshots.push(await waitFor(async () => {
-          const tabs = (await editorTabLabels(Runtime)).filter(label => /^LazyGitVS: (?:Commit\b|stash@\{)/.test(label));
+          const tabs = richPreviewHostLabels(await editorTabLabels(Runtime));
           return tabs.length === 1 ? { selection: 'dogfood comm', tabs } : null;
         }, 10000, 100, 'one rich-preview tab after the first commit'));
         assert(await clickWorkbenchPaneRow(Runtime, Input, '4 COMMITS', 1), 'Targeted preview dogfood could not click the second commit row');
         richPreviewSnapshots.push(await waitFor(async () => {
-          const tabs = (await editorTabLabels(Runtime)).filter(label => /^LazyGitVS: (?:Commit\b|stash@\{)/.test(label));
+          const tabs = richPreviewHostLabels(await editorTabLabels(Runtime));
           return tabs.length === 1 ? { selection: 'initial', tabs } : null;
         }, 10000, 100, 'one rich-preview tab after the second commit'));
       } else if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS && panelKey === '5') {
         assert(await clickWorkbenchPaneRow(Runtime, Input, '5 STASH', 0), 'Targeted preview dogfood could not click the stash row');
         richPreviewSnapshots.push(await waitFor(async () => {
-          const tabs = (await editorTabLabels(Runtime)).filter(label => /^LazyGitVS: (?:Commit\b|stash@\{)/.test(label));
+          const tabs = richPreviewHostLabels(await editorTabLabels(Runtime));
           return tabs.length === 1 ? { selection: 'stash@{0}', tabs } : null;
         }, 10000, 100, 'one rich-preview tab after the stash'));
       }
@@ -1164,7 +1167,7 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
     if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS) {
       const allEditorTabs = await editorTabLabels(Runtime);
       const dynamicPreviewTabs = allEditorTabs.filter(label => /^LazyGitVS\b/.test(label));
-      const richPreviewTabs = allEditorTabs.filter(label => /^LazyGitVS: (?:Commit\b|stash@\{)/.test(label));
+      const richPreviewTabs = richPreviewHostLabels(allEditorTabs);
       const untitledPreviewTabs = allEditorTabs.filter(label => /Untitled/i.test(label));
       evidence.push({ step: 'multiple-mode-single-dynamic-preview-after-navigation', screenshot: await screenshot(Page, '02-multiple-mode-single-dynamic-preview-after-navigation'), status: status(fixture), previewTabs: dynamicPreviewTabs, richPreviewTabs, richPreviewSnapshots });
       checks.push({ name: 'previewTabs multiple still keeps one transient rich preview while navigating commits and stash', ok: richPreviewTabs.length === 1, richPreviewTabs, allEditorTabs });
