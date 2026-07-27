@@ -1087,6 +1087,10 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
 
     // Smoke all lazygit panel jumps before entering the editor flow. Use dogfood-only
     // keybindings so native editor focus cannot eat panel navigation.
+    if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS) {
+      await chord(Input, 'ctrl+alt+0');
+      await sleep(STEP_DELAY);
+    }
     for (const [panelKey, panelTitle] of [['1', 'Status'], ['2', 'Files'], ['3', 'Branches'], ['4', 'Commits'], ['5', 'Stash'], ['6', 'Conflicts'], ['7', 'Tags'], ['8', 'Remotes']]) {
       void panelTitle;
       await chord(Input, `ctrl+alt+${panelKey}`);
@@ -1109,7 +1113,13 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
           if (!fs.existsSync(panelNavigationBoundaryReport)) return null;
           return fs.readFileSync(panelNavigationBoundaryReport, 'utf8').split('\n').some(line => line.includes('"event":"richPreviewPanel"') && line.includes(`"action":"${action}"`)) || null;
         };
-        await runCommandPalette(Input, 'LazyGitVS: Focus 4 Commits');
+        const commitFocusBoundaryOffset = fs.existsSync(panelNavigationBoundaryReport) ? fs.statSync(panelNavigationBoundaryReport).size : 0;
+        await chord(Input, 'ctrl+alt+4');
+        await waitFor(() => {
+          if (!fs.existsSync(panelNavigationBoundaryReport)) return null;
+          const freshEvents = fs.readFileSync(panelNavigationBoundaryReport, 'utf8').slice(commitFocusBoundaryOffset);
+          return freshEvents.includes('"event":"panelFocus"') && freshEvents.includes('"activeView":"commits"') || null;
+        }, 10000, 100, 'fresh physical Commits focus ACK');
         assert(await clickLgvsRowWithTitle(Runtime, Input, 'dogfood commit file tree'), 'Targeted preview dogfood could not click the first commit row');
         await waitFor(() => hasPreviewLifecycleAction('created'), 10000, 100, 'commit preview panel creation after clicking the first commit');
         assert(await clickLgvsRowWithTitle(Runtime, Input, 'initial'), 'Targeted preview dogfood could not click the second commit row');
