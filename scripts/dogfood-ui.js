@@ -37,14 +37,30 @@ const THEME = process.env.LGVS_DOGFOOD_THEME || 'Default Light Modern';
 const VIRTUAL_PREVIEW_URI_PREFIX = 'lazygitvs-preview:';
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-function getJson(url) {
+function getJson(url, timeoutMs = 3000) {
   return new Promise((resolve, reject) => {
-    http.get(url, res => {
+    let settled = false;
+    const fail = error => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+    const request = http.get(url, res => {
       let body = '';
       res.setEncoding('utf8');
-      res.on('data', c => body += c);
-      res.on('end', () => { try { resolve(JSON.parse(body)); } catch (e) { reject(e); } });
-    }).on('error', reject);
+      res.on('data', chunk => body += chunk);
+      res.on('end', () => {
+        if (settled) return;
+        try {
+          settled = true;
+          resolve(JSON.parse(body));
+        } catch (error) { fail(error); }
+      });
+      res.on('aborted', () => fail(new Error(`CDP JSON response aborted: ${url}`)));
+      res.on('error', fail);
+    });
+    request.setTimeout(timeoutMs, () => request.destroy(new Error(`CDP JSON request timed out after ${timeoutMs}ms: ${url}`)));
+    request.on('error', fail);
   });
 }
 async function waitFor(fn, timeoutMs = 20000, intervalMs = 250) {
@@ -153,7 +169,7 @@ function runMatrixIfNeeded() {
 
 async function cdpConnect() {
   const targets = await waitFor(async () => {
-    const t = await getJson(`http://127.0.0.1:${PORT}/json/list`);
+    const t = await getJson(`http://127.0.0.1:${PORT}/json/list`, 3000);
     return t && t.length ? t : null;
   }, 45000, 500, 'CDP targets');
   const page = targets.find(t => /Visual Studio Code|Extension Development Host/i.test(t.title || '') && t.type === 'page') || targets.find(t => t.type === 'page') || targets[0];
@@ -470,7 +486,7 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
   await sleep(STEP_DELAY);
   return point;
 }
-(async () => {
+async function main() {
   if (runMatrixIfNeeded()) return;
   let lifecyclePhase = 'setup';
   let rootProcessIdentity;
@@ -1612,4 +1628,8 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
     }
     if (TELEMETRY) process.exit(process.exitCode || 0);
   }
-})();
+}
+
+if (require.main === module) main();
+
+module.exports = { getJson };

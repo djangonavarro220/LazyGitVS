@@ -1,5 +1,6 @@
 const assert = require('assert');
 const fs = require('fs');
+const http = require('http');
 const path = require('path');
 const os = require('os');
 
@@ -9,6 +10,7 @@ const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8'
 const dogfoodFixtures = fs.readFileSync(path.join(root, 'scripts', 'dogfood', 'fixtures.js'), 'utf8');
 const dogfoodReporting = fs.readFileSync(path.join(root, 'scripts', 'dogfood', 'reporting.js'), 'utf8');
 const { writeNativeScreenshot, writeScreenshot } = require(path.join(root, 'scripts', 'dogfood', 'screenshots.js'));
+const { getJson } = require(path.join(root, 'scripts', 'dogfood-ui.js'));
 const dogfoodSource = `${dogfood}\n${dogfoodFixtures}\n${dogfoodReporting}`;
 const testingDoc = fs.readFileSync(path.join(root, 'docs', 'testing-and-verification.md'), 'utf8');
 const knownBugsDoc = fs.readFileSync(path.join(root, 'docs', 'known-bugs.md'), 'utf8');
@@ -37,6 +39,33 @@ function test(name, fn) {
 }
 
 process.on('beforeExit', async () => { await Promise.all(pendingTests); });
+
+test('getJson aborts an incomplete CDP response within the per-attempt timeout', async () => {
+  let requestAborted;
+  const server = http.createServer((req, res) => {
+    if (req.url !== '/json/list') {
+      res.writeHead(404).end();
+      return;
+    }
+    requestAborted = new Promise(resolve => req.once('aborted', resolve));
+    // Deliberately accept the request without completing its response.
+  });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  try {
+    const address = server.address();
+    await assert.rejects(
+      () => getJson(`http://127.0.0.1:${address.port}/json/list`, 75),
+      /CDP JSON request timed out after 75ms:/
+    );
+    assert(requestAborted, 'the test server must receive the request before the timeout');
+    await requestAborted;
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+  }
+});
 
 function requireDogfoodInvariant(name, pattern) {
   assert(pattern.test(dogfoodSource), `dogfood sources must cover: ${name}`);
