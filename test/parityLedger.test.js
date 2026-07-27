@@ -164,6 +164,7 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 assert.strictEqual(pkg.scripts['check:parity-ledger'], 'node scripts/validate-parity-ledger.js');
 const ci = fs.readFileSync(path.join(root, '.github', 'workflows', 'ci.yml'), 'utf8');
 assert.match(ci, /npm run check:parity-ledger/);
+assert.match(ci, /uses: actions\/checkout@v4[\s\S]*?with:\s*\n\s*fetch-depth: 0/, 'CI must fetch full history before validating commit-backed parity evidence');
 const hostPathPrefix = `/${'ho'}me/`;
 assert(!fs.readFileSync(validatorPath, 'utf8').includes(hostPathPrefix));
 assert(!fs.readFileSync(__filename, 'utf8').includes(hostPathPrefix));
