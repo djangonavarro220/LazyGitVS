@@ -1215,6 +1215,7 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
 
     await chord(Input, 'ctrl+alt+3');
     await sleep(STEP_DELAY);
+    await waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '3 BRANCHES', 0), 10000, 200, 'physical master branch row');
     await chord(Input, 'ctrl+alt+enter');
     const branchEnterPageText = await waitFor(async () => {
       const text = await pageText(Runtime);
