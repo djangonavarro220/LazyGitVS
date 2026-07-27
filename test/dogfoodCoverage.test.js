@@ -86,7 +86,9 @@ test('dogfood asserts the documented visible UI smoke path', () => {
   requireDogfoodInvariant('contextual help focus return is covered', /Contextual help return keeps LGVS focus after active-panel lazy rendering/);
   assert(dogfood.includes("if (panelKey === '4') {"), 'full dogfood must deliberately stabilize commit selection before requiring rich-preview reuse evidence');
   assert(dogfood.includes("runCommandPalette(Input, 'LazyGitVS: Open Operation Options')"), 'full dogfood must retry operation options through the qualified command when the physical m key is lost');
+  assert(dogfood.includes("runCommandPalette(Input, 'LazyGitVS: Focus 4 Commits')"), 'full dogfood must explicitly focus Commits before driving rich-preview lifecycle');
   assert(dogfood.includes("'commit preview panel reuse before leaving Commits'"), 'full dogfood must confirm rich-preview reuse while Commits is still active');
+  assert(dogfood.includes('process.env.XAUTHORITY ||'), 'native screenshot capture must inherit the owning Xvfb authorization file');
   for (const workflow of [ciWorkflow, publishWorkflow]) assert(workflow.includes('sudo apt-get install -y imagemagick'), 'CI and publish workflows must install the native screenshot dependency used by broad dogfood');
 });
 

@@ -467,7 +467,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
   const vscodeVersion = JSON.parse(fs.readFileSync(path.join(path.dirname(codePath), 'resources', 'app', 'package.json'), 'utf8')).version;
   const userData = TELEMETRY ? path.join(TELEMETRY_CHILD_DIR, 'user-data') : fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-code-user-'));
   if (TELEMETRY) fs.mkdirSync(userData, { mode: 0o700 });
-  nativeXauthority = path.join(userData, 'Xauthority');
+  nativeXauthority = process.env.XAUTHORITY || path.join(userData, 'Xauthority');
   const undoRedoConfig = path.join(userData, 'lazygit-undo-redo.yml');
   const undoRedoBoundaryReport = path.join(userData, 'lazygit-undo-redo-boundary.jsonl');
   const panelNavigationBoundaryReport = process.env.LGVS_DOGFOOD_UNDO_REDO ? undoRedoBoundaryReport : path.join(userData, 'lazygit-panel-navigation-boundary.jsonl');
@@ -1109,12 +1109,11 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
           if (!fs.existsSync(panelNavigationBoundaryReport)) return null;
           return fs.readFileSync(panelNavigationBoundaryReport, 'utf8').split('\n').some(line => line.includes('"event":"richPreviewPanel"') && line.includes(`"action":"${action}"`)) || null;
         };
-        await waitFor(() => hasPreviewLifecycleAction('created'), 3000, 100, 'commit preview panel creation')
-          .catch(async () => {
-            await key(Input, 'ArrowDown');
-            return waitFor(() => hasPreviewLifecycleAction('created'), 10000, 100, 'commit preview panel creation after navigation');
-          });
+        await runCommandPalette(Input, 'LazyGitVS: Focus 4 Commits');
         await key(Input, 'ArrowDown');
+        await sleep(STEP_DELAY);
+        await waitFor(() => hasPreviewLifecycleAction('created'), 10000, 100, 'commit preview panel creation after explicit focus and navigation');
+        await key(Input, 'ArrowUp');
         await sleep(STEP_DELAY);
         await waitFor(() => hasPreviewLifecycleAction('reused'), 10000, 100, 'commit preview panel reuse before leaving Commits');
       } else if (panelKey === '5') {
