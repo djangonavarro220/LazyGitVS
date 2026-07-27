@@ -76,12 +76,22 @@ function assert(cond, msg) { if (!cond) throw new Error(msg); }
 function nativeModalAction(action) {
   const options = { encoding: 'utf8', env: { ...process.env, DISPLAY: NATIVE_DISPLAY, XAUTHORITY: nativeXauthority } };
   const point = action === 'confirm' ? [352, 64] : [117, 64];
-  const move = spawnSync('xdotool', ['mousemove', String(point[0]), String(point[1])], options);
-  const location = spawnSync('xdotool', ['getmouselocation', '--shell'], options);
-  const targetWindow = (location.stdout || '').match(/^WINDOW=(\d+)$/m)?.[1];
-  const down = targetWindow ? spawnSync('xdotool', ['mousedown', '--window', targetWindow, '1'], options) : undefined;
-  const up = targetWindow ? spawnSync('xdotool', ['mouseup', '--window', targetWindow, '1'], options) : undefined;
-  if (!targetWindow || down?.status !== 0 || up?.status !== 0) throw new Error(`xdotool could not click native modal ${action}: ${(up?.stderr || down?.stderr || location.stderr || move.stderr || '').trim()}`);
+  const script = `import ctypes, os, sys, time
+x11 = ctypes.CDLL('libX11.so.6')
+xtst = ctypes.CDLL('libXtst.so.6')
+x11.XOpenDisplay.restype = ctypes.c_void_p
+display = x11.XOpenDisplay(os.environ['DISPLAY'].encode())
+assert display
+xtst.XTestFakeMotionEvent(display, -1, int(sys.argv[1]), int(sys.argv[2]), 0)
+x11.XFlush(display)
+time.sleep(0.1)
+xtst.XTestFakeButtonEvent(display, 1, 1, 0)
+xtst.XTestFakeButtonEvent(display, 1, 0, 0)
+x11.XFlush(display)
+time.sleep(0.1)
+x11.XCloseDisplay(display)`;
+  const result = spawnSync('python3', ['-c', script, String(point[0]), String(point[1])], options);
+  if (result.status !== 0) throw new Error(`XTEST could not click native modal ${action}: ${(result.stderr || result.stdout || '').trim()}`);
 }
 
 function installVSCodeVimExtension(extensionsDir) {
