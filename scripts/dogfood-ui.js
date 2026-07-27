@@ -302,7 +302,7 @@ async function clickLgvsRowWithTitle(Runtime, Input, titlePart) {
   const r = await Runtime.evaluate({ expression: `(() => {
     const titlePart = ${JSON.stringify(titlePart)};
     function find(root, ox = 0, oy = 0) {
-      const rows = Array.from(root.querySelectorAll?.('.row[data-index]') || []);
+      const rows = Array.from(root.querySelectorAll?.('.row') || []);
       const row = rows.find(el => (el.getAttribute('title') || '').includes(titlePart) || (el.textContent || '').includes(titlePart));
       if (row) {
         const rect = row.getBoundingClientRect();
