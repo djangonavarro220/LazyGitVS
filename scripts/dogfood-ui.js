@@ -1216,8 +1216,10 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
     await chord(Input, 'ctrl+alt+3');
     await sleep(STEP_DELAY);
     await chord(Input, 'ctrl+alt+enter');
-    await sleep(1800);
-    const branchEnterPageText = await pageText(Runtime);
+    const branchEnterPageText = await waitFor(async () => {
+      const text = await pageText(Runtime);
+      return /-- COMMITS · LG --/.test(text) && /initial/.test(text) ? text : undefined;
+    }, 10000, 200, 'selected branch commit list');
     const branchEnterText = branchEnterPageText.slice(0, 3000);
     evidence.push({ step: 'branches-enter-shows-selected-branch-commits', screenshot: await screenshot(Page, '02-branches-enter-shows-selected-branch-commits'), status: status(fixture), textSample: branchEnterText });
     checks.push({ name: 'Branches Enter shows commits for the selected branch', ok: /-- COMMITS · LG --/.test(branchEnterPageText) && /initial/.test(branchEnterPageText), textSample: branchEnterText.slice(0, 1200) });
@@ -1492,10 +1494,13 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
     await key(Input, 'ArrowDown');
     await sleep(STEP_DELAY);
     await key(Input, 'Enter');
-    await sleep(1800);
-    const secondaryStatusText = (await pageText(Runtime)).slice(0, 3000);
+    const secondaryStatusPageText = await waitFor(async () => {
+      const text = await pageText(Runtime);
+      return /other-repo[\s\S]*current/i.test(text) ? text : undefined;
+    }, 10000, 200, 'other-repo current status selection');
+    const secondaryStatusText = secondaryStatusPageText.slice(0, 3000);
     evidence.push({ step: 'status-enter-select-other-repo', screenshot: await screenshot(Page, '02-status-enter-select-other-repo'), status: status(secondaryRepo), textSample: secondaryStatusText });
-    checks.push({ name: 'Status Enter switches from the current repository row to other-repo', ok: /other-repo[\s\S]*current/i.test(secondaryStatusText), textSample: secondaryStatusText.slice(0, 1200) });
+    checks.push({ name: 'Status Enter switches from the current repository row to other-repo', ok: /other-repo[\s\S]*current/i.test(secondaryStatusPageText), textSample: secondaryStatusText.slice(0, 1200) });
     await key(Input, 'm');
     const operationMenuText = await waitForText(Runtime, /Merge options[\s\S]*c continue[\s\S]*a abort/i, 3000)
       .catch(async () => {
