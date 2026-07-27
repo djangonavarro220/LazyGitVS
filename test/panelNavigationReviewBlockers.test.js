@@ -6,6 +6,7 @@ const { targetLane, panelNavigationBoundaryMatches } = require('../scripts/dogfo
 const root = path.join(__dirname, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const dogfoodSource = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
+assert(dogfoodSource.includes("if (/-- STATUS · LG --/.test(await pageText(Runtime)))") && dogfoodSource.includes("if (/-- FILES · LG --/.test(await pageText(Runtime)))"), 'panel-navigation retries must reset an already-transitioned panel before requiring a fresh physical ACK');
 const extensionSource = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
 
 function test(name, fn) {

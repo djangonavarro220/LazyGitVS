@@ -832,11 +832,25 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
     for (const family of circularPanelKeys) {
       const previousExpected = { from: 'files', to: 'status', activeView: 'status' };
       await key(Input, ...family.previous);
-      const statusFocus = await waitForPanelNavigationBoundary(previousExpected);
+      const statusFocus = await waitForPanelNavigationBoundary(previousExpected).catch(async () => {
+        if (/-- STATUS · LG --/.test(await pageText(Runtime))) {
+          await key(Input, ...family.next);
+          await waitForPanelNavigationBoundary({ from: 'status', to: 'files', activeView: 'files' });
+        }
+        await key(Input, ...family.previous);
+        return waitForPanelNavigationBoundary(previousExpected);
+      });
       circularPanelEvidence.push({ family: family.name, step: `${family.name}:previous`, expected: previousExpected, focus: statusFocus });
       const nextExpected = { from: 'status', to: 'files', activeView: 'files' };
       await key(Input, ...family.next);
-      const filesFocus = await waitForPanelNavigationBoundary(nextExpected);
+      const filesFocus = await waitForPanelNavigationBoundary(nextExpected).catch(async () => {
+        if (/-- FILES · LG --/.test(await pageText(Runtime))) {
+          await key(Input, ...family.previous);
+          await waitForPanelNavigationBoundary(previousExpected);
+        }
+        await key(Input, ...family.next);
+        return waitForPanelNavigationBoundary(nextExpected);
+      });
       circularPanelEvidence.push({ family: family.name, step: `${family.name}:next`, expected: nextExpected, focus: filesFocus });
       const familyChecks = [
         { name: `${family.name}: Files previous physically focuses Status`, ok: panelNavigationBoundaryMatches(statusFocus, previousExpected), focus: statusFocus },
