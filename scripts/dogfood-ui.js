@@ -467,16 +467,30 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
   await sleep(STEP_DELAY);
   return true;
 }
-async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
+async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndexOrText = 0, rowText) {
   const r = await Runtime.evaluate({ expression: `(() => {
     const wanted = ${JSON.stringify(label)};
-    const rowIndex = ${JSON.stringify(rowIndex)};
+    const rowIndex = ${JSON.stringify(typeof rowIndexOrText === 'number' ? rowIndexOrText : 0)};
+    const wantedRowText = ${JSON.stringify(rowText ?? (typeof rowIndexOrText === 'string' ? rowIndexOrText : undefined))};
     const header = Array.from(document.querySelectorAll('.pane-header')).find(el => { const rect = el.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 && ((el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim()).includes(wanted); });
     const pane = header?.closest('.pane');
     const body = pane?.querySelector('.pane-body') || header?.nextElementSibling;
     if (!body) return undefined;
     const rect = body.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return undefined;
+    const rows = Array.from(body.querySelectorAll('.monaco-list-row'));
+    if (wantedRowText) {
+      const row = rows.find(el => {
+        const text = el.innerText || el.textContent || '';
+        const title = el.getAttribute('title') || '';
+        const ariaLabel = el.getAttribute('aria-label') || '';
+        return [text, title, ariaLabel].some(value => value.includes(wantedRowText));
+      });
+      if (!row) return undefined;
+      const rowRect = row.getBoundingClientRect();
+      if (rowRect.width <= 0 || rowRect.height <= 0) return undefined;
+      return { x: rowRect.left + Math.min(100, Math.max(24, rowRect.width / 3)), y: rowRect.top + rowRect.height / 2, rowText: wantedRowText };
+    }
     return { x: rect.left + Math.min(100, Math.max(24, rect.width / 3)), y: rect.top + 18 + (rowIndex * 22) };
   })()`, returnByValue: true });
   const point = r.result.value;
@@ -484,6 +498,17 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
   await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
   await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
   await sleep(STEP_DELAY);
+  if (point.rowText) {
+    const selected = await Runtime.evaluate({ expression: `(() => {
+      const wantedRowText = ${JSON.stringify(rowText ?? (typeof rowIndexOrText === 'string' ? rowIndexOrText : undefined))};
+      const header = Array.from(document.querySelectorAll('.pane-header')).find(el => { const rect = el.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 && ((el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim()).includes(${JSON.stringify(label)}); });
+      const pane = header?.closest('.pane');
+      const row = Array.from(pane?.querySelectorAll('.monaco-list-row') || []).find(el => [el.innerText || el.textContent || '', el.getAttribute('title') || '', el.getAttribute('aria-label') || ''].some(value => value.includes(wantedRowText)));
+      if (!row) return false;
+      return row.getAttribute('aria-selected') === 'true' || row.classList.contains('focused') || row.classList.contains('selected') || row.contains(document.activeElement);
+    })()`, returnByValue: true });
+    return selected.result.value ? point : undefined;
+  }
   return point;
 }
 async function main() {
@@ -1525,7 +1550,9 @@ async function main() {
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
     await key(Input, '1');
     await sleep(STEP_DELAY);
-    await waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '1 STATUS', 1), 10000, 200, 'physical other-repo Status row');
+    const secondaryOperationLabel = `(merging) ${path.basename(secondaryRepo)} → master`;
+    const selectedSecondaryStatusRow = await waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '1 STATUS', secondaryOperationLabel), 10000, 200, 'physical other-repo Status row');
+    assert(selectedSecondaryStatusRow, 'Status selection did not focus/select the exact other-repo operation row');
     await chord(Input, 'ctrl+alt+enter');
     const secondaryStatusPageText = await waitFor(async () => {
       const text = await pageText(Runtime);

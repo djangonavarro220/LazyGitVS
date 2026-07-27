@@ -42,5 +42,9 @@ assert(dogfood.includes("name: 'Confirmed abort clears only the selected reposit
 assert(dogfood.includes("'12-status-operation-options', { force: true }") && dogfood.includes("nativeScreenshot('13-status-operation-abort-confirmation')") && dogfood.includes("'14-status-operation-aborted-selected-repo', { force: true }"), 'operation menu, native destructive confirmation, and selected-repo result must keep fresh screenshot evidence even on passing runs');
 assert(pkg.scripts['dogfood:ui:operation-status'] === 'node scripts/run-operation-dogfood.js', 'package.json must expose the dedicated operation-status lane');
 assert(dogfood.includes("name: 'Cancelling operation abort causes no repository mutation'") && dogfood.includes("name: 'Confirmed abort clears only the selected repository operation'"), 'targeted dogfood must prove cancellation and selected-repository isolation with real Git state');
+assert(dogfood.includes('const secondaryOperationLabel = `(merging) ${path.basename(secondaryRepo)} → master`;') && dogfood.includes("clickWorkbenchPaneRow(Runtime, Input, '1 STATUS', secondaryOperationLabel)"), 'operation Status selection must target the exact secondary-repository row by DOM text/title, not a geometric row index');
+const operationSelection = dogfood.indexOf('const selectedSecondaryStatusRow =');
+assert(dogfood.includes('Status selection did not focus/select the exact other-repo operation row') && operationSelection >= 0 && dogfood.indexOf("await chord(Input, 'ctrl+alt+enter');", operationSelection) > operationSelection, 'operation flow must verify exact Status-row focus/selection immediately before Enter');
+assert(!/clickWorkbenchPaneRow\(Runtime, Input, '1 STATUS', 1\)/.test(dogfood), 'operation Status selection must not regress to rigid first/second-row geometry');
 
 console.log('operationStatusParity tests passed');
