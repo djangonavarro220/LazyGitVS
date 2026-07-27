@@ -1231,10 +1231,15 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
     await sleep(STEP_DELAY);
     await waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '3 BRANCHES', 0), 10000, 200, 'physical master branch row');
     await chord(Input, 'ctrl+alt+enter');
-    const branchEnterPageText = await waitFor(async () => {
+    const waitForBranchEnter = () => waitFor(async () => {
       const text = await pageText(Runtime);
       return /-- COMMITS · LG --/.test(text) && /initial/.test(text) ? text : undefined;
     }, 10000, 200, 'selected branch commit list');
+    const branchEnterPageText = await waitForBranchEnter().catch(async () => {
+      await waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '3 BRANCHES', 0), 5000, 200, 'physical master branch row retry');
+      await chord(Input, 'ctrl+alt+enter');
+      return waitForBranchEnter();
+    });
     const branchEnterText = branchEnterPageText.slice(0, 3000);
     evidence.push({ step: 'branches-enter-shows-selected-branch-commits', screenshot: await screenshot(Page, '02-branches-enter-shows-selected-branch-commits'), status: status(fixture), textSample: branchEnterText });
     checks.push({ name: 'Branches Enter shows commits for the selected branch', ok: /-- COMMITS · LG --/.test(branchEnterPageText) && /initial/.test(branchEnterPageText), textSample: branchEnterText.slice(0, 1200) });
@@ -1504,11 +1509,8 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
     await key(Input, '1');
     await sleep(STEP_DELAY);
-    await key(Input, 'Enter');
-    await sleep(STEP_DELAY);
-    await key(Input, 'ArrowDown');
-    await sleep(STEP_DELAY);
-    await key(Input, 'Enter');
+    await waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '1 STATUS', 1), 10000, 200, 'physical other-repo Status row');
+    await chord(Input, 'ctrl+alt+enter');
     const secondaryStatusPageText = await waitFor(async () => {
       const text = await pageText(Runtime);
       return /other-repo[\s\S]*current/i.test(text) ? text : undefined;
