@@ -1270,14 +1270,14 @@ async function main() {
 
     await chord(Input, 'ctrl+alt+3');
     await sleep(STEP_DELAY);
-    await waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '3 BRANCHES', 0), 10000, 200, 'physical master branch row');
+    await waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '3 BRANCHES', 'master'), 10000, 200, 'physical master branch row');
     await chord(Input, 'ctrl+alt+enter');
     const waitForBranchEnter = () => waitFor(async () => {
       const text = await pageText(Runtime);
       return /-- COMMITS · LG --/.test(text) && /initial/.test(text) ? text : undefined;
     }, 10000, 200, 'selected branch commit list');
     const branchEnterPageText = await waitForBranchEnter().catch(async () => {
-      await waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '3 BRANCHES', 0), 5000, 200, 'physical master branch row retry');
+      await waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '3 BRANCHES', 'master'), 5000, 200, 'physical master branch row retry');
       await chord(Input, 'ctrl+alt+enter');
       return waitForBranchEnter();
     });
