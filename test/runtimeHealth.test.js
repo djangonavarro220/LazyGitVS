@@ -22,7 +22,7 @@ assert(pkg.contributes.commands.some(command => command.command === 'lazygitvs.e
 assert(extension.includes("registerCommand('lazygitvs.enterCurrentFileHunkMode', () => app.enterCurrentFileHunkMode())"), 'Explicit HUNK entry command must route to controller HUNK entry');
 assert(extension.includes('async enterCurrentFileHunkMode()'), 'Controller must expose an explicit Files-to-HUNK entry path');
 assert(dogfood.includes("command: 'lazygitvs.enterCurrentFileHunkMode'") && dogfood.includes("ctrl+alt+h"), 'Broad dogfood must use the explicit HUNK entry command after proving Files ownership');
-assert(dogfood.includes("runCommandPalette(Input, 'LazyGitVS: Enter current file HUNK mode')"), 'Broad dogfood must retry HUNK entry through the fully qualified command when synthetic key dispatch is lost');
+assert((dogfood.match(/runCommandPalette\(Input, 'LazyGitVS: Enter current file HUNK mode'\)/g) || []).length >= 2, 'Broad dogfood must retry both HUNK entry boundaries through the fully qualified command when synthetic key dispatch is lost');
 assert(extension.includes('this.activePanel = \'files\';'), 'Explicit HUNK entry must force the Files panel instead of trusting stale focus state');
 assert(extension.includes('return this.enterHunks();'), 'Explicit HUNK entry must reuse the same real editor HUNK path as Enter');
 assert(extension.includes('this.clearRuntimeTimers();'), 'resetState must cancel refresh/interval timers instead of leaving CPU loops alive');

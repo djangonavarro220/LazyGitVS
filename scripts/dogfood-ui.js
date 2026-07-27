@@ -1220,7 +1220,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
         await chord(Input, 'ctrl+alt+2');
         await clickLgvsRoot(Runtime, Input);
         await key(Input, 'ArrowUp');
-        await chord(Input, 'ctrl+alt+h');
+        await runCommandPalette(Input, 'LazyGitVS: Enter current file HUNK mode');
         return waitFor(async () => /-- HUNK\b/.test((await pageText(Runtime)).slice(0, 5000)), 8000, 300, 'settings HUNK mode after deterministic focus retry');
       });
     await key(Input, 'Tab');
