@@ -1104,14 +1104,23 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
           return waitFor(panelText, 10000, 250, `panel ${panelKey} ${panelTitle} reveal after retry`);
         });
       evidence.push({ step: `panel-jump-${panelKey}`, screenshot: await screenshot(Page, `02-panel-jump-${panelKey}`), status: status(fixture), textSample: jumpText.slice(0, 1200) });
-      if (panelKey === '4' || panelKey === '5') {
+      if (panelKey === '4') {
+        const hasPreviewLifecycleAction = action => {
+          if (!fs.existsSync(panelNavigationBoundaryReport)) return null;
+          return fs.readFileSync(panelNavigationBoundaryReport, 'utf8').split('\n').some(line => line.includes('"event":"richPreviewPanel"') && line.includes(`"action":"${action}"`)) || null;
+        };
+        await waitFor(() => hasPreviewLifecycleAction('created'), 3000, 100, 'commit preview panel creation')
+          .catch(async () => {
+            await key(Input, 'ArrowDown');
+            return waitFor(() => hasPreviewLifecycleAction('created'), 10000, 100, 'commit preview panel creation after navigation');
+          });
+        await key(Input, 'ArrowDown');
+        await sleep(STEP_DELAY);
+        await waitFor(() => hasPreviewLifecycleAction('reused'), 10000, 100, 'commit preview panel reuse before leaving Commits');
+      } else if (panelKey === '5') {
         await key(Input, 'ArrowDown');
         await sleep(STEP_DELAY);
       }
-      if (panelKey === '4' && process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS) await waitFor(async () => {
-        if (!fs.existsSync(panelNavigationBoundaryReport)) return null;
-        return fs.readFileSync(panelNavigationBoundaryReport, 'utf8').split('\n').some(line => line.includes('"event":"richPreviewPanel"') && line.includes('"action":"created"')) || null;
-      }, 10000, 100, 'commit preview panel creation before reuse');
       if (panelKey === '1') checks.push({ name: 'Focus 1 keeps LGVS ownership or reveals Status panel', ok: /-- (STATUS|HUNK)\b/.test(jumpText) || jumpText.includes('1 STATUS') || /master\s*·\s*current/i.test(jumpText), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '2') checks.push({ name: 'Moving from 1 Status to 2 Files hides Status again', ok: !jumpText.includes('1 STATUS') && /-- FILES · LG --/.test(jumpText), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '7') checks.push({ name: 'Focus 7 reveals Tags in the SCM sidebar', ok: jumpText.includes('7 TAGS'), textSample: jumpText.slice(0, 1200) });

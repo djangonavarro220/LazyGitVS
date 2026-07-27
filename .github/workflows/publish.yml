@@ -89,6 +89,11 @@ jobs:
       - name: Tests
         run: npm test
 
+      - name: Install native screenshot dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+
       - name: UI dogfood
         shell: bash
         run: |

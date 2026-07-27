@@ -13,6 +13,8 @@ const dogfoodSource = `${dogfood}\n${dogfoodFixtures}\n${dogfoodReporting}`;
 const testingDoc = fs.readFileSync(path.join(root, 'docs', 'testing-and-verification.md'), 'utf8');
 const knownBugsDoc = fs.readFileSync(path.join(root, 'docs', 'known-bugs.md'), 'utf8');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+const ciWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'ci.yml'), 'utf8');
+const publishWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'publish.yml'), 'utf8');
 
 const pendingTests = [];
 function test(name, fn) {
@@ -82,8 +84,10 @@ test('dogfood asserts the documented visible UI smoke path', () => {
   requireDogfoodInvariant('Escape stays on normal panels', /Escape on \$\{panelKey\} \$\{panelName\} keeps the current panel/);
   requireDogfoodInvariant('commit files detail is reachable', /Commit Enter loads the tree before navigation reaches the nested target preview/);
   requireDogfoodInvariant('contextual help focus return is covered', /Contextual help return keeps LGVS focus after active-panel lazy rendering/);
-  assert(dogfood.includes("if (panelKey === '4' || panelKey === '5') {"), 'full dogfood must deliberately move commit/stash selection before requiring rich-preview reuse evidence');
+  assert(dogfood.includes("if (panelKey === '4') {"), 'full dogfood must deliberately stabilize commit selection before requiring rich-preview reuse evidence');
   assert(dogfood.includes("runCommandPalette(Input, 'LazyGitVS: Open Operation Options')"), 'full dogfood must retry operation options through the qualified command when the physical m key is lost');
+  assert(dogfood.includes("'commit preview panel reuse before leaving Commits'"), 'full dogfood must confirm rich-preview reuse while Commits is still active');
+  for (const workflow of [ciWorkflow, publishWorkflow]) assert(workflow.includes('sudo apt-get install -y imagemagick'), 'CI and publish workflows must install the native screenshot dependency used by broad dogfood');
 });
 
 test('dogfood proves the complete nested commit-file tree drilldown in full and targeted lanes', () => {
