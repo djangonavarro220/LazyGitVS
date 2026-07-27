@@ -1230,27 +1230,14 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
     await sleep(STEP_DELAY);
     const commitPreviewNumberIgnoredText = (await pageText(Runtime)).slice(0, 3000);
     evidence.push({ step: 'commits-preview-editor-number-ignored-by-lgvs', screenshot: await screenshot(Page, '02-commits-preview-editor-number-ignored-by-lgvs'), status: status(fixture), textSample: commitPreviewNumberIgnoredText });
-    await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
 
-    // Panel jump previews can legitimately leave editor focus; reset to the LGVS SCM sidebar before list navigation.
+    // Regression: nearby staged settings edits in the same file must remain navigable as separate hunks.
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
+    await key(Input, '0', { ctrl: true, alt: true });
     await chord(Input, 'ctrl+alt+2');
-    await sleep(700);
-    await clickLgvsRoot(Runtime, Input);
-
-    // Regression: nearby staged edits in the same file must remain navigable as separate hunks.
-    await key(Input, 'ArrowUp');
-    await sleep(STEP_DELAY);
-    await chord(Input, 'ctrl+alt+h');
-    await waitFor(async () => /-- HUNK\b/.test((await pageText(Runtime)).slice(0, 5000)), 8000, 300, 'settings HUNK mode before staged navigation')
-      .catch(async () => {
-        await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
-        await chord(Input, 'ctrl+alt+2');
-        await clickLgvsRoot(Runtime, Input);
-        await key(Input, 'ArrowUp');
-        await runCommandPalette(Input, 'LazyGitVS: Enter current file HUNK mode');
-        return waitFor(async () => /-- HUNK\b/.test((await pageText(Runtime)).slice(0, 5000)), 8000, 300, 'settings HUNK mode after deterministic focus retry');
-      });
+    await waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '2 FILES', 1), 10000, 200, 'physical settings.json row in the primary repo');
+    await runCommandPalette(Input, 'LazyGitVS: Enter current file HUNK mode');
+    await waitFor(async () => /-- HUNK\b/.test((await pageText(Runtime)).slice(0, 5000)), 10000, 300, 'settings HUNK mode after primary-repo file click');
     await key(Input, 'Tab');
     await sleep(STEP_DELAY);
     const stagedHunkOneText = (await pageText(Runtime)).slice(0, 3000);
