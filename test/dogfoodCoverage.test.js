@@ -93,7 +93,7 @@ test('dogfood asserts the documented visible UI smoke path', () => {
   assert(dogfood.includes("clickWorkbenchPaneRow(Runtime, Input, '5 STASH', 0)"), 'targeted preview dogfood must physically click the visible stash row');
   assert(dogfood.includes('richPreviewSnapshots.length === 3') && dogfood.includes('one rich-preview tab after the stash'), 'targeted preview dogfood must physically keep one rich tab across two commits and one stash');
   assert(dogfood.includes('env: { ...process.env, DISPLAY: NATIVE_DISPLAY, XAUTHORITY: nativeXauthority }'), 'native keyboard input must inherit the owning Xvfb display and authorization');
-  assert(dogfood.includes("spawnSync('xdotool', ['getwindowfocus']") && dogfood.includes("spawnSync('xdotool', ['key', '--clearmodifiers'"), 'native modal keys must verify an X11 focus owner and use XTEST against that focused window instead of unstable Electron titles or classes');
+  assert(dogfood.includes("['search', '--class', 'code']") && !dogfood.includes("['search', '--onlyvisible', '--class', 'code']") && dogfood.includes("['windowfocus', focusedWindow]"), 'native modal keys must find and focus the VS Code X11 window without the window-manager-dependent onlyvisible filter');
   assert(dogfood.includes('process.env.XAUTHORITY ||'), 'native screenshot capture must inherit the owning Xvfb authorization file');
   for (const workflow of [ciWorkflow, publishWorkflow]) {
     assert(workflow.includes('sudo apt-get install -y imagemagick'), 'CI and publish workflows must install the native screenshot dependency used by broad dogfood');

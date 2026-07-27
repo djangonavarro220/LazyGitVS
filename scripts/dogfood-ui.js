@@ -75,9 +75,12 @@ function addCheck(checks, check) {
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
 function nativeKey(keyName) {
   const options = { encoding: 'utf8', env: { ...process.env, DISPLAY: NATIVE_DISPLAY, XAUTHORITY: nativeXauthority } };
-  const focus = spawnSync('xdotool', ['getwindowfocus'], options);
-  const focusedWindow = (focus.stdout || '').trim();
-  if (focus.status !== 0 || !/^\d+$/.test(focusedWindow)) throw new Error(`xdotool could not resolve the focused X11 window: ${(focus.stderr || focus.stdout || '').trim()}`);
+  const search = spawnSync('xdotool', ['search', '--class', 'code'], options);
+  const windows = (search.stdout || '').split(/\s+/).filter(id => /^\d+$/.test(id)).sort((a, b) => Number(a) - Number(b));
+  const focusedWindow = windows.at(-1);
+  if (search.status !== 0 || !focusedWindow) throw new Error(`xdotool could not resolve the VS Code X11 window: ${(search.stderr || search.stdout || '').trim()}`);
+  const focus = spawnSync('xdotool', ['windowfocus', focusedWindow], options);
+  if (focus.status !== 0) throw new Error(`xdotool could not focus VS Code window ${focusedWindow}: ${(focus.stderr || focus.stdout || '').trim()}`);
   const result = spawnSync('xdotool', ['key', '--clearmodifiers', keyName], options);
   if (result.status !== 0) throw new Error(`xdotool could not send ${keyName}: ${(result.stderr || result.stdout || '').trim()}`);
 }
