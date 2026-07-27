@@ -74,7 +74,7 @@ function addCheck(checks, check) {
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
 function nativeKey(keyName) {
-  const result = spawnSync('xdotool', ['search', '--onlyvisible', '--name', 'Extension Development Host', 'windowfocus', '--sync', 'key', '--clearmodifiers', keyName], { encoding: 'utf8', env: { ...process.env, DISPLAY: NATIVE_DISPLAY, XAUTHORITY: nativeXauthority } });
+  const result = spawnSync('xdotool', ['search', '--onlyvisible', '--class', 'code', 'windowfocus', '--sync', 'key', '--clearmodifiers', keyName], { encoding: 'utf8', env: { ...process.env, DISPLAY: NATIVE_DISPLAY, XAUTHORITY: nativeXauthority } });
   if (result.status !== 0) throw new Error(`xdotool could not send ${keyName}: ${(result.stderr || result.stdout || '').trim()}`);
 }
 
