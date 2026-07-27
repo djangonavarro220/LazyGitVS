@@ -87,8 +87,8 @@ test('dogfood asserts the documented visible UI smoke path', () => {
   assert(dogfood.includes("process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS && panelKey === '4'"), 'targeted preview dogfood must deliberately stabilize commit selection before requiring rich-preview reuse evidence');
   assert(dogfood.includes("runCommandPalette(Input, 'LazyGitVS: Open Operation Options')"), 'full dogfood must retry operation options through the qualified command when the physical m key is lost');
   assert((dogfood.match(/runCommandPalette\(Input, 'LazyGitVS: Focus SCM Sidebar'\)/g) || []).length >= 2 && dogfood.includes('clickFirstCommit().catch'), 'targeted preview dogfood must focus the sidebar and retry primary-repo selection before failing');
-  assert(dogfood.includes("clickLgvsRowWithTitle(Runtime, Input, 'dogfood comm')") && dogfood.includes("clickLgvsRowWithTitle(Runtime, Input, 'initial')"), 'targeted preview dogfood must click two distinct real commit rows instead of relying on synthetic focus');
-  assert(dogfood.includes("clickLgvsRowWithTitle(Runtime, Input, 'stash@{0}')"), 'targeted preview dogfood must click the real stash row');
+  assert(dogfood.includes("clickWorkbenchPaneRow(Runtime, Input, '4 COMMITS', 0)") && dogfood.includes("clickWorkbenchPaneRow(Runtime, Input, '4 COMMITS', 1)"), 'targeted preview dogfood must physically click two distinct visible commit rows');
+  assert(dogfood.includes("clickWorkbenchPaneRow(Runtime, Input, '5 STASH', 0)"), 'targeted preview dogfood must physically click the visible stash row');
   assert(dogfood.includes('richPreviewSnapshots.length === 3') && dogfood.includes('one rich-preview tab after the stash'), 'targeted preview dogfood must physically keep one rich tab across two commits and one stash');
   assert(dogfood.includes('env: { ...process.env, DISPLAY: NATIVE_DISPLAY, XAUTHORITY: nativeXauthority }'), 'native keyboard input must inherit the owning Xvfb display and authorization');
   assert(dogfood.includes('process.env.XAUTHORITY ||'), 'native screenshot capture must inherit the owning Xvfb authorization file');

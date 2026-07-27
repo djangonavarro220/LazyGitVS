@@ -432,6 +432,25 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
   await sleep(STEP_DELAY);
   return true;
 }
+async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
+  const r = await Runtime.evaluate({ expression: `(() => {
+    const wanted = ${JSON.stringify(label)};
+    const rowIndex = ${JSON.stringify(rowIndex)};
+    const header = Array.from(document.querySelectorAll('.pane-header')).find(el => { const rect = el.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 && ((el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim()).includes(wanted); });
+    const pane = header?.closest('.pane');
+    const body = pane?.querySelector('.pane-body') || header?.nextElementSibling;
+    if (!body) return undefined;
+    const rect = body.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return undefined;
+    return { x: rect.left + Math.min(100, Math.max(24, rect.width / 3)), y: rect.top + 18 + (rowIndex * 22) };
+  })()`, returnByValue: true });
+  const point = r.result.value;
+  if (!point) return undefined;
+  await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+  await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
+  await sleep(STEP_DELAY);
+  return point;
+}
 (async () => {
   if (runMatrixIfNeeded()) return;
   let lifecyclePhase = 'setup';
@@ -1111,7 +1130,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
         });
       evidence.push({ step: `panel-jump-${panelKey}`, screenshot: await screenshot(Page, `02-panel-jump-${panelKey}`), status: status(fixture), textSample: jumpText.slice(0, 1200) });
       if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS && panelKey === '4') {
-        const clickFirstCommit = () => waitFor(() => clickLgvsRowWithTitle(Runtime, Input, 'dogfood comm'), 5000, 200, 'real first commit row after restoring the primary repo');
+        const clickFirstCommit = () => waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '4 COMMITS', 0), 5000, 200, 'real first commit row after restoring the primary repo');
         await clickFirstCommit().catch(async () => {
           await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
           await key(Input, '0', { ctrl: true, alt: true });
@@ -1122,13 +1141,13 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
           const tabs = (await editorTabLabels(Runtime)).filter(label => /^LazyGitVS:/.test(label));
           return tabs.length === 1 ? { selection: 'dogfood comm', tabs } : null;
         }, 10000, 100, 'one rich-preview tab after the first commit'));
-        assert(await clickLgvsRowWithTitle(Runtime, Input, 'initial'), 'Targeted preview dogfood could not click the second commit row');
+        assert(await clickWorkbenchPaneRow(Runtime, Input, '4 COMMITS', 1), 'Targeted preview dogfood could not click the second commit row');
         richPreviewSnapshots.push(await waitFor(async () => {
           const tabs = (await editorTabLabels(Runtime)).filter(label => /^LazyGitVS:/.test(label));
           return tabs.length === 1 ? { selection: 'initial', tabs } : null;
         }, 10000, 100, 'one rich-preview tab after the second commit'));
       } else if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS && panelKey === '5') {
-        assert(await clickLgvsRowWithTitle(Runtime, Input, 'stash@{0}'), 'Targeted preview dogfood could not click the stash row');
+        assert(await clickWorkbenchPaneRow(Runtime, Input, '5 STASH', 0), 'Targeted preview dogfood could not click the stash row');
         richPreviewSnapshots.push(await waitFor(async () => {
           const tabs = (await editorTabLabels(Runtime)).filter(label => /^LazyGitVS:/.test(label));
           return tabs.length === 1 ? { selection: 'stash@{0}', tabs } : null;
