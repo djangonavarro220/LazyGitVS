@@ -15,6 +15,7 @@ const { targetLane, panelNavigationBoundaryMatches, finishReport, writeJson } = 
 const { makeFixtureResult, classifyFailure, collectProcessTreeMetrics } = require('./dogfood/telemetry');
 const { discoverOwnedCdp, makeChildTerminalFailure, publishJsonOnce, readProcessIdentity, readRunEnvelope, runChildPreRuntimeLifecycle, terminateOwnedProcessGroup } = require('./dogfood/run-envelope');
 const { writeNativeScreenshot, writeScreenshot } = require('./dogfood/screenshots');
+const { buildWorkbenchPaneRowProbe } = require('./dogfood/workbench-pane-row');
 const CDP = require('chrome-remote-interface');
 const { downloadAndUnzipVSCode } = require('@vscode/test-electron');
 
@@ -468,45 +469,24 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
   return true;
 }
 async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndexOrText = 0, rowText) {
-  const r = await Runtime.evaluate({ expression: `(() => {
-    const wanted = ${JSON.stringify(label)};
-    const rowIndex = ${JSON.stringify(typeof rowIndexOrText === 'number' ? rowIndexOrText : 0)};
-    const wantedRowText = ${JSON.stringify(rowText ?? (typeof rowIndexOrText === 'string' ? rowIndexOrText : undefined))};
-    const header = Array.from(document.querySelectorAll('.pane-header')).find(el => { const rect = el.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 && ((el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim()).includes(wanted); });
-    const pane = header?.closest('.pane');
-    const body = pane?.querySelector('.pane-body') || header?.nextElementSibling;
-    if (!body) return undefined;
-    const rect = body.getBoundingClientRect();
-    if (rect.width <= 0 || rect.height <= 0) return undefined;
-    const rows = Array.from(body.querySelectorAll('.monaco-list-row'));
-    if (wantedRowText) {
-      const row = rows.find(el => {
-        const text = el.innerText || el.textContent || '';
-        const title = el.getAttribute('title') || '';
-        const ariaLabel = el.getAttribute('aria-label') || '';
-        return [text, title, ariaLabel].some(value => value.includes(wantedRowText));
-      });
-      if (!row) return undefined;
-      const rowRect = row.getBoundingClientRect();
-      if (rowRect.width <= 0 || rowRect.height <= 0) return undefined;
-      return { x: rowRect.left + Math.min(100, Math.max(24, rowRect.width / 3)), y: rowRect.top + rowRect.height / 2, rowText: wantedRowText };
-    }
-    return { x: rect.left + Math.min(100, Math.max(24, rect.width / 3)), y: rect.top + 18 + (rowIndex * 22) };
-  })()`, returnByValue: true });
+  const wantedRowText = rowText ?? (typeof rowIndexOrText === 'string' ? rowIndexOrText : undefined);
+  const r = await Runtime.evaluate({ expression: buildWorkbenchPaneRowProbe({
+    label,
+    rowIndex: typeof rowIndexOrText === 'number' ? rowIndexOrText : 0,
+    wantedRowText
+  }), returnByValue: true });
   const point = r.result.value;
   if (!point) return undefined;
   await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
   await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
   await sleep(STEP_DELAY);
   if (point.rowText) {
-    const selected = await Runtime.evaluate({ expression: `(() => {
-      const wantedRowText = ${JSON.stringify(rowText ?? (typeof rowIndexOrText === 'string' ? rowIndexOrText : undefined))};
-      const header = Array.from(document.querySelectorAll('.pane-header')).find(el => { const rect = el.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 && ((el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim()).includes(${JSON.stringify(label)}); });
-      const pane = header?.closest('.pane');
-      const row = Array.from(pane?.querySelectorAll('.monaco-list-row') || []).find(el => [el.innerText || el.textContent || '', el.getAttribute('title') || '', el.getAttribute('aria-label') || ''].some(value => value.includes(wantedRowText)));
-      if (!row) return false;
-      return row.getAttribute('aria-selected') === 'true' || row.classList.contains('focused') || row.classList.contains('selected') || row.contains(document.activeElement);
-    })()`, returnByValue: true });
+    const selected = await Runtime.evaluate({ expression: buildWorkbenchPaneRowProbe({
+      label,
+      rowIndex: 0,
+      wantedRowText,
+      verify: true
+    }), returnByValue: true });
     return selected.result.value ? point : undefined;
   }
   return point;
