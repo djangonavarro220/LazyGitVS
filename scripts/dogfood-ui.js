@@ -1111,7 +1111,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
         });
       evidence.push({ step: `panel-jump-${panelKey}`, screenshot: await screenshot(Page, `02-panel-jump-${panelKey}`), status: status(fixture), textSample: jumpText.slice(0, 1200) });
       if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS && panelKey === '4') {
-        const clickFirstCommit = () => waitFor(() => clickLgvsRowWithTitle(Runtime, Input, 'dogfood commit file tree'), 5000, 200, 'real first commit row after restoring the primary repo');
+        const clickFirstCommit = () => waitFor(() => clickLgvsRowWithTitle(Runtime, Input, 'dogfood comm'), 5000, 200, 'real first commit row after restoring the primary repo');
         await clickFirstCommit().catch(async () => {
           await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
           await key(Input, '0', { ctrl: true, alt: true });
@@ -1120,7 +1120,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
         });
         richPreviewSnapshots.push(await waitFor(async () => {
           const tabs = (await editorTabLabels(Runtime)).filter(label => /^LazyGitVS:/.test(label));
-          return tabs.length === 1 ? { selection: 'dogfood commit file tree', tabs } : null;
+          return tabs.length === 1 ? { selection: 'dogfood comm', tabs } : null;
         }, 10000, 100, 'one rich-preview tab after the first commit'));
         assert(await clickLgvsRowWithTitle(Runtime, Input, 'initial'), 'Targeted preview dogfood could not click the second commit row');
         richPreviewSnapshots.push(await waitFor(async () => {
@@ -1128,10 +1128,10 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
           return tabs.length === 1 ? { selection: 'initial', tabs } : null;
         }, 10000, 100, 'one rich-preview tab after the second commit'));
       } else if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS && panelKey === '5') {
-        assert(await clickLgvsRowWithTitle(Runtime, Input, 'dogfood stash entry'), 'Targeted preview dogfood could not click the stash row');
+        assert(await clickLgvsRowWithTitle(Runtime, Input, 'stash@{0}'), 'Targeted preview dogfood could not click the stash row');
         richPreviewSnapshots.push(await waitFor(async () => {
           const tabs = (await editorTabLabels(Runtime)).filter(label => /^LazyGitVS:/.test(label));
-          return tabs.length === 1 ? { selection: 'dogfood stash entry', tabs } : null;
+          return tabs.length === 1 ? { selection: 'stash@{0}', tabs } : null;
         }, 10000, 100, 'one rich-preview tab after the stash'));
       }
       if (panelKey === '1') checks.push({ name: 'Focus 1 keeps LGVS ownership or reveals Status panel', ok: /-- (STATUS|HUNK)\b/.test(jumpText) || jumpText.includes('1 STATUS') || /master\s*·\s*current/i.test(jumpText), textSample: jumpText.slice(0, 1200) });
