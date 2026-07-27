@@ -1324,7 +1324,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     let fullHunkText = await pageText(Runtime);
     let hunkText = fullHunkText.slice(0, 5000);
     if (!/-- (HUNK|LINE)\b/.test(fullHunkText) && !process.env.LGVS_DOGFOOD_FAST_HUNK_ESCAPE) {
-      await runExactCommand(Runtime, Input, 'LazyGitVS: Enter current file HUNK mode');
+      await runCommandPalette(Input, 'LazyGitVS: Enter current file HUNK mode');
       await sleep(1200);
       fullHunkText = await pageText(Runtime);
       hunkText = fullHunkText.slice(0, 5000);
