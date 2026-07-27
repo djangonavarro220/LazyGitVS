@@ -94,6 +94,7 @@ test('dogfood asserts the documented visible UI smoke path', () => {
   assert(dogfood.includes('richPreviewSnapshots.length === 3') && dogfood.includes('one rich-preview tab after the stash'), 'targeted preview dogfood must physically keep one rich tab across two commits and one stash');
   assert(dogfood.includes('env: { ...process.env, DISPLAY: NATIVE_DISPLAY, XAUTHORITY: nativeXauthority }'), 'native keyboard input must inherit the owning Xvfb display and authorization');
   assert(dogfood.includes("function nativeModalAction(action)") && dogfood.includes("action === 'confirm' ? [352, 64] : [117, 64]") && dogfood.includes("ctypes.CDLL('libXtst.so.6')") && dogfood.includes('XTestFakeMotionEvent') && dogfood.includes('XTestFakeButtonEvent'), 'native modal confirmation must physically press the captured Abort/Cancel buttons through direct XTEST events');
+  assert(dogfood.includes("/index\\.lock/.test(String(error))") && dogfood.includes('secondary-repo stash pop after merge abort'), 'broad dogfood must retry the post-abort stash pop only while VS Code owns the transient Git index lock');
   assert(dogfood.includes('process.env.XAUTHORITY ||'), 'native screenshot capture must inherit the owning Xvfb authorization file');
   for (const workflow of [ciWorkflow, publishWorkflow]) {
     assert(workflow.includes('sudo apt-get install -y imagemagick'), 'CI and publish workflows must install the native screenshot dependency used by broad dogfood');

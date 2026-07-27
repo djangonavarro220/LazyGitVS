@@ -1514,7 +1514,10 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
     await waitFor(() => !mergeOperationInProgress(secondaryRepo), 10000, 200, 'operation abort to clear MERGE_HEAD');
     evidence.push({ step: 'status-operation-aborted', screenshot: await screenshot(Page, '13-status-operation-aborted', { force: true }), status: status(secondaryRepo), primaryStatus: status(fixture) });
     checks.push({ name: 'Status operation abort runs only against the selected repository', ok: !mergeOperationInProgress(secondaryRepo) && status(fixture) === primaryStatusBeforeOperationAbort, status: status(secondaryRepo), primaryBefore: primaryStatusBeforeOperationAbort, primaryAfter: status(fixture) });
-    git(secondaryRepo, 'stash', 'pop');
+    await waitFor(() => {
+      try { git(secondaryRepo, 'stash', 'pop'); return true; }
+      catch (error) { if (/index\.lock/.test(String(error))) return undefined; throw error; }
+    }, 10000, 200, 'secondary-repo stash pop after merge abort');
     await sleep(1800);
     await key(Input, '2');
     await sleep(STEP_DELAY);
