@@ -1091,6 +1091,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
       await key(Input, '0', { ctrl: true, alt: true });
       await sleep(STEP_DELAY);
     }
+    const richPreviewSnapshots = [];
     for (const [panelKey, panelTitle] of [['1', 'Status'], ['2', 'Files'], ['3', 'Branches'], ['4', 'Commits'], ['5', 'Stash'], ['6', 'Conflicts'], ['7', 'Tags'], ['8', 'Remotes']]) {
       void panelTitle;
       await chord(Input, `ctrl+alt+${panelKey}`);
@@ -1109,16 +1110,22 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
         });
       evidence.push({ step: `panel-jump-${panelKey}`, screenshot: await screenshot(Page, `02-panel-jump-${panelKey}`), status: status(fixture), textSample: jumpText.slice(0, 1200) });
       if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS && panelKey === '4') {
-        const hasPreviewLifecycleAction = action => {
-          if (!fs.existsSync(panelNavigationBoundaryReport)) return null;
-          return fs.readFileSync(panelNavigationBoundaryReport, 'utf8').split('\n').some(line => line.includes('"event":"richPreviewPanel"') && line.includes(`"action":"${action}"`)) || null;
-        };
         await waitFor(() => clickLgvsRowWithTitle(Runtime, Input, 'dogfood commit file tree'), 10000, 200, 'real first commit row after restoring the primary repo');
-        await waitFor(() => hasPreviewLifecycleAction('created'), 10000, 100, 'commit preview panel creation after clicking the first commit');
+        richPreviewSnapshots.push(await waitFor(async () => {
+          const tabs = (await editorTabLabels(Runtime)).filter(label => /^LazyGitVS:/.test(label));
+          return tabs.length === 1 ? { selection: 'dogfood commit file tree', tabs } : null;
+        }, 10000, 100, 'one rich-preview tab after the first commit'));
         assert(await clickLgvsRowWithTitle(Runtime, Input, 'initial'), 'Targeted preview dogfood could not click the second commit row');
-        await waitFor(() => hasPreviewLifecycleAction('reused'), 10000, 100, 'commit preview panel reuse before leaving Commits');
+        richPreviewSnapshots.push(await waitFor(async () => {
+          const tabs = (await editorTabLabels(Runtime)).filter(label => /^LazyGitVS:/.test(label));
+          return tabs.length === 1 ? { selection: 'initial', tabs } : null;
+        }, 10000, 100, 'one rich-preview tab after the second commit'));
       } else if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS && panelKey === '5') {
         assert(await clickLgvsRowWithTitle(Runtime, Input, 'dogfood stash entry'), 'Targeted preview dogfood could not click the stash row');
+        richPreviewSnapshots.push(await waitFor(async () => {
+          const tabs = (await editorTabLabels(Runtime)).filter(label => /^LazyGitVS:/.test(label));
+          return tabs.length === 1 ? { selection: 'dogfood stash entry', tabs } : null;
+        }, 10000, 100, 'one rich-preview tab after the stash'));
       }
       if (panelKey === '1') checks.push({ name: 'Focus 1 keeps LGVS ownership or reveals Status panel', ok: /-- (STATUS|HUNK)\b/.test(jumpText) || jumpText.includes('1 STATUS') || /master\s*·\s*current/i.test(jumpText), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '2') checks.push({ name: 'Moving from 1 Status to 2 Files hides Status again', ok: !jumpText.includes('1 STATUS') && /-- FILES · LG --/.test(jumpText), textSample: jumpText.slice(0, 1200) });
@@ -1127,18 +1134,13 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     }
 
     if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS) {
-      const previewPanelLifecycle = await waitFor(async () => {
-        if (!fs.existsSync(panelNavigationBoundaryReport)) return null;
-        const events = fs.readFileSync(panelNavigationBoundaryReport, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(event => event.event === 'richPreviewPanel');
-        return events.filter(event => event.action === 'created').length === 1 && events.some(event => event.action === 'reused') ? events : null;
-      }, 10000, 100, 'commit/stash preview panel reuse');
       const allEditorTabs = await editorTabLabels(Runtime);
       const dynamicPreviewTabs = allEditorTabs.filter(label => /^LazyGitVS\b/.test(label));
       const richPreviewTabs = allEditorTabs.filter(label => /^LazyGitVS:/.test(label));
       const untitledPreviewTabs = allEditorTabs.filter(label => /Untitled/i.test(label));
-      evidence.push({ step: 'multiple-mode-single-dynamic-preview-after-navigation', screenshot: await screenshot(Page, '02-multiple-mode-single-dynamic-preview-after-navigation'), status: status(fixture), previewTabs: dynamicPreviewTabs, richPreviewTabs, previewPanelLifecycle });
+      evidence.push({ step: 'multiple-mode-single-dynamic-preview-after-navigation', screenshot: await screenshot(Page, '02-multiple-mode-single-dynamic-preview-after-navigation'), status: status(fixture), previewTabs: dynamicPreviewTabs, richPreviewTabs, richPreviewSnapshots });
       checks.push({ name: 'previewTabs multiple still keeps one transient rich preview while navigating commits and stash', ok: richPreviewTabs.length === 1, richPreviewTabs, allEditorTabs });
-      checks.push({ name: 'Commit/stash previews keep one webview even when previewTabs is multiple', ok: previewPanelLifecycle.filter(event => event.action === 'created').length === 1 && previewPanelLifecycle.some(event => event.action === 'reused'), previewPanelLifecycle });
+      checks.push({ name: 'Commit/stash navigation physically keeps one rich-preview tab after each selection', ok: richPreviewSnapshots.length === 3 && richPreviewSnapshots.every(snapshot => snapshot.tabs.length === 1), richPreviewSnapshots });
       checks.push({ name: `Generated previews use named ${VIRTUAL_PREVIEW_URI_PREFIX} virtual documents, not Untitled buffers`, ok: dynamicPreviewTabs.every(label => /^LazyGitVS\b/.test(label)) && untitledPreviewTabs.length === 0, previewTabs: dynamicPreviewTabs, allEditorTabs, untitledPreviewTabs });
       finishDogfoodReport();
       return;

@@ -41,7 +41,7 @@ assert(workspaceActions.includes("recordRichPreviewPanelLifecycle('created'"), '
 assert(workspaceActions.includes("recordRichPreviewPanelLifecycle('reused'"), 'real dogfood must observe in-place preview reuse');
 const dogfood = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
 assert(dogfood.includes("'lazygitvs.previewTabs': process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS ? 'multiple' : 'single'"), 'preview-tabs dogfood must reproduce the user configuration that previously accumulated commit editors');
-assert(dogfood.includes('Commit/stash previews keep one webview even when previewTabs is multiple'), 'preview-tabs dogfood must verify the reported multiple-mode regression');
+assert(dogfood.includes('Commit/stash navigation physically keeps one rich-preview tab after each selection'), 'preview-tabs dogfood must verify the reported multiple-mode regression through real editor-tab state');
 
 const { commitPatchPreviewHtml } = require('../out/richPreview.js');
 const html = commitPatchPreviewHtml({ title: 'Commit abc123', hash: 'abc123', subject: 'Pretty summary' }, `commit abc123

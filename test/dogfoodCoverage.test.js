@@ -89,7 +89,7 @@ test('dogfood asserts the documented visible UI smoke path', () => {
   assert(dogfood.includes("await key(Input, '0', { ctrl: true, alt: true })") && dogfood.includes('real first commit row after restoring the primary repo'), 'targeted preview dogfood must restore the primary repo and physically click a real Commit row');
   assert(dogfood.includes("clickLgvsRowWithTitle(Runtime, Input, 'dogfood commit file tree')") && dogfood.includes("clickLgvsRowWithTitle(Runtime, Input, 'initial')"), 'targeted preview dogfood must click two distinct real commit rows instead of relying on synthetic focus');
   assert(dogfood.includes("clickLgvsRowWithTitle(Runtime, Input, 'dogfood stash entry')"), 'targeted preview dogfood must click the real stash row');
-  assert(dogfood.includes("'commit preview panel reuse before leaving Commits'"), 'targeted preview dogfood must confirm rich-preview reuse while Commits is still active');
+  assert(dogfood.includes('richPreviewSnapshots.length === 3') && dogfood.includes('one rich-preview tab after the stash'), 'targeted preview dogfood must physically keep one rich tab across two commits and one stash');
   assert(dogfood.includes('env: { ...process.env, DISPLAY: NATIVE_DISPLAY, XAUTHORITY: nativeXauthority }'), 'native keyboard input must inherit the owning Xvfb display and authorization');
   assert(dogfood.includes('process.env.XAUTHORITY ||'), 'native screenshot capture must inherit the owning Xvfb authorization file');
   for (const workflow of [ciWorkflow, publishWorkflow]) {
