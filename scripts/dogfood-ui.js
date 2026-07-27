@@ -1088,6 +1088,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     // Smoke all lazygit panel jumps before entering the editor flow. Use dogfood-only
     // keybindings so native editor focus cannot eat panel navigation.
     if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS) {
+      await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
       await key(Input, '0', { ctrl: true, alt: true });
       await sleep(STEP_DELAY);
     }
@@ -1110,7 +1111,13 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
         });
       evidence.push({ step: `panel-jump-${panelKey}`, screenshot: await screenshot(Page, `02-panel-jump-${panelKey}`), status: status(fixture), textSample: jumpText.slice(0, 1200) });
       if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS && panelKey === '4') {
-        await waitFor(() => clickLgvsRowWithTitle(Runtime, Input, 'dogfood commit file tree'), 10000, 200, 'real first commit row after restoring the primary repo');
+        const clickFirstCommit = () => waitFor(() => clickLgvsRowWithTitle(Runtime, Input, 'dogfood commit file tree'), 5000, 200, 'real first commit row after restoring the primary repo');
+        await clickFirstCommit().catch(async () => {
+          await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
+          await key(Input, '0', { ctrl: true, alt: true });
+          await chord(Input, 'ctrl+alt+4');
+          return clickFirstCommit();
+        });
         richPreviewSnapshots.push(await waitFor(async () => {
           const tabs = (await editorTabLabels(Runtime)).filter(label => /^LazyGitVS:/.test(label));
           return tabs.length === 1 ? { selection: 'dogfood commit file tree', tabs } : null;
