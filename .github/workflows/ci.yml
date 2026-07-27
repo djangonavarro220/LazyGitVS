@@ -49,6 +49,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y imagemagick
+          sudo apt-get install -y x11-utils
 
       - name: UI dogfood
         shell: bash

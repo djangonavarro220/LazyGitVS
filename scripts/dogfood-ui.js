@@ -75,15 +75,13 @@ function addCheck(checks, check) {
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
 function nativeKey(keyName) {
   const options = { encoding: 'utf8', env: { ...process.env, DISPLAY: NATIVE_DISPLAY, XAUTHORITY: nativeXauthority } };
-  const search = spawnSync('xdotool', ['search', '--name', '.*'], options);
-  const windows = (search.stdout || '').split(/\s+/).filter(id => /^\d+$/.test(id));
-  const focusedWindow = windows.map(id => {
-    const geometry = spawnSync('xdotool', ['getwindowgeometry', '--shell', id], options);
-    const width = Number((geometry.stdout || '').match(/^WIDTH=(\d+)$/m)?.[1] || 0);
-    const height = Number((geometry.stdout || '').match(/^HEIGHT=(\d+)$/m)?.[1] || 0);
-    return { id, area: width * height };
-  }).sort((a, b) => b.area - a.area)[0]?.id;
-  if (search.status !== 0 || !focusedWindow) throw new Error(`xdotool could not resolve the VS Code X11 window: ${(search.stderr || search.stdout || '').trim()}`);
+  const tree = spawnSync('xwininfo', ['-root', '-tree'], options);
+  const windows = (tree.stdout || '').split('\n').map(line => {
+    const match = line.match(/^\s+(0x[0-9a-f]+).*?\s(\d+)x(\d+)\+/i);
+    return match ? { id: match[1], area: Number(match[2]) * Number(match[3]) } : undefined;
+  }).filter(Boolean).sort((a, b) => b.area - a.area);
+  const focusedWindow = windows[0]?.id;
+  if (tree.status !== 0 || !focusedWindow) throw new Error(`xwininfo could not resolve the VS Code X11 window: ${(tree.stderr || tree.stdout || '').trim()}`);
   const focus = spawnSync('xdotool', ['windowfocus', focusedWindow], options);
   if (focus.status !== 0) throw new Error(`xdotool could not focus VS Code window ${focusedWindow}: ${(focus.stderr || focus.stdout || '').trim()}`);
   const result = spawnSync('xdotool', ['key', '--clearmodifiers', keyName], options);
