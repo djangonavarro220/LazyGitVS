@@ -228,7 +228,7 @@ async function lazyGitPreviewTabLabels(Runtime) {
   return Array.from(new Set(r.result.value || []));
 }
 async function editorTabLabels(Runtime) {
-  const r = await Runtime.evaluate({ expression: `Array.from(document.querySelectorAll('.tab:not(.tab .tab)')).map(el => el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '').map(s => s.replace(/\s+/g, ' ').trim()).filter(Boolean)`, returnByValue: true });
+  const r = await Runtime.evaluate({ expression: `(document.body.innerText || '').split('\n').map(s => s.replace(/\s+/g, ' ').trim()).filter(s => /^LazyGitVS(?:\b|:)/.test(s))`, returnByValue: true });
   return Array.from(new Set(r.result.value || []));
 }
 function richPreviewHostLabels(labels) {
