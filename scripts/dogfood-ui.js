@@ -1110,15 +1110,12 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
           return fs.readFileSync(panelNavigationBoundaryReport, 'utf8').split('\n').some(line => line.includes('"event":"richPreviewPanel"') && line.includes(`"action":"${action}"`)) || null;
         };
         await runCommandPalette(Input, 'LazyGitVS: Focus 4 Commits');
-        await key(Input, 'ArrowDown');
-        await sleep(STEP_DELAY);
-        await waitFor(() => hasPreviewLifecycleAction('created'), 10000, 100, 'commit preview panel creation after explicit focus and navigation');
-        await key(Input, 'ArrowUp');
-        await sleep(STEP_DELAY);
+        assert(await clickLgvsRowWithTitle(Runtime, Input, 'dogfood commit file tree'), 'Targeted preview dogfood could not click the first commit row');
+        await waitFor(() => hasPreviewLifecycleAction('created'), 10000, 100, 'commit preview panel creation after clicking the first commit');
+        assert(await clickLgvsRowWithTitle(Runtime, Input, 'initial'), 'Targeted preview dogfood could not click the second commit row');
         await waitFor(() => hasPreviewLifecycleAction('reused'), 10000, 100, 'commit preview panel reuse before leaving Commits');
       } else if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS && panelKey === '5') {
-        await key(Input, 'ArrowDown');
-        await sleep(STEP_DELAY);
+        assert(await clickLgvsRowWithTitle(Runtime, Input, 'dogfood stash entry'), 'Targeted preview dogfood could not click the stash row');
       }
       if (panelKey === '1') checks.push({ name: 'Focus 1 keeps LGVS ownership or reveals Status panel', ok: /-- (STATUS|HUNK)\b/.test(jumpText) || jumpText.includes('1 STATUS') || /master\s*·\s*current/i.test(jumpText), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '2') checks.push({ name: 'Moving from 1 Status to 2 Files hides Status again', ok: !jumpText.includes('1 STATUS') && /-- FILES · LG --/.test(jumpText), textSample: jumpText.slice(0, 1200) });
