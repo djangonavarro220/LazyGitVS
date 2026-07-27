@@ -1093,6 +1093,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     }
     for (const [panelKey, panelTitle] of [['1', 'Status'], ['2', 'Files'], ['3', 'Branches'], ['4', 'Commits'], ['5', 'Stash'], ['6', 'Conflicts'], ['7', 'Tags'], ['8', 'Remotes']]) {
       void panelTitle;
+      const panelBoundaryOffsetBeforeJump = fs.existsSync(panelNavigationBoundaryReport) ? fs.statSync(panelNavigationBoundaryReport).size : 0;
       await chord(Input, `ctrl+alt+${panelKey}`);
       const panelText = async () => {
         const text = await pageText(Runtime);
@@ -1113,13 +1114,15 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
           if (!fs.existsSync(panelNavigationBoundaryReport)) return null;
           return fs.readFileSync(panelNavigationBoundaryReport, 'utf8').split('\n').some(line => line.includes('"event":"richPreviewPanel"') && line.includes(`"action":"${action}"`)) || null;
         };
-        const commitFocusBoundaryOffset = fs.existsSync(panelNavigationBoundaryReport) ? fs.statSync(panelNavigationBoundaryReport).size : 0;
-        await chord(Input, 'ctrl+alt+4');
-        await waitFor(() => {
+        const waitForCommitFocus = () => waitFor(() => {
           if (!fs.existsSync(panelNavigationBoundaryReport)) return null;
-          const freshEvents = fs.readFileSync(panelNavigationBoundaryReport, 'utf8').slice(commitFocusBoundaryOffset);
+          const freshEvents = fs.readFileSync(panelNavigationBoundaryReport, 'utf8').slice(panelBoundaryOffsetBeforeJump);
           return freshEvents.includes('"event":"panelFocus"') && freshEvents.includes('"activeView":"commits"') || null;
-        }, 10000, 100, 'fresh physical Commits focus ACK');
+        }, 5000, 100, 'fresh physical Commits focus ACK');
+        await waitForCommitFocus().catch(async () => {
+          await chord(Input, 'ctrl+alt+4');
+          return waitForCommitFocus();
+        });
         assert(await clickLgvsRowWithTitle(Runtime, Input, 'dogfood commit file tree'), 'Targeted preview dogfood could not click the first commit row');
         await waitFor(() => hasPreviewLifecycleAction('created'), 10000, 100, 'commit preview panel creation after clicking the first commit');
         assert(await clickLgvsRowWithTitle(Runtime, Input, 'initial'), 'Targeted preview dogfood could not click the second commit row');
