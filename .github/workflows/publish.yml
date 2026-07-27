@@ -89,6 +89,9 @@ jobs:
       - name: Tests
         run: npm test
 
+      - name: Targeted rich-preview dogfood
+        run: npm run dogfood:ui:preview-tabs
+
       - name: Install native screenshot dependency
         run: |
           sudo apt-get update

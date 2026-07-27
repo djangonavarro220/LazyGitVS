@@ -84,12 +84,16 @@ test('dogfood asserts the documented visible UI smoke path', () => {
   requireDogfoodInvariant('Escape stays on normal panels', /Escape on \$\{panelKey\} \$\{panelName\} keeps the current panel/);
   requireDogfoodInvariant('commit files detail is reachable', /Commit Enter loads the tree before navigation reaches the nested target preview/);
   requireDogfoodInvariant('contextual help focus return is covered', /Contextual help return keeps LGVS focus after active-panel lazy rendering/);
-  assert(dogfood.includes("if (panelKey === '4') {"), 'full dogfood must deliberately stabilize commit selection before requiring rich-preview reuse evidence');
+  assert(dogfood.includes("process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS && panelKey === '4'"), 'targeted preview dogfood must deliberately stabilize commit selection before requiring rich-preview reuse evidence');
   assert(dogfood.includes("runCommandPalette(Input, 'LazyGitVS: Open Operation Options')"), 'full dogfood must retry operation options through the qualified command when the physical m key is lost');
-  assert(dogfood.includes("runCommandPalette(Input, 'LazyGitVS: Focus 4 Commits')"), 'full dogfood must explicitly focus Commits before driving rich-preview lifecycle');
-  assert(dogfood.includes("'commit preview panel reuse before leaving Commits'"), 'full dogfood must confirm rich-preview reuse while Commits is still active');
+  assert(dogfood.includes("runCommandPalette(Input, 'LazyGitVS: Focus 4 Commits')"), 'targeted preview dogfood must explicitly focus Commits before driving rich-preview lifecycle');
+  assert(dogfood.includes("'commit preview panel reuse before leaving Commits'"), 'targeted preview dogfood must confirm rich-preview reuse while Commits is still active');
+  assert(dogfood.includes('env: { ...process.env, DISPLAY: NATIVE_DISPLAY, XAUTHORITY: nativeXauthority }'), 'native keyboard input must inherit the owning Xvfb display and authorization');
   assert(dogfood.includes('process.env.XAUTHORITY ||'), 'native screenshot capture must inherit the owning Xvfb authorization file');
-  for (const workflow of [ciWorkflow, publishWorkflow]) assert(workflow.includes('sudo apt-get install -y imagemagick'), 'CI and publish workflows must install the native screenshot dependency used by broad dogfood');
+  for (const workflow of [ciWorkflow, publishWorkflow]) {
+    assert(workflow.includes('sudo apt-get install -y imagemagick'), 'CI and publish workflows must install the native screenshot dependency used by broad dogfood');
+    assert(workflow.includes('npm run dogfood:ui:preview-tabs'), 'CI and publish workflows must run the targeted rich-preview gate separately from broad dogfood');
+  }
 });
 
 test('dogfood proves the complete nested commit-file tree drilldown in full and targeted lanes', () => {

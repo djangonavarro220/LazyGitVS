@@ -74,7 +74,7 @@ function addCheck(checks, check) {
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
 function nativeKey(keyName) {
-  const result = spawnSync('xdotool', ['key', '--clearmodifiers', keyName], { encoding: 'utf8' });
+  const result = spawnSync('xdotool', ['key', '--clearmodifiers', keyName], { encoding: 'utf8', env: { ...process.env, DISPLAY: NATIVE_DISPLAY, XAUTHORITY: nativeXauthority } });
   if (result.status !== 0) throw new Error(`xdotool could not send ${keyName}: ${(result.stderr || result.stdout || '').trim()}`);
 }
 
@@ -1104,7 +1104,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
           return waitFor(panelText, 10000, 250, `panel ${panelKey} ${panelTitle} reveal after retry`);
         });
       evidence.push({ step: `panel-jump-${panelKey}`, screenshot: await screenshot(Page, `02-panel-jump-${panelKey}`), status: status(fixture), textSample: jumpText.slice(0, 1200) });
-      if (panelKey === '4') {
+      if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS && panelKey === '4') {
         const hasPreviewLifecycleAction = action => {
           if (!fs.existsSync(panelNavigationBoundaryReport)) return null;
           return fs.readFileSync(panelNavigationBoundaryReport, 'utf8').split('\n').some(line => line.includes('"event":"richPreviewPanel"') && line.includes(`"action":"${action}"`)) || null;
@@ -1116,7 +1116,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
         await key(Input, 'ArrowUp');
         await sleep(STEP_DELAY);
         await waitFor(() => hasPreviewLifecycleAction('reused'), 10000, 100, 'commit preview panel reuse before leaving Commits');
-      } else if (panelKey === '5') {
+      } else if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS && panelKey === '5') {
         await key(Input, 'ArrowDown');
         await sleep(STEP_DELAY);
       }
@@ -1126,20 +1126,20 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
       if (panelKey === '8') checks.push({ name: 'Focus 8 reveals Remotes in the SCM sidebar', ok: jumpText.includes('8 REMOTES'), textSample: jumpText.slice(0, 1200) });
     }
 
-    const previewPanelLifecycle = await waitFor(async () => {
-      if (!fs.existsSync(panelNavigationBoundaryReport)) return null;
-      const events = fs.readFileSync(panelNavigationBoundaryReport, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(event => event.event === 'richPreviewPanel');
-      return events.filter(event => event.action === 'created').length === 1 && events.some(event => event.action === 'reused') ? events : null;
-    }, 10000, 100, 'commit/stash preview panel reuse');
-    const allEditorTabs = await editorTabLabels(Runtime);
-    const dynamicPreviewTabs = allEditorTabs.filter(label => /^LazyGitVS\b/.test(label));
-    const richPreviewTabs = allEditorTabs.filter(label => /^LazyGitVS:/.test(label));
-    const untitledPreviewTabs = allEditorTabs.filter(label => /Untitled/i.test(label));
-    evidence.push({ step: 'multiple-mode-single-dynamic-preview-after-navigation', screenshot: await screenshot(Page, '02-multiple-mode-single-dynamic-preview-after-navigation'), status: status(fixture), previewTabs: dynamicPreviewTabs, richPreviewTabs, previewPanelLifecycle });
-    checks.push({ name: 'previewTabs multiple still keeps one transient rich preview while navigating commits and stash', ok: richPreviewTabs.length === 1, richPreviewTabs, allEditorTabs });
-    checks.push({ name: 'Commit/stash previews keep one webview even when previewTabs is multiple', ok: previewPanelLifecycle.filter(event => event.action === 'created').length === 1 && previewPanelLifecycle.some(event => event.action === 'reused'), previewPanelLifecycle });
-    checks.push({ name: `Generated previews use named ${VIRTUAL_PREVIEW_URI_PREFIX} virtual documents, not Untitled buffers`, ok: dynamicPreviewTabs.every(label => /^LazyGitVS\b/.test(label)) && untitledPreviewTabs.length === 0, previewTabs: dynamicPreviewTabs, allEditorTabs, untitledPreviewTabs });
     if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS) {
+      const previewPanelLifecycle = await waitFor(async () => {
+        if (!fs.existsSync(panelNavigationBoundaryReport)) return null;
+        const events = fs.readFileSync(panelNavigationBoundaryReport, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)).filter(event => event.event === 'richPreviewPanel');
+        return events.filter(event => event.action === 'created').length === 1 && events.some(event => event.action === 'reused') ? events : null;
+      }, 10000, 100, 'commit/stash preview panel reuse');
+      const allEditorTabs = await editorTabLabels(Runtime);
+      const dynamicPreviewTabs = allEditorTabs.filter(label => /^LazyGitVS\b/.test(label));
+      const richPreviewTabs = allEditorTabs.filter(label => /^LazyGitVS:/.test(label));
+      const untitledPreviewTabs = allEditorTabs.filter(label => /Untitled/i.test(label));
+      evidence.push({ step: 'multiple-mode-single-dynamic-preview-after-navigation', screenshot: await screenshot(Page, '02-multiple-mode-single-dynamic-preview-after-navigation'), status: status(fixture), previewTabs: dynamicPreviewTabs, richPreviewTabs, previewPanelLifecycle });
+      checks.push({ name: 'previewTabs multiple still keeps one transient rich preview while navigating commits and stash', ok: richPreviewTabs.length === 1, richPreviewTabs, allEditorTabs });
+      checks.push({ name: 'Commit/stash previews keep one webview even when previewTabs is multiple', ok: previewPanelLifecycle.filter(event => event.action === 'created').length === 1 && previewPanelLifecycle.some(event => event.action === 'reused'), previewPanelLifecycle });
+      checks.push({ name: `Generated previews use named ${VIRTUAL_PREVIEW_URI_PREFIX} virtual documents, not Untitled buffers`, ok: dynamicPreviewTabs.every(label => /^LazyGitVS\b/.test(label)) && untitledPreviewTabs.length === 0, previewTabs: dynamicPreviewTabs, allEditorTabs, untitledPreviewTabs });
       finishDogfoodReport();
       return;
     }
