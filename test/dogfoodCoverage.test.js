@@ -93,11 +93,10 @@ test('dogfood asserts the documented visible UI smoke path', () => {
   assert(dogfood.includes("clickWorkbenchPaneRow(Runtime, Input, '5 STASH', 0)"), 'targeted preview dogfood must physically click the visible stash row');
   assert(dogfood.includes('richPreviewSnapshots.length === 3') && dogfood.includes('one rich-preview tab after the stash'), 'targeted preview dogfood must physically keep one rich tab across two commits and one stash');
   assert(dogfood.includes('env: { ...process.env, DISPLAY: NATIVE_DISPLAY, XAUTHORITY: nativeXauthority }'), 'native keyboard input must inherit the owning Xvfb display and authorization');
-  assert(dogfood.includes("spawnSync('xwininfo', ['-root', '-tree']") && dogfood.includes("['windowfocus', focusedWindow]"), 'native modal keys must focus the largest raw X11 child window without relying on unavailable window-manager or Electron metadata');
+  assert(dogfood.includes("function nativeModalAction(action)") && dogfood.includes("action === 'confirm' ? [352, 64] : [117, 64]") && dogfood.includes("['mousemove', '--sync'"), 'native modal confirmation must physically click the captured Abort/Cancel buttons without relying on unavailable X11 focus metadata');
   assert(dogfood.includes('process.env.XAUTHORITY ||'), 'native screenshot capture must inherit the owning Xvfb authorization file');
   for (const workflow of [ciWorkflow, publishWorkflow]) {
     assert(workflow.includes('sudo apt-get install -y imagemagick'), 'CI and publish workflows must install the native screenshot dependency used by broad dogfood');
-    assert(workflow.includes('sudo apt-get install -y x11-utils'), 'CI and publish workflows must install xwininfo for native modal focus discovery');
     assert(workflow.includes('npm run dogfood:ui:preview-tabs'), 'CI and publish workflows must run the targeted rich-preview gate separately from broad dogfood');
   }
 });

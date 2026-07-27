@@ -73,19 +73,11 @@ function addCheck(checks, check) {
 }
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
-function nativeKey(keyName) {
+function nativeModalAction(action) {
   const options = { encoding: 'utf8', env: { ...process.env, DISPLAY: NATIVE_DISPLAY, XAUTHORITY: nativeXauthority } };
-  const tree = spawnSync('xwininfo', ['-root', '-tree'], options);
-  const windows = (tree.stdout || '').split('\n').map(line => {
-    const match = line.match(/^\s+(0x[0-9a-f]+).*?\s(\d+)x(\d+)\+/i);
-    return match ? { id: match[1], area: Number(match[2]) * Number(match[3]) } : undefined;
-  }).filter(Boolean).sort((a, b) => b.area - a.area);
-  const focusedWindow = windows[0]?.id;
-  if (tree.status !== 0 || !focusedWindow) throw new Error(`xwininfo could not resolve the VS Code X11 window: ${(tree.stderr || tree.stdout || '').trim()}`);
-  const focus = spawnSync('xdotool', ['windowfocus', focusedWindow], options);
-  if (focus.status !== 0) throw new Error(`xdotool could not focus VS Code window ${focusedWindow}: ${(focus.stderr || focus.stdout || '').trim()}`);
-  const result = spawnSync('xdotool', ['key', '--clearmodifiers', keyName], options);
-  if (result.status !== 0) throw new Error(`xdotool could not send ${keyName}: ${(result.stderr || result.stdout || '').trim()}`);
+  const point = action === 'confirm' ? [352, 64] : [117, 64];
+  const result = spawnSync('xdotool', ['mousemove', '--sync', String(point[0]), String(point[1]), 'click', '1'], options);
+  if (result.status !== 0) throw new Error(`xdotool could not click native modal ${action}: ${(result.stderr || result.stdout || '').trim()}`);
 }
 
 function installVSCodeVimExtension(extensionsDir) {
@@ -657,7 +649,7 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
       const confirmationText = await pageText(Runtime);
       evidence.push({ step: 'status-operation-abort-confirmation', screenshot: nativeScreenshot('13-status-operation-abort-confirmation'), status: status(secondaryRepo), primaryStatus: status(fixture), textSample: confirmationText.slice(0, 3000) });
       checks.push({ name: 'Status operation abort exposes a native confirmation before mutation', ok: mergeOperationInProgress(fixture) && mergeOperationInProgress(secondaryRepo), textSample: confirmationText.slice(0, 1400) });
-      nativeKey('Escape');
+      nativeModalAction('cancel');
       await sleep(500);
       checks.push({ name: 'Cancelling operation abort causes no repository mutation', ok: mergeOperationInProgress(fixture) && mergeOperationInProgress(secondaryRepo) && status(fixture) === primaryBeforeCancel && status(secondaryRepo) === secondaryBeforeCancel, primaryBefore: primaryBeforeCancel, primaryAfter: status(fixture), secondaryBefore: secondaryBeforeCancel, secondaryAfter: status(secondaryRepo) });
 
@@ -669,7 +661,7 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
       await typeText(Input, 'a');
       await waitFor(async () => !(await quickInputState(Runtime)).visible, 5000, 100, 'confirmed abort option selection');
       await sleep(600);
-      nativeKey('Return');
+      nativeModalAction('confirm');
       await waitFor(() => !mergeOperationInProgress(secondaryRepo), 10000, 200, 'selected operation abort');
       evidence.push({ step: 'status-operation-aborted-selected-repo', screenshot: await screenshot(Page, '14-status-operation-aborted-selected-repo', { force: true }), status: status(secondaryRepo), primaryStatus: status(fixture) });
       checks.push({ name: 'Confirmed abort clears only the selected repository operation', ok: !mergeOperationInProgress(secondaryRepo) && mergeOperationInProgress(fixture), secondaryStatus: status(secondaryRepo), primaryStatus: status(fixture) });
@@ -1504,7 +1496,7 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
     const operationConfirmationText = (await pageText(Runtime)).slice(0, 3000);
     evidence.push({ step: 'status-operation-abort-confirmation', screenshot: nativeScreenshot('12-status-operation-abort-confirmation'), status: status(secondaryRepo), textSample: operationConfirmationText.slice(0, 3000) });
     checks.push({ name: 'Status operation abort requires confirmation before Git mutation', ok: mergeOperationInProgress(secondaryRepo), status: status(secondaryRepo) });
-    nativeKey('Return');
+    nativeModalAction('confirm');
     await waitFor(() => !mergeOperationInProgress(secondaryRepo), 10000, 200, 'operation abort to clear MERGE_HEAD');
     evidence.push({ step: 'status-operation-aborted', screenshot: await screenshot(Page, '13-status-operation-aborted', { force: true }), status: status(secondaryRepo), primaryStatus: status(fixture) });
     checks.push({ name: 'Status operation abort runs only against the selected repository', ok: !mergeOperationInProgress(secondaryRepo) && status(fixture) === primaryStatusBeforeOperationAbort, status: status(secondaryRepo), primaryBefore: primaryStatusBeforeOperationAbort, primaryAfter: status(fixture) });
