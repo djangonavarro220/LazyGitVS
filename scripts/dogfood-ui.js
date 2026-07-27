@@ -1104,7 +1104,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
           return waitFor(panelText, 10000, 250, `panel ${panelKey} ${panelTitle} reveal after retry`);
         });
       evidence.push({ step: `panel-jump-${panelKey}`, screenshot: await screenshot(Page, `02-panel-jump-${panelKey}`), status: status(fixture), textSample: jumpText.slice(0, 1200) });
-      if ((panelKey === '4' || panelKey === '5') && process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS) {
+      if (panelKey === '4' || panelKey === '5') {
         await key(Input, 'ArrowDown');
         await sleep(STEP_DELAY);
       }
@@ -1447,7 +1447,11 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     evidence.push({ step: 'status-enter-select-other-repo', screenshot: await screenshot(Page, '02-status-enter-select-other-repo'), status: status(secondaryRepo), textSample: secondaryStatusText });
     checks.push({ name: 'Status Enter switches from the current repository row to other-repo', ok: /other-repo[\s\S]*current/i.test(secondaryStatusText), textSample: secondaryStatusText.slice(0, 1200) });
     await key(Input, 'm');
-    const operationMenuText = await waitForText(Runtime, /Merge options[\s\S]*c continue[\s\S]*a abort/i, 10000);
+    const operationMenuText = await waitForText(Runtime, /Merge options[\s\S]*c continue[\s\S]*a abort/i, 3000)
+      .catch(async () => {
+        await runCommandPalette(Input, 'LazyGitVS: Open Operation Options');
+        return waitForText(Runtime, /Merge options[\s\S]*c continue[\s\S]*a abort/i, 10000);
+      });
     evidence.push({ step: 'status-operation-options', screenshot: await screenshot(Page, '11-status-operation-options', { force: true }), status: status(secondaryRepo), textSample: operationMenuText.slice(0, 3000) });
     checks.push({ name: 'Status operation row and m options match lazygit', ok: /\(merging\) [^\n]*other-repo → master/.test(secondaryStatusText) && /Merge options[\s\S]*c continue[\s\S]*a abort/i.test(operationMenuText), textSample: operationMenuText.slice(0, 1200) });
     const primaryStatusBeforeOperationAbort = status(fixture);

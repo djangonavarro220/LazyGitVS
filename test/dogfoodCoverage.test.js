@@ -82,6 +82,8 @@ test('dogfood asserts the documented visible UI smoke path', () => {
   requireDogfoodInvariant('Escape stays on normal panels', /Escape on \$\{panelKey\} \$\{panelName\} keeps the current panel/);
   requireDogfoodInvariant('commit files detail is reachable', /Commit Enter loads the tree before navigation reaches the nested target preview/);
   requireDogfoodInvariant('contextual help focus return is covered', /Contextual help return keeps LGVS focus after active-panel lazy rendering/);
+  assert(dogfood.includes("if (panelKey === '4' || panelKey === '5') {"), 'full dogfood must deliberately move commit/stash selection before requiring rich-preview reuse evidence');
+  assert(dogfood.includes("runCommandPalette(Input, 'LazyGitVS: Open Operation Options')"), 'full dogfood must retry operation options through the qualified command when the physical m key is lost');
 });
 
 test('dogfood proves the complete nested commit-file tree drilldown in full and targeted lanes', () => {
