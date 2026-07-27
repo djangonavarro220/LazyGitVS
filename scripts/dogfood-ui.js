@@ -1217,9 +1217,10 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
     await sleep(STEP_DELAY);
     await chord(Input, 'ctrl+alt+enter');
     await sleep(1800);
-    const branchEnterText = (await pageText(Runtime)).slice(0, 3000);
+    const branchEnterPageText = await pageText(Runtime);
+    const branchEnterText = branchEnterPageText.slice(0, 3000);
     evidence.push({ step: 'branches-enter-shows-selected-branch-commits', screenshot: await screenshot(Page, '02-branches-enter-shows-selected-branch-commits'), status: status(fixture), textSample: branchEnterText });
-    checks.push({ name: 'Branches Enter shows commits for the selected branch', ok: /-- COMMITS · LG --/.test(branchEnterText) && /initial/.test(branchEnterText), textSample: branchEnterText.slice(0, 1200) });
+    checks.push({ name: 'Branches Enter shows commits for the selected branch', ok: /-- COMMITS · LG --/.test(branchEnterPageText) && /initial/.test(branchEnterPageText), textSample: branchEnterText.slice(0, 1200) });
 
     await chord(Input, 'ctrl+alt+4');
     await key(Input, 'Escape');
@@ -1237,9 +1238,10 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
     await sleep(250);
     await key(Input, 'Escape');
     await sleep(STEP_DELAY);
-    const helpReturnText = (await pageText(Runtime)).slice(0, 3000);
+    const helpReturnPageText = await pageText(Runtime);
+    const helpReturnText = helpReturnPageText.slice(0, 3000);
     evidence.push({ step: 'contextual-help-focus-return', screenshot: await screenshot(Page, '02-contextual-help-focus-return'), status: status(fixture), quickInput: helpQuick, textSample: helpReturnText });
-    checks.push({ name: 'Contextual help return keeps LGVS focus after active-panel lazy rendering', ok: /-- COMMITS · LG --/.test(helpReturnText), quickInput: helpQuick, textSample: helpReturnText.slice(0, 1200) });
+    checks.push({ name: 'Contextual help return keeps LGVS focus after active-panel lazy rendering', ok: /-- COMMITS · LG --/.test(helpReturnPageText), quickInput: helpQuick, textSample: helpReturnText.slice(0, 1200) });
 
     await key(Input, '4');
     await sleep(STEP_DELAY);
