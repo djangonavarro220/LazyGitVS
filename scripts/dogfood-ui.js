@@ -1088,7 +1088,7 @@ async function focusWorkbenchPanelBody(Runtime, Input, label) {
     // Smoke all lazygit panel jumps before entering the editor flow. Use dogfood-only
     // keybindings so native editor focus cannot eat panel navigation.
     if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS) {
-      await chord(Input, 'ctrl+alt+0');
+      await key(Input, '0', { ctrl: true, alt: true });
       await sleep(STEP_DELAY);
     }
     for (const [panelKey, panelTitle] of [['1', 'Status'], ['2', 'Files'], ['3', 'Branches'], ['4', 'Commits'], ['5', 'Stash'], ['6', 'Conflicts'], ['7', 'Tags'], ['8', 'Remotes']]) {

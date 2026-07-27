@@ -86,7 +86,7 @@ test('dogfood asserts the documented visible UI smoke path', () => {
   requireDogfoodInvariant('contextual help focus return is covered', /Contextual help return keeps LGVS focus after active-panel lazy rendering/);
   assert(dogfood.includes("process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS && panelKey === '4'"), 'targeted preview dogfood must deliberately stabilize commit selection before requiring rich-preview reuse evidence');
   assert(dogfood.includes("runCommandPalette(Input, 'LazyGitVS: Open Operation Options')"), 'full dogfood must retry operation options through the qualified command when the physical m key is lost');
-  assert(dogfood.includes("await chord(Input, 'ctrl+alt+0')") && dogfood.includes('commitFocusBoundaryOffset'), 'targeted preview dogfood must restore the primary repo and require a fresh physical Commits focus ACK');
+  assert(dogfood.includes("await key(Input, '0', { ctrl: true, alt: true })") && dogfood.includes('commitFocusBoundaryOffset'), 'targeted preview dogfood must restore the primary repo and require a fresh physical Commits focus ACK');
   assert(dogfood.includes("clickLgvsRowWithTitle(Runtime, Input, 'dogfood commit file tree')") && dogfood.includes("clickLgvsRowWithTitle(Runtime, Input, 'initial')"), 'targeted preview dogfood must click two distinct real commit rows instead of relying on synthetic focus');
   assert(dogfood.includes("clickLgvsRowWithTitle(Runtime, Input, 'dogfood stash entry')"), 'targeted preview dogfood must click the real stash row');
   assert(dogfood.includes("'commit preview panel reuse before leaving Commits'"), 'targeted preview dogfood must confirm rich-preview reuse while Commits is still active');
