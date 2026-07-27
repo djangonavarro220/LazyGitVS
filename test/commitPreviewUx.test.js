@@ -43,6 +43,7 @@ const dogfood = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'ut
 assert(dogfood.includes("'lazygitvs.previewTabs': process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS ? 'multiple' : 'single'"), 'preview-tabs dogfood must reproduce the user configuration that previously accumulated commit editors');
 assert(dogfood.includes('Commit/stash navigation physically keeps one rich-preview tab after each selection'), 'preview-tabs dogfood must verify the reported multiple-mode regression through real editor-tab state');
 assert(dogfood.includes('function richPreviewHostLabels(labels)') && dogfood.includes('Commit\\s+[0-9a-f]+|stash@\\{\\d+\\}'), 'rich-preview tab counts must canonicalize accessibility duplicates while excluding native file/diff previews');
+assert(!dogfood.includes(".tabs-and-actions-container .tab, .tab'"), 'editor tab inspection must not use the global .tab selector that double-counts nested accessibility nodes');
 
 const { commitPatchPreviewHtml } = require('../out/richPreview.js');
 const html = commitPatchPreviewHtml({ title: 'Commit abc123', hash: 'abc123', subject: 'Pretty summary' }, `commit abc123
