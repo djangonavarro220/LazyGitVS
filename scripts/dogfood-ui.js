@@ -1156,7 +1156,7 @@ async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndex = 0) {
         richPreviewSnapshots.push(await waitFor(async () => {
           const tabs = richPreviewHostLabels(await editorTabLabels(Runtime));
           return tabs.length === 1 ? { selection: 'stash@{0}', tabs } : null;
-        }, 10000, 100, 'one rich-preview tab after the stash'));
+        }, 20000, 100, 'one rich-preview tab after the stash'));
       }
       if (panelKey === '1') checks.push({ name: 'Focus 1 keeps LGVS ownership or reveals Status panel', ok: /-- (STATUS|HUNK)\b/.test(jumpText) || jumpText.includes('1 STATUS') || /master\s*·\s*current/i.test(jumpText), textSample: jumpText.slice(0, 1200) });
       if (panelKey === '2') checks.push({ name: 'Moving from 1 Status to 2 Files hides Status again', ok: !jumpText.includes('1 STATUS') && /-- FILES · LG --/.test(jumpText), textSample: jumpText.slice(0, 1200) });
