@@ -183,12 +183,16 @@ async function chord(Input, keys) {
   if (keys === 'ctrl+alt+h') return key(Input, 'h', { ctrl: true, alt: true });
   if (keys === 'ctrl+alt+r') return key(Input, 'r', { ctrl: true, alt: true });
   if (keys === 'ctrl+alt+f') return key(Input, 'f', { ctrl: true, alt: true });
+  if (keys === 'ctrl+alt+g') return key(Input, 'g', { ctrl: true, alt: true });
 
   if (keys === 'ctrl+alt+?') return key(Input, '/', { ctrl: true, alt: true });
   if (keys === 'ctrl+alt+o') return key(Input, 'o', { ctrl: true, alt: true });
   const panelChord = /^ctrl\+alt\+([1-8])$/.exec(keys);
   if (panelChord) return key(Input, panelChord[1], { ctrl: true, alt: true });
   throw new Error(`unknown chord ${keys}`);
+}
+async function focusTelemetrySidebar(Input) {
+  await chord(Input, 'ctrl+alt+g');
 }
 async function typeText(Input, text) {
   await Input.insertText({ text });
@@ -553,7 +557,7 @@ async function main() {
     evidence.push({ step: 'initial-workbench', screenshot: await screenshot(Page, '01-initial-workbench'), status: status(fixture) });
 
     writeTelemetryPhase('telemetry/sidebar-focus');
-    await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
+    await focusTelemetrySidebar(Input);
     const sidebarText = await waitForText(Runtime, /2 FILES|1 STATUS/);
     evidence.push({ step: 'open-lgvs-scm-sidebar', screenshot: await screenshot(Page, '02-open-lgvs-scm-sidebar'), status: status(fixture), textSample: sidebarText });
     if (process.env.LGVS_DOGFOOD_TELEMETRY) {

@@ -35,4 +35,8 @@ for (const required of [
   assert(dogfood.includes(required), `keyboard-only dogfood must retain product result assertion: ${required}`);
 }
 
+assert(dogfood.includes("if (keys === 'ctrl+alt+g') return key(Input, 'g', { ctrl: true, alt: true });"), 'telemetry sidebar focus must use the physical Ctrl+Alt+G chord');
+const telemetrySidebarFocus = dogfood.match(/writeTelemetryPhase\('telemetry\/sidebar-focus'\)[\s\S]{0,300}waitForText\(Runtime, \/2 FILES\|1 STATUS\//)?.[0] || '';
+assert(telemetrySidebarFocus.includes('await focusTelemetrySidebar(Input);') && !/runCommandPalette|Input\.dispatchMouseEvent|\b[xy]\s*:|dispatchEvent/.test(telemetrySidebarFocus), 'bounded telemetry sidebar-focus block must use only direct keyboard focus and the sidebar product-state wait');
+
 console.log('dogfoodKeyboardOnly tests passed');
