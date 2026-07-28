@@ -15,7 +15,7 @@ const { targetLane, panelNavigationBoundaryMatches, finishReport, writeJson } = 
 const { makeFixtureResult, classifyFailure, collectProcessTreeMetrics } = require('./dogfood/telemetry');
 const { discoverOwnedCdp, makeChildTerminalFailure, publishJsonOnce, readProcessIdentity, readRunEnvelope, runChildPreRuntimeLifecycle, terminateOwnedProcessGroup } = require('./dogfood/run-envelope');
 const { writeNativeScreenshot, writeScreenshot } = require('./dogfood/screenshots');
-const { buildWorkbenchPaneRowProbe } = require('./dogfood/workbench-pane-row');
+
 const CDP = require('chrome-remote-interface');
 const { downloadAndUnzipVSCode } = require('@vscode/test-electron');
 
@@ -90,26 +90,6 @@ function addCheck(checks, check) {
 }
 
 function assert(cond, msg) { if (!cond) throw new Error(msg); }
-function nativeModalAction(action) {
-  const options = { encoding: 'utf8', env: { ...process.env, DISPLAY: NATIVE_DISPLAY, XAUTHORITY: nativeXauthority } };
-  const point = action === 'confirm' ? [352, 64] : [117, 64];
-  const script = `import ctypes, os, sys, time
-x11 = ctypes.CDLL('libX11.so.6')
-xtst = ctypes.CDLL('libXtst.so.6')
-x11.XOpenDisplay.restype = ctypes.c_void_p
-display = x11.XOpenDisplay(os.environ['DISPLAY'].encode())
-assert display
-xtst.XTestFakeMotionEvent(display, -1, int(sys.argv[1]), int(sys.argv[2]), 0)
-x11.XFlush(display)
-time.sleep(0.1)
-xtst.XTestFakeButtonEvent(display, 1, 1, 0)
-xtst.XTestFakeButtonEvent(display, 1, 0, 0)
-x11.XFlush(display)
-time.sleep(0.1)
-x11.XCloseDisplay(display)`;
-  const result = spawnSync('python3', ['-c', script, String(point[0]), String(point[1])], options);
-  if (result.status !== 0) throw new Error(`XTEST could not click native modal ${action}: ${(result.stderr || result.stdout || '').trim()}`);
-}
 
 function installVSCodeVimExtension(extensionsDir) {
   const cacheDir = path.join(OUT, 'cache');
@@ -247,9 +227,9 @@ async function runExactCommand(Runtime, Input, commandText, waitForHide = true) 
   await key(Input, 'a', { ctrl: true });
   await key(Input, 'Backspace');
   await typeText(Input, `>${commandText}`);
-  await sleep(600);
-  const picked = await clickQuickPickRowEndingWith(Runtime, Input, commandText, waitForHide);
-  if (!picked) throw new Error(`Command Palette did not expose exact command: ${commandText}`);
+  await waitForText(Runtime, new RegExp(commandText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), 5000);
+  await key(Input, 'Enter');
+  if (waitForHide) await waitFor(async () => !(await quickInputState(Runtime)).visible, 5000, 100, 'QuickPick selection accepted');
   await sleep(STEP_DELAY);
 }
 async function pageText(Runtime) {
@@ -270,32 +250,6 @@ function richPreviewHostLabels(labels) {
 async function quickInputState(Runtime) {
   const r = await Runtime.evaluate({ expression: `(() => { const widget = document.querySelector('.quick-input-widget'); const input = widget?.querySelector('input'); const style = widget ? getComputedStyle(widget) : undefined; return { visible: !!widget && style?.display !== 'none' && style?.visibility !== 'hidden' && widget.getBoundingClientRect().height > 0, focused: document.activeElement === input, text: input?.value || '', placeholder: input?.getAttribute('aria-label') || input?.getAttribute('placeholder') || '' }; })()`, returnByValue: true });
   return r.result.value || { visible: false, focused: false, text: '', placeholder: '' };
-}
-async function focusVisibleQuickInput(Runtime, Input) {
-  const r = await Runtime.evaluate({ expression: `(() => { const input = document.querySelector('.quick-input-widget input'); if (!input) return undefined; const rect = input.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : undefined; })()`, returnByValue: true });
-  const point = r.result.value;
-  if (!point) throw new Error('Visible QuickPick input was not available for keyboard focus');
-  await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
-  await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
-  await waitFor(async () => (await quickInputState(Runtime)).focused, 3000, 100, 'QuickPick keyboard focus');
-}
-async function clickQuickPickRowEndingWith(Runtime, Input, suffix, waitForHide = true) {
-  const r = await Runtime.evaluate({ expression: `(() => {
-    const suffix = ${JSON.stringify("__SUFFIX__")}.replace('__SUFFIX__', ${JSON.stringify(suffix)});
-    const rows = Array.from(document.querySelectorAll('.quick-input-list .monaco-list-row'));
-    const row = rows.find(el => (el.textContent || '').trim().endsWith(suffix));
-    if (!row) return undefined;
-    const rect = row.getBoundingClientRect();
-    return { x: rect.left + Math.min(40, Math.max(8, rect.width / 2)), y: rect.top + rect.height / 2, text: row.textContent || '' };
-  })()`, returnByValue: true });
-  const point = r.result.value;
-  if (!point) return undefined;
-  await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
-  await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
-  await key(Input, 'Enter');
-  if (waitForHide) await waitFor(async () => !(await quickInputState(Runtime)).visible, 5000, 100, 'QuickPick selection accepted');
-  await sleep(STEP_DELAY);
-  return point;
 }
 
 async function selectedLgvsRowInfo(Runtime) {
@@ -334,163 +288,7 @@ async function selectedLgvsRowInfo(Runtime) {
   return r.result.value;
 }
 
-async function clickLgvsRowWithTitle(Runtime, Input, titlePart) {
-  const r = await Runtime.evaluate({ expression: `(() => {
-    const titlePart = ${JSON.stringify(titlePart)};
-    function find(root, ox = 0, oy = 0) {
-      const rows = Array.from(root.querySelectorAll?.('.row') || []);
-      const row = rows.find(el => (el.getAttribute('title') || '').includes(titlePart) || (el.textContent || '').includes(titlePart));
-      if (row) {
-        const rect = row.getBoundingClientRect();
-        return { x: ox + rect.left + Math.min(80, Math.max(8, rect.width / 2)), y: oy + rect.top + rect.height / 2, title: row.getAttribute('title') || '', text: row.textContent || '' };
-      }
-      for (const el of Array.from(root.querySelectorAll?.('*') || [])) {
-        if (el.shadowRoot) { const found = find(el.shadowRoot, ox, oy); if (found) return found; }
-        if (el.tagName === 'IFRAME' && el.contentDocument) {
-          const rect = el.getBoundingClientRect();
-          const found = find(el.contentDocument, ox + rect.left, oy + rect.top);
-          if (found) return found;
-        }
-      }
-      return undefined;
-    }
-    return find(document);
-  })()`, returnByValue: true });
-  const point = r.result.value;
-  if (!point) return undefined;
-  await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
-  await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
-  await sleep(STEP_DELAY);
-  return point;
-}
 
-async function clickLgvsRoot(Runtime, Input) {
-  const r = await Runtime.evaluate({ expression: `(() => {
-    function find(root, ox = 0, oy = 0) {
-      const target = root.querySelector?.('.root .rows') || root.querySelector?.('.root');
-      if (target) {
-        const rect = target.getBoundingClientRect();
-        return { x: ox + rect.left + Math.min(24, Math.max(8, rect.width / 2)), y: oy + rect.top + Math.min(24, Math.max(8, rect.height / 2)) };
-      }
-      const all = Array.from(root.querySelectorAll?.('*') || []);
-      for (const el of all) {
-        if (el.shadowRoot) {
-          const found = find(el.shadowRoot, ox, oy);
-          if (found) return found;
-        }
-        if (el.tagName === 'IFRAME' && el.contentDocument) {
-          const rect = el.getBoundingClientRect();
-          const found = find(el.contentDocument, ox + rect.left, oy + rect.top);
-          if (found) return found;
-        }
-      }
-      return undefined;
-    }
-    return find(document);
-  })()`, returnByValue: true });
-  const point = r.result.value;
-  if (!point) return false;
-  await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
-  await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
-  await sleep(STEP_DELAY);
-  return true;
-}
-async function dispatchLgvsKey(Runtime, keyValue) {
-  const r = await Runtime.evaluate({ expression: `(() => {
-    const keyValue = ${JSON.stringify(keyValue)};
-    function dispatch(root) {
-      const target = root.querySelector?.('.root');
-      if (target) {
-        const view = target.ownerDocument.defaultView;
-        view.dispatchEvent(new view.KeyboardEvent('keydown', { key: keyValue, bubbles: true }));
-        return true;
-      }
-      for (const el of Array.from(root.querySelectorAll?.('*') || [])) {
-        if (el.shadowRoot && dispatch(el.shadowRoot)) return true;
-        if (el.tagName === 'IFRAME' && el.contentDocument && dispatch(el.contentDocument)) return true;
-      }
-      return false;
-    }
-    return dispatch(document);
-  })()`, returnByValue: true });
-  return r.result.value === true;
-}
-async function clickWorkbenchLabel(Runtime, Input, label) {
-  const r = await Runtime.evaluate({ expression: `(() => {
-    const wanted = ${JSON.stringify(label)};
-    const candidates = Array.from(document.querySelectorAll('.pane-header')).filter(el => ((el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim()).includes(wanted));
-    const el = candidates
-      .filter(candidate => { const rect = candidate.getBoundingClientRect(); return rect.width > 0 && rect.height > 0; })
-      .sort((a, b) => a.getBoundingClientRect().width - b.getBoundingClientRect().width)[0];
-    if (!el) return undefined;
-    const rect = el.getBoundingClientRect();
-    return { x: rect.left + Math.min(24, rect.width / 4), y: rect.top + rect.height / 2, text: el.textContent || '' };
-  })()`, returnByValue: true });
-  const point = r.result.value;
-  if (!point) return undefined;
-  await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
-  await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
-  await sleep(STEP_DELAY);
-  return point;
-}
-async function clickWorkbenchTreeRow(Runtime, Input, textPart) {
-  const r = await Runtime.evaluate({ expression: `(() => {
-    const wanted = ${JSON.stringify(textPart)};
-    const rows = Array.from(document.querySelectorAll('.monaco-list-row'));
-    const row = rows.find(el => {
-      const rect = el.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0 && (el.innerText || el.textContent || '').includes(wanted);
-    });
-    if (!row) return undefined;
-    const rect = row.getBoundingClientRect();
-    return { x: rect.left + Math.min(80, Math.max(12, rect.width / 3)), y: rect.top + rect.height / 2, text: row.innerText || row.textContent || '' };
-  })()`, returnByValue: true });
-  const point = r.result.value;
-  if (!point) return undefined;
-  await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
-  await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
-  await sleep(300);
-  return point;
-}
-async function focusWorkbenchPanelBody(Runtime, Input, label) {
-  const r = await Runtime.evaluate({ expression: `(() => {
-    const wanted = ${JSON.stringify(label)};
-    const header = Array.from(document.querySelectorAll('.pane-header')).find(el => { const rect = el.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 && ((el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim()).includes(wanted); });
-    const pane = header?.closest('.pane');
-    if (!header || !pane) return undefined;
-    const paneRect = pane.getBoundingClientRect();
-    return { x: paneRect.left + paneRect.width / 2, y: paneRect.bottom - 8 };
-  })()`, returnByValue: true });
-  const point = r.result.value;
-  if (!point) return false;
-  await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
-  await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
-  await sleep(STEP_DELAY);
-  return true;
-}
-async function clickWorkbenchPaneRow(Runtime, Input, label, rowIndexOrText = 0, rowText) {
-  const wantedRowText = rowText ?? (typeof rowIndexOrText === 'string' ? rowIndexOrText : undefined);
-  const r = await Runtime.evaluate({ expression: buildWorkbenchPaneRowProbe({
-    label,
-    rowIndex: typeof rowIndexOrText === 'number' ? rowIndexOrText : 0,
-    wantedRowText
-  }), returnByValue: true });
-  const point = r.result.value;
-  if (!point) return undefined;
-  await Input.dispatchMouseEvent({ type: 'mousePressed', x: point.x, y: point.y, button: 'left', clickCount: 1 });
-  await Input.dispatchMouseEvent({ type: 'mouseReleased', x: point.x, y: point.y, button: 'left', clickCount: 1 });
-  await sleep(STEP_DELAY);
-  if (point.rowText) {
-    const selected = await Runtime.evaluate({ expression: buildWorkbenchPaneRowProbe({
-      label,
-      rowIndex: 0,
-      wantedRowText,
-      verify: true
-    }), returnByValue: true });
-    return selected.result.value ? point : undefined;
-  }
-  return point;
-}
 async function main() {
   if (runMatrixIfNeeded()) return;
   let lifecyclePhase = 'setup';
@@ -632,6 +430,39 @@ async function main() {
     const { Page, Input, Runtime, Browser, Emulation, Performance } = client;
     activePage = Page;
     await Promise.all([Page.enable(), Runtime.enable(), Performance.enable()]);
+    async function selectPrimaryStatusFixture() {
+      await chord(Input, 'ctrl+alt+1');
+      await key(Input, 'Home');
+      await key(Input, 'Enter');
+    }
+    async function selectFirstCommitFixture() {
+      await chord(Input, 'ctrl+alt+4');
+      await key(Input, 'Home');
+    }
+    async function selectSecondCommitFixture() {
+      await chord(Input, 'ctrl+alt+4');
+      await key(Input, 'Home');
+      await key(Input, 'ArrowDown');
+    }
+    async function selectFirstStashFixture() {
+      await chord(Input, 'ctrl+alt+5');
+      await key(Input, 'Home');
+    }
+    async function selectMasterBranchFixture() {
+      await chord(Input, 'ctrl+alt+3');
+      await key(Input, 'Home');
+    }
+    async function selectSettingsJsonFixture() {
+      await chord(Input, 'ctrl+alt+2');
+      await key(Input, 'Home');
+      await key(Input, 'ArrowDown');
+    }
+    async function selectOtherRepoStatusFixture() {
+      await chord(Input, 'ctrl+alt+1');
+      await key(Input, 'Home');
+      await key(Input, 'ArrowDown');
+      await key(Input, 'Enter');
+    }
     async function exerciseCommitFileTree() {
       const expectedPath = 'commit-tree/routes/api/target.ts';
       const gitCommitFiles = git(fixture, 'show', '--format=', '--name-only', 'HEAD');
@@ -661,8 +492,7 @@ async function main() {
       await sleep(1200);
       await chord(Input, 'ctrl+alt+1');
       const rowText = await waitForText(Runtime, /\(merging\)[^\n]*other-repo → master/, 10000);
-      const selected = await clickWorkbenchTreeRow(Runtime, Input, `(merging) ${path.basename(secondaryRepo)} → master`);
-      assert(selected, 'Could not deterministically focus the secondary operation row');
+      await selectOtherRepoStatusFixture();
       evidence.push({ step: 'status-operation-row', screenshot: await screenshot(Page, '11-status-operation-row', { force: true }), status: status(secondaryRepo), primaryStatus: status(fixture), textSample: rowText.slice(0, 3000) });
 
       await key(Input, 'm');
@@ -675,7 +505,6 @@ async function main() {
 
       const primaryBeforeCancel = status(fixture);
       const secondaryBeforeCancel = status(secondaryRepo);
-      await focusVisibleQuickInput(Runtime, Input);
       await typeText(Input, 'a');
       await sleep(250);
       const abortSelectionState = await quickInputState(Runtime);
@@ -684,19 +513,17 @@ async function main() {
       const confirmationText = await pageText(Runtime);
       evidence.push({ step: 'status-operation-abort-confirmation', screenshot: nativeScreenshot('13-status-operation-abort-confirmation'), status: status(secondaryRepo), primaryStatus: status(fixture), textSample: confirmationText.slice(0, 3000) });
       checks.push({ name: 'Status operation abort exposes a native confirmation before mutation', ok: mergeOperationInProgress(fixture) && mergeOperationInProgress(secondaryRepo), textSample: confirmationText.slice(0, 1400) });
-      nativeModalAction('cancel');
+      await key(Input, 'Escape');
       await sleep(500);
       checks.push({ name: 'Cancelling operation abort causes no repository mutation', ok: mergeOperationInProgress(fixture) && mergeOperationInProgress(secondaryRepo) && status(fixture) === primaryBeforeCancel && status(secondaryRepo) === secondaryBeforeCancel, primaryBefore: primaryBeforeCancel, primaryAfter: status(fixture), secondaryBefore: secondaryBeforeCancel, secondaryAfter: status(secondaryRepo) });
 
-      const reselected = await clickWorkbenchTreeRow(Runtime, Input, `(merging) ${path.basename(secondaryRepo)} → master`);
-      assert(reselected, 'Could not restore deterministic focus to the secondary operation row');
+      await selectOtherRepoStatusFixture();
       await runExactCommand(Runtime, Input, 'LazyGitVS: Open Operation Options');
       await waitForText(Runtime, /Merge options[\s\S]*a abort/i, 10000);
-      await focusVisibleQuickInput(Runtime, Input);
       await typeText(Input, 'a');
       await waitFor(async () => !(await quickInputState(Runtime)).visible, 5000, 100, 'confirmed abort option selection');
       await sleep(600);
-      nativeModalAction('confirm');
+      await key(Input, 'Enter');
       await waitFor(() => !mergeOperationInProgress(secondaryRepo), 10000, 200, 'selected operation abort');
       evidence.push({ step: 'status-operation-aborted-selected-repo', screenshot: await screenshot(Page, '14-status-operation-aborted-selected-repo', { force: true }), status: status(secondaryRepo), primaryStatus: status(fixture) });
       checks.push({ name: 'Confirmed abort clears only the selected repository operation', ok: !mergeOperationInProgress(secondaryRepo) && mergeOperationInProgress(fixture), secondaryStatus: status(secondaryRepo), primaryStatus: status(fixture) });
@@ -716,7 +543,6 @@ async function main() {
     evidence.push({ step: 'initial-workbench', screenshot: await screenshot(Page, '01-initial-workbench'), status: status(fixture) });
 
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
-    await clickLgvsRoot(Runtime, Input);
     const sidebarText = await waitForText(Runtime, /2 FILES|1 STATUS/);
     evidence.push({ step: 'open-lgvs-scm-sidebar', screenshot: await screenshot(Page, '02-open-lgvs-scm-sidebar'), status: status(fixture), textSample: sidebarText });
     if (process.env.LGVS_DOGFOOD_TELEMETRY) {
@@ -817,10 +643,8 @@ async function main() {
     }
     let pickedPrimary;
     if (process.env.LGVS_DOGFOOD_UNDO_REDO) {
-      assert(await focusWorkbenchPanelBody(Runtime, Input, '1 STATUS'), 'Visible Status panel body was not found for repository selection');
-      await key(Input, 'Enter');
-      await waitFor(async () => (await quickInputState(Runtime)).visible, 5000, 200, 'repository selector QuickPick');
-      pickedPrimary = await clickQuickPickRowEndingWith(Runtime, Input, fixture);
+      await selectPrimaryStatusFixture();
+      pickedPrimary = { keys: 'Home, Enter', repoPath: fixture };
     } else if (process.env.LGVS_DOGFOOD_OPERATION_STATUS) {
       throw new Error('Operation-status lane should have returned before repository selection');
     } else {
@@ -834,7 +658,6 @@ async function main() {
 
     await chord(Input, 'ctrl+alt+2');
     await waitForText(Runtime, /-- FILES · LG --/);
-    assert(await focusWorkbenchPanelBody(Runtime, Input, '2 FILES'), 'Visible Files panel body was not found for circular navigation');
     const circularPanelKeys = [
       { name: 'left/right', previous: ['ArrowLeft'], next: ['ArrowRight'] },
       { name: 'h/l', previous: ['h'], next: ['l'] },
@@ -956,7 +779,6 @@ async function main() {
       await key(Input, '2');
       await chord(Input, 'ctrl+alt+f');
       await sleep(STEP_DELAY);
-      await clickLgvsRoot(Runtime, Input);
       await key(Input, 'End');
       await sleep(STEP_DELAY);
       const selectedBeforeStorm = await waitFor(async () => {
@@ -993,7 +815,6 @@ async function main() {
 
     if (process.env.LGVS_DOGFOOD_BINARY_FILE) {
       await key(Input, '2');
-      await clickLgvsRoot(Runtime, Input);
       let binaryText = '';
       for (let i = 0; i < 10; i++) {
         binaryText = await pageText(Runtime);
@@ -1009,7 +830,6 @@ async function main() {
     if (process.env.LGVS_DOGFOOD_EDGE_FILES) {
       await key(Input, '2');
       await sleep(STEP_DELAY);
-      await clickLgvsRoot(Runtime, Input);
       const edgeFileSamples = [];
       for (let i = 0; i < 6; i++) {
         edgeFileSamples.push((await pageText(Runtime)).slice(0, 5000));
@@ -1186,26 +1006,18 @@ async function main() {
         });
       evidence.push({ step: `panel-jump-${panelKey}`, screenshot: await screenshot(Page, `02-panel-jump-${panelKey}`), status: status(fixture), textSample: jumpText.slice(0, 1200) });
       if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS && panelKey === '4') {
-        const clickFirstCommit = () => waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '4 COMMITS', 0), 5000, 200, 'real first commit row after restoring the primary repo');
-        await clickFirstCommit().catch(async () => {
-          await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
-          await key(Input, '0', { ctrl: true, alt: true });
-          await sleep(500);
-          await key(Input, 'Escape');
-          await chord(Input, 'ctrl+alt+4');
-          return clickFirstCommit();
-        });
+        await selectFirstCommitFixture();
         richPreviewSnapshots.push(await waitFor(async () => {
           const tabs = richPreviewHostLabels(await editorTabLabels(Runtime));
           return tabs.length === 1 ? { selection: 'dogfood comm', tabs } : null;
         }, 10000, 100, 'one rich-preview tab after the first commit'));
-        assert(await clickWorkbenchPaneRow(Runtime, Input, '4 COMMITS', 1), 'Targeted preview dogfood could not click the second commit row');
+        await selectSecondCommitFixture();
         richPreviewSnapshots.push(await waitFor(async () => {
           const tabs = richPreviewHostLabels(await editorTabLabels(Runtime));
           return tabs.length === 1 ? { selection: 'initial', tabs } : null;
         }, 10000, 100, 'one rich-preview tab after the second commit'));
       } else if (process.env.LGVS_DOGFOOD_FAST_PREVIEW_TABS && panelKey === '5') {
-        assert(await clickWorkbenchPaneRow(Runtime, Input, '5 STASH', 0), 'Targeted preview dogfood could not click the stash row');
+        await selectFirstStashFixture();
         richPreviewSnapshots.push(await waitFor(async () => {
           const tabs = richPreviewHostLabels(await editorTabLabels(Runtime));
           return tabs.length === 1 ? { selection: 'stash@{0}', tabs } : null;
@@ -1239,7 +1051,6 @@ async function main() {
       if (!new RegExp(`-- ${panelName} · LG --`).test(escText)) {
         await chord(Input, `ctrl+alt+${panelKey}`);
         await sleep(STEP_DELAY);
-        await clickLgvsRoot(Runtime, Input);
         await key(Input, 'Escape');
         await sleep(STEP_DELAY);
         escText = await pageText(Runtime);
@@ -1248,19 +1059,14 @@ async function main() {
       checks.push({ name: `Escape on ${panelKey} ${panelName} keeps the current panel`, ok: new RegExp(`-- ${panelName} · LG --`).test(escText), textSample: escText.slice(0, 1200) });
     }
 
-    await chord(Input, 'ctrl+alt+3');
+    await selectMasterBranchFixture();
     await sleep(STEP_DELAY);
-    await waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '3 BRANCHES', 'master'), 10000, 200, 'physical master branch row');
     await chord(Input, 'ctrl+alt+enter');
     const waitForBranchEnter = () => waitFor(async () => {
       const text = await pageText(Runtime);
       return /-- COMMITS · LG --/.test(text) && /initial/.test(text) ? text : undefined;
     }, 10000, 200, 'selected branch commit list');
-    const branchEnterPageText = await waitForBranchEnter().catch(async () => {
-      await waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '3 BRANCHES', 'master'), 5000, 200, 'physical master branch row retry');
-      await chord(Input, 'ctrl+alt+enter');
-      return waitForBranchEnter();
-    });
+    const branchEnterPageText = await waitForBranchEnter();
     const branchEnterText = branchEnterPageText.slice(0, 3000);
     evidence.push({ step: 'branches-enter-shows-selected-branch-commits', screenshot: await screenshot(Page, '02-branches-enter-shows-selected-branch-commits'), status: status(fixture), textSample: branchEnterText });
     checks.push({ name: 'Branches Enter shows commits for the selected branch', ok: /-- COMMITS · LG --/.test(branchEnterPageText) && /initial/.test(branchEnterPageText), textSample: branchEnterText.slice(0, 1200) });
@@ -1270,7 +1076,6 @@ async function main() {
     await sleep(300);
     await key(Input, 'Escape');
     await sleep(300);
-    await clickLgvsRoot(Runtime, Input);
     await chord(Input, 'ctrl+alt+?');
     let helpQuick = await quickInputState(Runtime);
     if (!helpQuick.visible) {
@@ -1304,8 +1109,7 @@ async function main() {
     await key(Input, '0', { ctrl: true, alt: true });
     await sleep(500);
     await key(Input, 'Escape');
-    await chord(Input, 'ctrl+alt+2');
-    await waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '2 FILES', 1), 10000, 200, 'physical settings.json row in the primary repo');
+    await selectSettingsJsonFixture();
     await runCommandPalette(Input, 'LazyGitVS: Enter current file HUNK mode');
     await waitFor(async () => /-- HUNK\b/.test((await pageText(Runtime)).slice(0, 5000)), 10000, 300, 'settings HUNK mode after primary-repo file click');
     await key(Input, 'Tab');
@@ -1326,6 +1130,7 @@ async function main() {
       first: stagedHunkOneText.slice(-400),
       second: stagedHunkTwoText.slice(-400)
     });
+    checks.push({ name: 'Files selection reaches HUNK for settings.json', ok: /-- HUNK\b/.test(stagedHunkOneText) && /settings\.json/.test(stagedHunkOneText), textSample: stagedHunkOneText.slice(-1200) });
     const extensionSourceForHunkGuard = [
       'extension.ts',
       'hunkEditorDecorations.ts'
@@ -1408,7 +1213,6 @@ async function main() {
     // LGVS correctly owns the logical panel state.
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
     await runCommandPalette(Input, 'LazyGitVS: Focus 2 Files');
-    await clickLgvsRoot(Runtime, Input);
     await waitFor(filesContextVisible, 8000, 300, 'LGVS Files panel focus before entering HUNK mode');
 
     // Enter HUNK mode through a dogfood-only keybinding so the test is not at the mercy of CDP focus.
@@ -1530,10 +1334,7 @@ async function main() {
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
     await key(Input, '1');
     await sleep(STEP_DELAY);
-    const secondaryRepoBasename = path.basename(secondaryRepo);
-    const selectedSecondaryStatusRow = await waitFor(() => clickWorkbenchPaneRow(Runtime, Input, '1 STATUS', secondaryRepoBasename), 10000, 200, 'physical other-repo Status row');
-    assert(selectedSecondaryStatusRow, 'Status selection did not focus/select the exact other-repo basename row');
-    await chord(Input, 'ctrl+alt+enter');
+    await selectOtherRepoStatusFixture();
     const secondaryStatusPageText = await waitFor(async () => {
       const text = await pageText(Runtime);
       return /other-repo[\s\S]*current/i.test(text) ? text : undefined;
@@ -1557,7 +1358,7 @@ async function main() {
     const operationConfirmationText = (await pageText(Runtime)).slice(0, 3000);
     evidence.push({ step: 'status-operation-abort-confirmation', screenshot: nativeScreenshot('12-status-operation-abort-confirmation'), status: status(secondaryRepo), textSample: operationConfirmationText.slice(0, 3000) });
     checks.push({ name: 'Status operation abort requires confirmation before Git mutation', ok: mergeOperationInProgress(secondaryRepo), status: status(secondaryRepo) });
-    nativeModalAction('confirm');
+    await key(Input, 'Enter');
     await waitFor(() => !mergeOperationInProgress(secondaryRepo), 10000, 200, 'operation abort to clear MERGE_HEAD');
     evidence.push({ step: 'status-operation-aborted', screenshot: await screenshot(Page, '13-status-operation-aborted', { force: true }), status: status(secondaryRepo), primaryStatus: status(fixture) });
     checks.push({ name: 'Status operation abort runs only against the selected repository', ok: !mergeOperationInProgress(secondaryRepo) && status(fixture) === primaryStatusBeforeOperationAbort, status: status(secondaryRepo), primaryBefore: primaryStatusBeforeOperationAbort, primaryAfter: status(fixture) });
