@@ -29,6 +29,7 @@ const REPORT_SLUG = `${VARIANT_NAME}-${TARGETED_LANE}`;
 const TELEMETRY = process.env.LGVS_DOGFOOD_TELEMETRY === '1';
 const RUN_ENVELOPE = TELEMETRY ? readRunEnvelope(process.env.LGVS_TELEMETRY_ENVELOPE_PATH, process.env.LGVS_TELEMETRY_ENVELOPE_DIGEST) : undefined;
 const TELEMETRY_CHILD_DIR = TELEMETRY ? path.resolve(process.env.LGVS_TELEMETRY_CHILD_DIR) : undefined;
+const TELEMETRY_PHASE_PATH = TELEMETRY ? path.resolve(process.env.LGVS_TELEMETRY_PHASE_PATH) : undefined;
 const REPORT_JSON = path.resolve(process.env.LGVS_DOGFOOD_REPORT_PATH || path.join(OUT, `last-run-${REPORT_SLUG}.json`));
 const LANE_SHOTS = TELEMETRY ? path.join(RUN_ENVELOPE.paths.screenshotsDir, TARGETED_LANE) : path.join(SHOTS, REPORT_SLUG);
 let PORT = Number(process.env.LGVS_DOGFOOD_CDP_PORT || 9322);
@@ -38,6 +39,12 @@ const THEME = process.env.LGVS_DOGFOOD_THEME || 'Default Light Modern';
 const VIRTUAL_PREVIEW_URI_PREFIX = 'lazygitvs-preview:';
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function writeTelemetryPhase(phase) {
+  if (!TELEMETRY) return;
+  const temporaryPath = `${TELEMETRY_PHASE_PATH}.${process.pid}.tmp`;
+  fs.writeFileSync(temporaryPath, JSON.stringify({ schemaVersion: 1, phase, at: new Date().toISOString() }), { mode: 0o600 });
+  fs.renameSync(temporaryPath, TELEMETRY_PHASE_PATH);
+}
 function getJson(url, timeoutMs = 3000) {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -306,6 +313,7 @@ async function main() {
   let checks = [];
   let evidence = [];
   try {
+  writeTelemetryPhase('telemetry/child-started');
   if (!TELEMETRY) fs.rmSync(LANE_SHOTS, { recursive: true, force: true });
   ensureDir(LANE_SHOTS);
   started = new Date().toISOString();
@@ -421,11 +429,13 @@ async function main() {
     }
   });
     if (TELEMETRY) {
+      writeTelemetryPhase('telemetry/owned-cdp');
       cdpOwnership = await waitFor(() => {
         try { return discoverOwnedCdp({ userDataDir: userData, rootProcessIdentity }); } catch { return undefined; }
       }, 45000, 100, 'owned CDP listener');
       PORT = cdpOwnership.port;
     }
+    writeTelemetryPhase('telemetry/cdp-connected');
     client = await cdpConnect();
     const { Page, Input, Runtime, Browser, Emulation, Performance } = client;
     activePage = Page;
@@ -542,10 +552,12 @@ async function main() {
     await sleep(4500);
     evidence.push({ step: 'initial-workbench', screenshot: await screenshot(Page, '01-initial-workbench'), status: status(fixture) });
 
+    writeTelemetryPhase('telemetry/sidebar-focus');
     await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
     const sidebarText = await waitForText(Runtime, /2 FILES|1 STATUS/);
     evidence.push({ step: 'open-lgvs-scm-sidebar', screenshot: await screenshot(Page, '02-open-lgvs-scm-sidebar'), status: status(fixture), textSample: sidebarText });
     if (process.env.LGVS_DOGFOOD_TELEMETRY) {
+      writeTelemetryPhase('telemetry/files-ready');
       await key(Input, '0', { ctrl: true, alt: true });
       await waitForText(Runtime, /-- FILES · LG --/, 20000);
       const warmSamples = Math.max(2, Math.min(20, Number(process.env.LGVS_TELEMETRY_WARM_SAMPLES || 5)));
@@ -567,8 +579,10 @@ async function main() {
         }
         const panel = index % 2 === 0 ? ['3', /-- BRANCHES · LG --/] : ['2', /-- FILES · LG --/];
         const dispatchStarted = performance.now();
+        writeTelemetryPhase(`telemetry/sample-${kind}-${index}/panel-dispatch`);
         await chord(Input, `ctrl+alt+${panel[0]}`);
         const dispatchAcknowledged = performance.now();
+        writeTelemetryPhase(`telemetry/sample-${kind}-${index}/panel-ready`);
         await waitForText(Runtime, panel[1], 10000);
         const renderedReady = performance.now();
         input.dispatchAcknowledgedMs.push({ kind, value: dispatchAcknowledged - dispatchStarted });
@@ -601,6 +615,7 @@ async function main() {
       });
       checks.push({ name: 'Telemetry fixture renders real changed files', ok: /bulk\/file-/.test(status(fixture)), fixture: telemetry.fixture });
       for (const check of checks) if (!check.ok) throw new Error(`Dogfood check failed: ${check.name}`);
+      writeTelemetryPhase('telemetry/publish-success');
       publishJsonOnce(REPORT_JSON, {
         schemaVersion: 1,
         status: 'success',

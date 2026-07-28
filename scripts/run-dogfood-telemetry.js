@@ -11,19 +11,44 @@ const root = path.resolve(__dirname, '..');
 const output = path.resolve(process.env.LGVS_TELEMETRY_OUTPUT || path.join(root, 'dogfood-output', 'telemetry.json'));
 const warmSamples = String(Math.max(2, Math.min(20, Number(process.env.LGVS_TELEMETRY_WARM_SAMPLES || 5))));
 
-function runChild(command, args, options) {
+function runChild(command, args, options, spawnChild = spawn) {
   return new Promise(resolve => {
-    const child = spawn(command, args, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawnChild(command, args, { ...options, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
+    let timedOut = false;
+    let timeoutSignal;
+    let settled = false;
+    let graceTimer;
+    const settle = result => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(graceTimer);
+      resolve({ timedOut, status: null, signal: null, stdout, stderr, pid: child.pid, timeoutSignal, ...result });
+    };
     const timer = setTimeout(() => {
-      try { child.kill('SIGTERM'); } catch {}
+      timedOut = true;
+      timeoutSignal = 'SIGTERM';
+      try { child.kill(timeoutSignal); } catch {}
+      graceTimer = setTimeout(() => {
+        timeoutSignal = 'SIGKILL';
+        try { child.kill(timeoutSignal); } catch {}
+      }, 10000);
     }, options.timeout);
     child.stdout.on('data', chunk => { stdout += chunk; if (stdout.length > 10 * 1024 * 1024) stdout = stdout.slice(-10 * 1024 * 1024); });
-    child.stderr.on('data', chunk => { stderr += chunk; if (stderr.length > 10 * 1024 * 1024) stderr = stderr.slice(-10 * 1024 * 1024); });
-    child.on('error', error => { clearTimeout(timer); resolve({ status: null, error, stdout, stderr, pid: child.pid }); });
-    child.on('exit', (status, signal) => { clearTimeout(timer); resolve({ status, signal, stdout, stderr, pid: child.pid }); });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    child.on('error', error => settle({ error }));
+    child.on('exit', (status, signal) => settle({ status, signal }));
   });
+}
+
+function readPhaseSnapshot(phasePath, childDir) {
+  try {
+    if (path.dirname(phasePath) !== childDir || fs.lstatSync(phasePath).isSymbolicLink()) return undefined;
+    const snapshot = JSON.parse(fs.readFileSync(phasePath, 'utf8'));
+    return snapshot?.schemaVersion === 1 && typeof snapshot.phase === 'string' && typeof snapshot.at === 'string' ? snapshot.phase : undefined;
+  } catch { return undefined; }
 }
 
 function coordinatorFailure(runEnvelope, provenance, code, message) {
@@ -44,14 +69,15 @@ async function runTelemetryCoordinator(testOnly = undefined) {
   const knownInjections = new Set(['post-envelope-exception', 'launch-failure', 'zero-result']);
   if (injection && !knownInjections.has(injection)) throw new Error(`Unknown test injection: ${injection}`);
   const selection = parseFixtureSelector(process.env.LGVS_TELEMETRY_FIXTURES);
-  fs.mkdirSync(path.dirname(output), { recursive: true });
+  const coordinatorOutput = testOnly?.outputPath || output;
+  fs.mkdirSync(path.dirname(coordinatorOutput), { recursive: true });
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   const codePath = testOnly?.codePath || await require('@vscode/test-electron').downloadAndUnzipVSCode('stable');
   const provenance = testOnly?.captureProvenance
     ? testOnly.captureProvenance({ repoRoot: root, extensionVersion: pkg.version, nodeExecutable: process.execPath, vscodeExecutable: codePath })
     : captureProvenance({ repoRoot: root, extensionVersion: pkg.version, nodeExecutable: process.execPath, vscodeExecutable: codePath });
   const runId = crypto.randomUUID();
-  const runEnvelope = createRunEnvelope({ outputPath: output, repoRoot: root, runId, lane: 'telemetry-matrix', provenance });
+  const runEnvelope = createRunEnvelope({ outputPath: coordinatorOutput, repoRoot: root, runId, lane: 'telemetry-matrix', provenance });
   let published = false;
   const publishTerminal = report => {
     if (published) throw new Error('Coordinator terminal result was already published');
@@ -66,11 +92,12 @@ async function runTelemetryCoordinator(testOnly = undefined) {
     const lane = `telemetry-${fixture.fileCount}f-${fixture.repoCount}r`;
     const childDir = path.join(runEnvelope.paths.tempDir, fixtureKey(fixture));
     fs.mkdirSync(childDir, { mode: 0o700 });
+    const phasePath = path.join(childDir, 'phase.json');
     const reportPath = path.join(runEnvelope.paths.childrenDir, `${fixtureKey(fixture)}.json`);
     const dogfoodArgs = [process.execPath, path.join(__dirname, 'dogfood-ui.js')];
     const command = process.env.DISPLAY ? dogfoodArgs.shift() : 'xvfb-run';
     const args = process.env.DISPLAY ? dogfoodArgs : ['-a', ...dogfoodArgs];
-    const result = await runChild(injection === 'zero-result' ? process.execPath : injection === 'launch-failure' ? path.join(runEnvelope.paths.tempDir, 'missing-executable') : command, injection === 'zero-result' ? ['-e', ''] : args, {
+    const result = await (testOnly?.runChild || runChild)(injection === 'zero-result' ? process.execPath : injection === 'launch-failure' ? path.join(runEnvelope.paths.tempDir, 'missing-executable') : command, injection === 'zero-result' ? ['-e', ''] : args, {
       cwd: root,
       timeout: Number(process.env.LGVS_TELEMETRY_RUN_TIMEOUT_MS || 1200000),
       env: {
@@ -82,12 +109,14 @@ async function runTelemetryCoordinator(testOnly = undefined) {
         LGVS_TELEMETRY_WARM_SAMPLES: warmSamples,
         LGVS_TELEMETRY_ENVELOPE_PATH: runEnvelope.envelopePath,
         LGVS_TELEMETRY_CHILD_DIR: childDir,
+        LGVS_TELEMETRY_PHASE_PATH: phasePath,
         LGVS_DOGFOOD_REPORT_PATH: reportPath,
         LGVS_TELEMETRY_LANE: lane,
         LGVS_TELEMETRY_ENVELOPE_DIGEST: runEnvelope.digest,
         LGVS_TELEMETRY_VSCODE_PATH: codePath
       }
     });
+    const child = { timedOut: !!result.timedOut, status: result.status ?? null, signal: result.signal ?? null, stderr: result.stderr || '', lastPhase: readPhaseSnapshot(phasePath, childDir), pid: result.pid ?? null, timeoutSignal: result.timeoutSignal ?? null };
     let dogfoodReport;
     let reportStat;
     try {
@@ -99,9 +128,9 @@ async function runTelemetryCoordinator(testOnly = undefined) {
       : ['child did not atomically publish a current terminal result'];
     if (result.status !== 0 || dogfoodReport?.status !== 'success' || !dogfoodReport?.telemetry || bindingErrors.length) {
       const error = bindingErrors.join('; ') || dogfoodReport?.error || result.error || result.stderr || `dogfood exited ${result.status}${result.signal ? ` (${result.signal})` : ''}`;
-      const code = result.error ? 'CHILD_LAUNCH_FAILED' : !dogfoodReport ? 'CHILD_RESULT_MISSING_OR_INVALID' : result.status !== 0 ? 'CHILD_EXECUTION_FAILED' : dogfoodReport.status !== 'success' || !dogfoodReport.telemetry ? 'CHILD_RESULT_FAILED' : 'CHILD_BINDING_INVALID';
+      const code = result.timedOut ? 'CHILD_TIMEOUT' : result.error ? 'CHILD_LAUNCH_FAILED' : !dogfoodReport ? 'CHILD_RESULT_MISSING_OR_INVALID' : result.status !== 0 ? 'CHILD_EXECUTION_FAILED' : dogfoodReport.status !== 'success' || !dogfoodReport.telemetry ? 'CHILD_RESULT_FAILED' : 'CHILD_BINDING_INVALID';
       const classification = ['infrastructure', 'product'].includes(dogfoodReport?.classification) ? dogfoodReport.classification : 'infrastructure';
-      failures.push({ fixture, outcome: 'failure', phase: 'coordinator', code, classification, error: String(error).slice(0, 8000) });
+      failures.push({ fixture, outcome: 'failure', phase: 'coordinator', code, classification: result.timedOut ? 'infrastructure' : classification, error: String(error).slice(0, 8000), child });
       break;
     }
     runs.push(dogfoodReport.telemetry);
@@ -141,6 +170,7 @@ async function runTelemetryCoordinator(testOnly = undefined) {
   publishTerminal(report);
   if (failures.length || errors.length) {
     if (errors.length) console.error(errors.join('\n'));
+    if (testOnly?.runChild) return runEnvelope.paths.aggregateResult;
     process.exit(1);
   }
   console.log(`Telemetry matrix passed: ${runs.length} fixtures -> ${runEnvelope.paths.aggregateResult}`);
@@ -151,7 +181,11 @@ async function runTelemetryCoordinator(testOnly = undefined) {
   }
 }
 
-module.exports = { runTelemetryCoordinator };
+async function runTelemetryCoordinatorForTest({ outputPath, captureProvenance, runChild: testRunChild, phasePath }) {
+  return JSON.parse(fs.readFileSync(await runTelemetryCoordinator({ outputPath, codePath: process.execPath, captureProvenance, runChild: async (command, args, options) => testRunChild({ command, args, phasePath: phasePath || options.env.LGVS_TELEMETRY_PHASE_PATH }) }), 'utf8'));
+}
+
+module.exports = { runChild, runTelemetryCoordinator, runTelemetryCoordinatorForTest };
 
 if (require.main === module) {
   runTelemetryCoordinator().then(reportPath => {

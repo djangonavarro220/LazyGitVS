@@ -356,6 +356,36 @@ test('coordinator classification does not depend on human wording', () => {
   assert.notStrictEqual(first.message, second.message);
 });
 
+test('coordinator retains exact timeout diagnostics and only its fixture phase snapshot', async () => {
+  const runner = require(path.join(root, 'scripts', 'run-dogfood-telemetry'));
+  assert.strictEqual(typeof runner.runTelemetryCoordinatorForTest, 'function', 'timeout test seam is required');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-coordinator-timeout-'));
+  const fakeChild = new EventEmitter();
+  fakeChild.pid = 123;
+  fakeChild.stdout = new EventEmitter();
+  fakeChild.stderr = new EventEmitter();
+  fakeChild.kill = signal => { assert.strictEqual(signal, 'SIGTERM'); fakeChild.emit('exit', null, signal); };
+  const timeoutResult = await runner.runChild('fake', [], { timeout: 1 }, () => {
+    process.nextTick(() => fakeChild.stderr.emit('data', Buffer.from('focus stalled\n')));
+    return fakeChild;
+  });
+  const run = async phasePath => runner.runTelemetryCoordinatorForTest({
+    outputPath: path.join(dir, `${phasePath ? path.basename(phasePath) : 'accepted'}.json`),
+    phasePath,
+    captureProvenance: () => validProvenance(),
+    runChild: async ({ phasePath: childPhasePath }) => {
+      fs.mkdirSync(path.dirname(childPhasePath), { recursive: true, mode: 0o700 });
+      fs.writeFileSync(childPhasePath, JSON.stringify({ schemaVersion: 1, phase: 'telemetry/sidebar-focus', at: new Date().toISOString() }), { mode: 0o600 });
+      return timeoutResult;
+    }
+  });
+  const accepted = await run();
+  assert.deepStrictEqual([accepted.code, accepted.classification, accepted.phase], ['CHILD_TIMEOUT', 'infrastructure', 'coordinator']);
+  assert.deepStrictEqual(accepted.failures[0].child, { timedOut: true, status: null, signal: 'SIGTERM', stderr: 'focus stalled\n', lastPhase: 'telemetry/sidebar-focus', pid: 123, timeoutSignal: 'SIGTERM' });
+  const outside = await run(path.join(dir, '..', 'outside-phase.json'));
+  assert.strictEqual(outside.failures[0].child.lastPhase, undefined);
+});
+
 function runForcedChildLifecycle({ envelope, reportPath, failPhase, rootProcessIdentity }) {
   let phase = 'setup';
   try {
