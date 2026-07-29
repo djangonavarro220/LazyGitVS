@@ -12,6 +12,7 @@ const deadlineMs = 30000;
 function digest(value) { return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
 function readJson(file) { return JSON.parse(fs.readFileSync(file, 'utf8')); }
 function publish(file, value) { const temporary = `${file}.${process.pid}.tmp`; fs.writeFileSync(temporary, JSON.stringify(value)); fs.renameSync(temporary, file); }
+function publishProgress(request, progress, extra = {}) { publish(resultPath, { identity: request?.identity, digest: request?.digest, progress, ...extra }); }
 function waitFor(file, accept) {
   return new Promise((resolve, reject) => {
     const check = () => { try { const value = readJson(file); if (accept(value)) finish(resolve, value); } catch {} };
@@ -39,9 +40,18 @@ function waitForBoundary() {
 
 exports.run = async () => {
   if (!requestPath || !resultPath || !donePath || !boundaryPath) throw new Error('Bootstrap paths are required');
+  publish(resultPath, { progress: 'loaded' });
   const request = await waitFor(requestPath, value => value?.digest === digest(value.identity) && value.boundaryPath === boundaryPath);
-  await vscode.commands.executeCommand('lazygitvs.openDashboard');
+  publishProgress(request, 'request-read');
+  try {
+    const command = vscode.commands.executeCommand('lazygitvs.openDashboard');
+    publishProgress(request, 'command-issued');
+    void Promise.resolve(command).then(
+      () => publishProgress(request, 'command-settled'),
+      () => publishProgress(request, 'command-error', { error: 'command-rejected' })
+    );
+  } catch { publishProgress(request, 'command-error', { error: 'command-threw' }); }
   const observed = await waitForBoundary();
-  publish(resultPath, { identity: request.identity, digest: request.digest, event: 'panelFocus', activeView: 'files', boundary: observed });
+  publishProgress(request, 'success', { event: 'panelFocus', activeView: 'files', boundary: observed });
   await waitFor(donePath, value => value?.digest === request.digest);
 };

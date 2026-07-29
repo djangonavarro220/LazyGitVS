@@ -61,9 +61,15 @@ test('panel-navigation owns a test-only Extension Host bootstrap with a durable 
   assert(dogfoodSource.includes("LGVS_DOGFOOD_EXTENSION_HOST_BOOTSTRAP: '1'") && dogfoodSource.includes('LGVS_DOGFOOD_BOOTSTRAP_REQUEST: bootstrapRequest') && dogfoodSource.includes('LGVS_DOGFOOD_BOOTSTRAP_RESULT: bootstrapResult') && dogfoodSource.includes('LGVS_DOGFOOD_BOOTSTRAP_DONE: bootstrapDone'), 'bootstrap paths and gate must be explicit in the test-only environment');
   assert(dogfoodSource.indexOf('waitForBootstrapResult') < dogfoodSource.indexOf('cdpConnect()'), 'dogfood must await the Extension Host acknowledgement before CDP input');
   assert(bootstrapSource.includes("executeCommand('lazygitvs.openDashboard')"), 'bootstrap must open the real dashboard command');
+  assert(bootstrapSource.includes("progress: 'loaded'"), 'bootstrap must atomically expose loaded progress');
+  for (const progress of ['request-read', 'command-issued', 'command-settled', 'command-error']) assert(bootstrapSource.includes(`publishProgress(request, '${progress}'`), `bootstrap must atomically expose sanitized ${progress} progress`);
+  assert(!bootstrapSource.includes("await vscode.commands.executeCommand('lazygitvs.openDashboard')"), 'bootstrap must not block on the dashboard command promise');
+  assert(bootstrapSource.includes('Promise.resolve(command).then('), 'bootstrap must attach dashboard command settlement observers');
   assert(bootstrapSource.includes("record.event === 'panelFocus' && record.activeView === 'files' && record.to === 'files'"), 'bootstrap must require the durable real Files panelFocus boundary record');
-  assert(bootstrapSource.indexOf('const observed = await waitForBoundary()') < bootstrapSource.indexOf('publish(resultPath'), 'bootstrap must observe the boundary ACK before publishing its result');
+  assert(bootstrapSource.indexOf('const observed = await waitForBoundary()') < bootstrapSource.indexOf("publishProgress(request, 'success'"), 'bootstrap must observe the boundary ACK before publishing final success');
   assert(bootstrapSource.includes('boundary: observed'), 'bootstrap result must preserve the observed boundary evidence');
+  assert(dogfoodSource.includes('readBootstrapProgress') && dogfoodSource.includes("progress === 'success'") && dogfoodSource.includes('bootstrapProgress: error?.bootstrapProgress'), 'harness must preserve progress without accepting it as an ACK');
+  assert(dogfoodSource.includes("error.classification = 'infrastructure-harness-failure'"), 'bootstrap timeout must be classified as infrastructure harness failure');
   assert(!/\b(?:document\.|querySelector|mouse|coordinates?|dispatchKeyEvent|postMessage\s*\(\s*\{\s*(?:event|type)\s*:\s*['\"]panelFocus)/i.test(bootstrapSource), 'bootstrap must not fake ACKs or use root-DOM, mouse, coordinates, or synthetic input');
   assert.strictEqual(targetLane({ LGVS_DOGFOOD_PANEL_NAVIGATION: '1' }), 'panel-navigation');
   assert(dogfoodSource.includes('last-run-${REPORT_SLUG}.json'), 'targeted report filename must include its lane');

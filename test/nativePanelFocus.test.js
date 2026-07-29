@@ -34,10 +34,14 @@ assert(!extension.includes("executeCommand('workbench.action.openView', viewId)"
 const focusRequest = fs.readFileSync(path.join(root, 'src', 'focusRequest.ts'), 'utf8');
 assert(focusRequest.includes('timeoutMs = 250'), 'native focus requests must have a bounded 250ms settle timeout');
 assert(focusRequest.includes('Promise.resolve(request).then(finish, finish);'), 'native focus requests must settle both fulfilled and rejected VS Code commands');
-assert(extension.includes("if (!this.visible()) {\n        void settleFocusRequest(vscode.commands.executeCommand('workbench.view.scm'))"), 'SCM container focus should only run when no LGVS view is already visible and must continue without awaiting the request');
+assert(extension.includes("if (!this.visible()) await settleFocusRequest(vscode.commands.executeCommand('workbench.view.scm'));"), 'SCM container reveal must settle before the contributed view focus request');
 assert(extension.includes('this.views.get(panel)?.show(false);'), 'panel reveal should use WebviewView.show(false) for the contributed view');
-assert(extension.includes('void settleFocusRequest(vscode.commands.executeCommand(`${viewId}.focus`, { preserveFocus: false }))'), 'panel reveal should issue a bounded fire-and-continue request for the target contributed view');
-assert(extension.includes("void settleFocusRequest(view.webview.postMessage({ type: 'focusBody' }))"), 'panel focus body requests must also be bounded and fire-and-continue');
+assert(extension.includes('await settleFocusRequest(vscode.commands.executeCommand(`${viewId}.focus`, { preserveFocus: false }));'), 'contributed-view focus must settle after native reveal inside the detached workflow');
+assert(extension.includes("await settleFocusRequest(view.webview.postMessage({ type: 'focusBody' }));"), 'focusBody must settle only after the contributed view focus request');
+const revealBody = extension.slice(extension.indexOf('private async revealPanelView'), extension.indexOf('private async revealCurrentStatusRepo'));
+assert(revealBody.indexOf("await settleFocusRequest(vscode.commands.executeCommand('workbench.view.scm'))") < revealBody.indexOf('await settleFocusRequest(vscode.commands.executeCommand(`${viewId}.focus`, { preserveFocus: false }));'), 'native reveal must deterministically precede contributed-view focus');
+const focusBodyDelivery = extension.slice(extension.indexOf('if (transition) this.pendingPanelFocusTransition = transition;'), extension.indexOf('private async restorePanelFocusAfterModal'));
+assert(focusBodyDelivery.indexOf('await this.revealPanelView(panel);') < focusBodyDelivery.indexOf("await settleFocusRequest(view.webview.postMessage({ type: 'focusBody' }));"), 'focusBody must be delivered only after revealPanelView has completed');
 assert(extension.includes("type === 'focusArea'") && extension.includes("recordDogfoodBoundary('panelFocus'"), 'physical webview focusArea/panelFocus acknowledgements must remain after request completion is decoupled');
 assert(extension.includes("document.body.focus();markPanelFocus();"), 'focusBody must retain the physical document focus and focus-area acknowledgement');
 const bootstrap = fs.readFileSync(path.join(root, 'scripts', 'dogfood', 'extension-host-bootstrap.js'), 'utf8');
@@ -45,6 +49,7 @@ const dogfood = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'ut
 assert(bootstrap.includes("executeCommand('lazygitvs.openDashboard')"), 'Extension Host bootstrap must open LazyGitVS through its existing command');
 assert(dogfood.indexOf('waitForBootstrapResult') < dogfood.indexOf('cdpConnect()'), 'dogfood must require the durable bootstrap acknowledgement before CDP connection');
 assert(extension.includes("process.env.LGVS_DOGFOOD_EXTENSION_HOST_BOOTSTRAP === '1' && process.env.LGVS_DOGFOOD_BOUNDARY_REPORT"), 'bootstrap attribution must be dual-gated by the test environment and boundary report');
+assert(extension.includes("registerCommand('lazygitvs.openDashboard', () => detachFocusRequest(app.focus()))") && extension.includes('registerCommand(`lazygitvs.focusPanel${index + 1}`, () => detachFocusRequest(app.focusNumberPanel(index + 1)))'), 'top-level dashboard and numeric handlers must remain detached while their internal focus workflow sequences requests');
 assert(!/\b(CDP|document\.|querySelector|mouse|coordinate|dispatchKeyEvent)\b/i.test(bootstrap), 'Extension Host bootstrap must not use CDP, root DOM, mouse, coordinates, or synthetic keys');
 assert(extension.includes('Date.now() <= this.suppressWebviewAutoFocusUntil'), 'webview bootstrap must remain guarded during editor/HUNK transitions');
 assert(!extension.includes('setTimeout(() => { void reveal(); }'), 'panel reveal must not schedule delayed focus retries that close Command Palette/QuickPick after it opens');

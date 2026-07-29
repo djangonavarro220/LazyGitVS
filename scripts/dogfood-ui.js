@@ -42,12 +42,12 @@ const VIRTUAL_PREVIEW_URI_PREFIX = 'lazygitvs-preview:';
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 function publishBootstrapJson(file, value) { const temporary = `${file}.${process.pid}.tmp`; fs.writeFileSync(temporary, JSON.stringify(value)); fs.renameSync(temporary, file); }
+function readBootstrapProgress(file) { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return undefined; } }
 async function waitForBootstrapResult(file, identity, digest) {
   return waitFor(() => {
-    if (!fs.existsSync(file)) return undefined;
-    const result = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const result = readBootstrapProgress(file);
     return result.digest === digest && JSON.stringify(result.identity) === JSON.stringify(identity)
-      && result.event === 'panelFocus' && result.activeView === 'files' && result.boundary?.event === 'panelFocus' && result.boundary?.activeView === 'files' ? result : undefined;
+      && result.progress === 'success' && result.event === 'panelFocus' && result.activeView === 'files' && result.boundary?.event === 'panelFocus' && result.boundary?.activeView === 'files' ? result : undefined;
   }, 30000, 100);
 }
 function writeTelemetryPhase(phase) {
@@ -456,8 +456,9 @@ async function main() {
       }, 45000, 100, 'owned CDP listener');
       PORT = cdpOwnership.port;
     }
+    let bootstrapProgress;
     const bootstrap = await waitForBootstrapResult(bootstrapResult, bootstrapIdentity, bootstrapDigest)
-      .catch(() => { const error = new Error('extension-host-bootstrap-unacknowledged|stage=pre-cdp-input|command=lazygitvs.openDashboard|ack=panelFocus:files|protocol=LGVS_DOGFOOD_BOUNDARY_REPORT|deadlineMs=30000'); error.classification = 'extension-host-bootstrap-unacknowledged'; throw error; });
+      .catch(() => { bootstrapProgress = readBootstrapProgress(bootstrapResult); const error = new Error(`infrastructure-harness-failure|stage=pre-cdp-input|command=lazygitvs.openDashboard|ack=panelFocus:files|progress=${bootstrapProgress?.progress || 'unpublished'}|deadlineMs=30000`); error.classification = 'infrastructure-harness-failure'; error.bootstrapProgress = bootstrapProgress; throw error; });
     evidence.push({ step: 'extension-host-bootstrap', bootstrap });
     writeTelemetryPhase('telemetry/cdp-connected');
     client = await cdpConnect();
@@ -1456,8 +1457,9 @@ async function main() {
       provenance: RUN_ENVELOPE.provenance,
       process: { root: rootProcessIdentity, listener: cdpOwnership?.listenerIdentity },
       error: String(error && error.stack || error),
+      bootstrapProgress: error?.bootstrapProgress,
       cdpTargetAttempts: error instanceof CdpRootDomUnreachableError ? { targets: error.targets, attemptedTargetIds: error.attemptedTargetIds } : undefined
-    } : { ok: false, classification: classifyFailure(error), variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, failureScreenshot, error: String(error && error.stack || error), processOutput: procOut.slice(-8000) };
+    } : { ok: false, classification: error?.classification || classifyFailure(error), variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, failureScreenshot, error: String(error && error.stack || error), bootstrapProgress: error?.bootstrapProgress, processOutput: procOut.slice(-8000) };
     if (TELEMETRY && !terminalPublished) {
       publishJsonOnce(REPORT_JSON, report, { runRoot: RUN_ENVELOPE.paths.runRoot });
       terminalPublished = true;

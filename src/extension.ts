@@ -479,9 +479,8 @@ class LazyGitVSController {
     await this.revealPanelView(panel);
     if (panel === 'status') await this.revealCurrentStatusRepo().catch(() => undefined);
     if (transition) this.pendingPanelFocusTransition = transition;
-    await new Promise(resolve => setTimeout(resolve, 50));
     const view = this.views.get(panel);
-    if (view) void settleFocusRequest(view.webview.postMessage({ type: 'focusBody' }));
+    if (view) await settleFocusRequest(view.webview.postMessage({ type: 'focusBody' }));
   }
   private async restorePanelFocusAfterModal(viewPanel: ViewPanel) {
     if (this.editorHunkMode || this.editorEditMode) return;
@@ -503,14 +502,9 @@ class LazyGitVSController {
   }
   private async revealPanelView(panel: ViewPanel) {
     const viewId = VIEW_IDS[panel];
-    const reveal = async () => {
-      if (!this.visible()) {
-        void settleFocusRequest(vscode.commands.executeCommand('workbench.view.scm'));
-      }
-      try { this.views.get(panel)?.show(false); } catch { /* ignore */ }
-      void settleFocusRequest(vscode.commands.executeCommand(`${viewId}.focus`, { preserveFocus: false }));
-    };
-    await reveal();
+    if (!this.visible()) await settleFocusRequest(vscode.commands.executeCommand('workbench.view.scm'));
+    try { this.views.get(panel)?.show(false); } catch { /* ignore */ }
+    await settleFocusRequest(vscode.commands.executeCommand(`${viewId}.focus`, { preserveFocus: false }));
   }
   private async revealCurrentStatusRepo() {
     this.statusTreeProvider?.refresh();
