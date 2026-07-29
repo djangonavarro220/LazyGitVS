@@ -42,7 +42,9 @@ jobs:
       - name: Package VSIX
         run: npm run package:dist
 
-      - name: Targeted rich-preview dogfood
+      - name: Targeted rich-preview dogfood diagnostic
+        id: preview_dogfood
+        continue-on-error: true
         run: npm run dogfood:ui:preview-tabs
 
       - name: Install native screenshot dependency
@@ -66,7 +68,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload dogfood diagnostic evidence
-        if: always() && steps.ui_dogfood.outcome == 'failure'
+        if: always() && (steps.preview_dogfood.outcome == 'failure' || steps.ui_dogfood.outcome == 'failure')
         uses: actions/upload-artifact@v4
         with:
           name: dogfood-output
