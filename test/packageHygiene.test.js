@@ -70,6 +70,9 @@ test('dist packaging runs a VSIX content allow/deny inspection', () => {
   assert.match(inspector, /dogfood-output/);
   assert.match(inspector, /\.vscode-test/);
   assert.match(inspector, /private absolute path/i);
+  assert.match(inspector, /stale compiled module without matching src\/\*\.ts/);
+  assert.strictEqual(pkg.scripts.compile, 'node scripts/clean-out.js && tsc -p ./');
+  assert(fs.existsSync(path.join(root, 'scripts', 'clean-out.js')), 'compile must clean out/ before TypeScript emits files');
 });
 
 test('VSIX keeps the README screenshot while excluding source-only assets', () => {

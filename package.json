@@ -633,7 +633,7 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
+    "compile": "node scripts/clean-out.js && tsc -p ./",
     "check:release": "node scripts/check-release-consistency.js",
     "check:parity-ledger": "node scripts/validate-parity-ledger.js",
     "test": "npm run compile && node scripts/run-tests.js",

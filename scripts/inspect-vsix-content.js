@@ -5,6 +5,7 @@
  * package command proves the actual archive contents, not just .vscodeignore.
  */
 const { spawnSync } = require('child_process');
+const fs = require('fs');
 const path = require('path');
 
 const vsix = process.argv[2];
@@ -72,6 +73,15 @@ for (const entry of entries) {
   if (!allowedFiles.some((pattern) => pattern.test(entry))) {
     failures.push(`unexpected VSIX file: ${entry}`);
   }
+}
+
+const sourceDir = path.resolve(__dirname, '..', 'src');
+const sourceModules = new Set(fs.readdirSync(sourceDir)
+  .filter((file) => file.endsWith('.ts') && !file.endsWith('.d.ts'))
+  .map((file) => file.slice(0, -3)));
+for (const entry of entries.filter((file) => /^extension\/out\/[A-Za-z0-9_-]+\.js$/.test(file))) {
+  const moduleName = path.basename(entry, '.js');
+  if (!sourceModules.has(moduleName)) failures.push(`stale compiled module without matching src/*.ts: ${entry}`);
 }
 
 const textEntries = entries.filter((entry) => entry !== '[Content_Types].xml' && /\.(?:js|json|md|txt|vsixmanifest)$/.test(entry));
