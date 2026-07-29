@@ -29,6 +29,7 @@ function repoChangeDescription(repo: WorkspaceRepository): string { return repo.
 function repoDescription(repo: WorkspaceRepository, isCurrent: boolean): string { return [repoChangeDescription(repo), isCurrent ? 'current' : ''].filter(Boolean).join(' · '); }
 function statusRepositoryLabel(repo: WorkspaceRepository): string { return `${repo.operation ? `(${repo.operation.label}) ` : ''}${repo.name} → ${repo.branch}`; }
 function recordDogfoodBoundary(event: string, details: Record<string, unknown> = {}) { const report = process.env.LGVS_DOGFOOD_BOUNDARY_REPORT; if (report) fs.appendFileSync(report, `${JSON.stringify({ at: new Date().toISOString(), event, ...details })}\n`); }
+function recordBootstrapDiagnostic(event: string, details: Record<string, unknown> = {}) { if (process.env.LGVS_DOGFOOD_EXTENSION_HOST_BOOTSTRAP === '1' && process.env.LGVS_DOGFOOD_BOUNDARY_REPORT) recordDogfoodBoundary(event, details); }
 async function showChangedFilesQuickPick() {
   const files = await changedFiles();
   if (!files.length) return vscode.window.showInformationMessage('LazyGitVS: clean working tree.');
@@ -165,6 +166,7 @@ class LazyGitVSController {
   }
   attach(panel: ViewPanel, view: vscode.WebviewView) {
     this.views.set(panel, view);
+    if (panel === 'files') recordBootstrapDiagnostic('filesViewAttached', { attached: true, visible: view.visible });
     view.webview.options = { enableScripts: true };
     view.onDidChangeVisibility(() => { if (view.visible) this.scheduleRefresh(0); else if (!this.visible()) this.clearRuntimeTimers(); }, null, this.context.subscriptions);
     view.webview.onDidReceiveMessage(async rawMessage => {
@@ -173,7 +175,7 @@ class LazyGitVSController {
         if (!message) return;
         const type = message.type;
         if (type === 'dogfoodBoundary') recordDogfoodBoundary(String(message.event ?? 'unknown'), { panel, key: String(message.key ?? '') });
-        if (type === 'focusArea') { this.setFocusArea(message.area === 'panel' ? 'panel' : 'none'); const transition = this.pendingPanelFocusTransition; if (message.area === 'panel' && transition?.to === panel) { recordDogfoodBoundary('panelFocus', { ...transition, activeView: this.activeViewPanel() }); this.pendingPanelFocusTransition = undefined; } }
+        if (type === 'focusArea') { recordBootstrapDiagnostic('incomingFocusArea', { panel, area: message.area }); this.setFocusArea(message.area === 'panel' ? 'panel' : 'none'); const transition = this.pendingPanelFocusTransition; if (message.area === 'panel' && transition?.to === panel) { recordDogfoodBoundary('panelFocus', { ...transition, activeView: this.activeViewPanel() }); this.pendingPanelFocusTransition = undefined; } }
         if (type === 'commandPalette') await this.openCommandPalette();
         if (type === 'move') await this.move(panel, message.delta);
         if (type === 'moveTo') await this.moveTo(panel, message.position);
@@ -478,9 +480,10 @@ class LazyGitVSController {
     this.renderActivePanel(panel);
     await this.revealPanelView(panel);
     if (panel === 'status') await this.revealCurrentStatusRepo().catch(() => undefined);
+    recordBootstrapDiagnostic('focusWorkflowAfterFinalReveal', { panel, attached: this.views.has(panel), visible: this.views.get(panel)?.visible ?? false });
     if (transition) this.pendingPanelFocusTransition = transition;
     const view = this.views.get(panel);
-    if (view) await settleFocusRequest(view.webview.postMessage({ type: 'focusBody' }));
+    if (view) { let settled = false, error = ''; const focusBody = view.webview.postMessage({ type: 'focusBody' }); void Promise.resolve(focusBody).then(() => settled = true, e => error = String(e)); await settleFocusRequest(focusBody); recordBootstrapDiagnostic('focusBodyPostMessageSettled', { panel, settled, error }); }
   }
   private async restorePanelFocusAfterModal(viewPanel: ViewPanel) {
     if (this.editorHunkMode || this.editorEditMode) return;

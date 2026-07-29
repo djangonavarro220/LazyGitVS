@@ -37,12 +37,16 @@ assert(focusRequest.includes('Promise.resolve(request).then(finish, finish);'), 
 assert(extension.includes("if (!this.visible()) await settleFocusRequest(vscode.commands.executeCommand('workbench.view.scm'));"), 'SCM container reveal must settle before the contributed view focus request');
 assert(extension.includes('this.views.get(panel)?.show(false);'), 'panel reveal should use WebviewView.show(false) for the contributed view');
 assert(extension.includes('await settleFocusRequest(vscode.commands.executeCommand(`${viewId}.focus`, { preserveFocus: false }));'), 'contributed-view focus must settle after native reveal inside the detached workflow');
-assert(extension.includes("await settleFocusRequest(view.webview.postMessage({ type: 'focusBody' }));"), 'focusBody must settle only after the contributed view focus request');
+assert(extension.includes("await settleFocusRequest(focusBody);"), 'focusBody must settle only after the contributed view focus request');
 const revealBody = extension.slice(extension.indexOf('private async revealPanelView'), extension.indexOf('private async revealCurrentStatusRepo'));
 assert(revealBody.indexOf("await settleFocusRequest(vscode.commands.executeCommand('workbench.view.scm'))") < revealBody.indexOf('await settleFocusRequest(vscode.commands.executeCommand(`${viewId}.focus`, { preserveFocus: false }));'), 'native reveal must deterministically precede contributed-view focus');
 const focusBodyDelivery = extension.slice(extension.indexOf('if (transition) this.pendingPanelFocusTransition = transition;'), extension.indexOf('private async restorePanelFocusAfterModal'));
-assert(focusBodyDelivery.indexOf('await this.revealPanelView(panel);') < focusBodyDelivery.indexOf("await settleFocusRequest(view.webview.postMessage({ type: 'focusBody' }));"), 'focusBody must be delivered only after revealPanelView has completed');
+assert(focusBodyDelivery.indexOf('await this.revealPanelView(panel);') < focusBodyDelivery.indexOf("await settleFocusRequest(focusBody);"), 'focusBody must be delivered only after revealPanelView has completed');
 assert(extension.includes("type === 'focusArea'") && extension.includes("recordDogfoodBoundary('panelFocus'"), 'physical webview focusArea/panelFocus acknowledgements must remain after request completion is decoupled');
+const bootstrapDiagnostics = extension.slice(extension.indexOf('function recordBootstrapDiagnostic'), extension.indexOf('async function showChangedFilesQuickPick'));
+assert(bootstrapDiagnostics.includes("process.env.LGVS_DOGFOOD_EXTENSION_HOST_BOOTSTRAP === '1' && process.env.LGVS_DOGFOOD_BOUNDARY_REPORT"), 'bootstrap diagnostics must be dual-gated by the bootstrap flag and boundary report');
+for (const event of ['filesViewAttached', 'focusWorkflowAfterFinalReveal', 'focusBodyPostMessageSettled', 'incomingFocusArea']) assert(extension.includes(`recordBootstrapDiagnostic('${event}'`), `${event} must be a bootstrap diagnostic boundary`);
+assert(!extension.includes("recordBootstrapDiagnostic('panelFocus'"), 'diagnostics must never create or substitute panelFocus acknowledgements');
 assert(extension.includes("document.body.focus();markPanelFocus();"), 'focusBody must retain the physical document focus and focus-area acknowledgement');
 const bootstrap = fs.readFileSync(path.join(root, 'scripts', 'dogfood', 'extension-host-bootstrap.js'), 'utf8');
 const dogfood = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
