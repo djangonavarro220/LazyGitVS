@@ -348,7 +348,8 @@ class LazyGitVSController {
   async focus() {
     this.loadLazyGitConfig();
     await this.revealDefaultOpenPanels();
-    return this.focusPanel(this.activeViewPanel());
+    const bootstrap = process.env.LGVS_DOGFOOD_EXTENSION_HOST_BOOTSTRAP === '1' && process.env.LGVS_DOGFOOD_BOUNDARY_REPORT ? { from: 'files' as ViewPanel, to: 'files' as ViewPanel } : undefined;
+    return this.focusPanel(this.activeViewPanel(), bootstrap);
   }
   private async revealDefaultOpenPanels() {
     if (this.defaultPanelsRevealed) return;
@@ -393,7 +394,6 @@ class LazyGitVSController {
     this.renderAll();
     vscode.window.showInformationMessage('LazyGitVS: state reset.');
   }
-
   private healthSnapshot() {
     return {
       activePanel: this.activePanel,

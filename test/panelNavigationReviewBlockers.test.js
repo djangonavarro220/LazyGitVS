@@ -6,6 +6,7 @@ const { targetLane, panelNavigationBoundaryMatches } = require('../scripts/dogfo
 const root = path.join(__dirname, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const dogfoodSource = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
+const bootstrapSource = fs.readFileSync(path.join(root, 'scripts', 'dogfood', 'extension-host-bootstrap.js'), 'utf8');
 assert(dogfoodSource.includes("if (/-- STATUS · LG --/.test(await pageText(Runtime)))") && dogfoodSource.includes("if (/-- FILES · LG --/.test(await pageText(Runtime)))"), 'panel-navigation retries must reset an already-transitioned panel before requiring a fresh physical ACK');
 const extensionSource = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
 
@@ -54,9 +55,16 @@ test('panel-navigation dogfood proves focused panes per physical transition', ()
   assert(block.includes('checks.push(...familyChecks)'), 'expected six independent transition checks');
 });
 
-test('panel-navigation owns a stable report lane and six transition checks', () => {
+test('panel-navigation owns a test-only Extension Host bootstrap with a durable Files focus ACK', () => {
   assert(dogfoodSource.includes("? undoRedoBoundaryReport : path.join(userData, 'lazygit-panel-navigation-boundary.jsonl')"), 'undo lane must share its boundary stream with the navigation preflight');
-  assert(dogfoodSource.includes(": { ...process.env, LGVS_DOGFOOD_BOUNDARY_REPORT: panelNavigationBoundaryReport }"), 'full dogfood must enable panel-focus boundary evidence too');
+  assert(dogfoodSource.includes('--extensionTestsPath=${path.join(ROOT, \'scripts\', \'dogfood\', \'extension-host-bootstrap.js\')}'), 'dogfood must load the bootstrap only as Extension Host tests');
+  assert(dogfoodSource.includes("LGVS_DOGFOOD_EXTENSION_HOST_BOOTSTRAP: '1'") && dogfoodSource.includes('LGVS_DOGFOOD_BOOTSTRAP_REQUEST: bootstrapRequest') && dogfoodSource.includes('LGVS_DOGFOOD_BOOTSTRAP_RESULT: bootstrapResult') && dogfoodSource.includes('LGVS_DOGFOOD_BOOTSTRAP_DONE: bootstrapDone'), 'bootstrap paths and gate must be explicit in the test-only environment');
+  assert(dogfoodSource.indexOf('waitForBootstrapResult') < dogfoodSource.indexOf('cdpConnect()'), 'dogfood must await the Extension Host acknowledgement before CDP input');
+  assert(bootstrapSource.includes("executeCommand('lazygitvs.openDashboard')"), 'bootstrap must open the real dashboard command');
+  assert(bootstrapSource.includes("record.event === 'panelFocus' && record.activeView === 'files' && record.to === 'files'"), 'bootstrap must require the durable real Files panelFocus boundary record');
+  assert(bootstrapSource.indexOf('const observed = await waitForBoundary()') < bootstrapSource.indexOf('publish(resultPath'), 'bootstrap must observe the boundary ACK before publishing its result');
+  assert(bootstrapSource.includes('boundary: observed'), 'bootstrap result must preserve the observed boundary evidence');
+  assert(!/\b(?:document\.|querySelector|mouse|coordinates?|dispatchKeyEvent|postMessage\s*\(\s*\{\s*(?:event|type)\s*:\s*['\"]panelFocus)/i.test(bootstrapSource), 'bootstrap must not fake ACKs or use root-DOM, mouse, coordinates, or synthetic input');
   assert.strictEqual(targetLane({ LGVS_DOGFOOD_PANEL_NAVIGATION: '1' }), 'panel-navigation');
   assert(dogfoodSource.includes('last-run-${REPORT_SLUG}.json'), 'targeted report filename must include its lane');
   assert(dogfoodSource.includes("expectedTransitionChecks: circularPanelKeys.length * 2"), 'targeted report must record the expected six transition checks');

@@ -8,6 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
+const crypto = require('crypto');
 const { spawn, spawnSync, execFileSync } = require('child_process');
 const { performance } = require('perf_hooks');
 const { makeFixture, fixtureRepos, telemetryFixtureManifest, secondaryFixtureRepo, deepNestedFixtureRepo, status, diffCachedNames, diffNames, git, ensureDir, write, startMergeOperation, mergeOperationInProgress } = require('./dogfood/fixtures');
@@ -40,6 +41,15 @@ const THEME = process.env.LGVS_DOGFOOD_THEME || 'Default Light Modern';
 const VIRTUAL_PREVIEW_URI_PREFIX = 'lazygitvs-preview:';
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function publishBootstrapJson(file, value) { const temporary = `${file}.${process.pid}.tmp`; fs.writeFileSync(temporary, JSON.stringify(value)); fs.renameSync(temporary, file); }
+async function waitForBootstrapResult(file, identity, digest) {
+  return waitFor(() => {
+    if (!fs.existsSync(file)) return undefined;
+    const result = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return result.digest === digest && JSON.stringify(result.identity) === JSON.stringify(identity)
+      && result.event === 'panelFocus' && result.activeView === 'files' && result.boundary?.event === 'panelFocus' && result.boundary?.activeView === 'files' ? result : undefined;
+  }, 30000, 100);
+}
 function writeTelemetryPhase(phase) {
   if (!TELEMETRY) return;
   const temporaryPath = `${TELEMETRY_PHASE_PATH}.${process.pid}.tmp`;
@@ -340,6 +350,11 @@ async function main() {
   const undoRedoConfig = path.join(userData, 'lazygit-undo-redo.yml');
   const undoRedoBoundaryReport = path.join(userData, 'lazygit-undo-redo-boundary.jsonl');
   const panelNavigationBoundaryReport = process.env.LGVS_DOGFOOD_UNDO_REDO ? undoRedoBoundaryReport : path.join(userData, 'lazygit-panel-navigation-boundary.jsonl');
+  const bootstrapDir = path.join(userData, 'bootstrap');
+  fs.mkdirSync(bootstrapDir, { mode: 0o700 });
+  const bootstrapRequest = path.join(bootstrapDir, 'request.json');
+  const bootstrapResult = path.join(bootstrapDir, 'result.json');
+  const bootstrapDone = path.join(bootstrapDir, 'done.json');
   if (process.env.LGVS_DOGFOOD_UNDO_REDO) write(undoRedoConfig, 'keybinding:\n  universal:\n    undo: x\n    redo: X\n');
   write(path.join(userData, 'User', 'settings.json'), JSON.stringify({
     'workbench.colorTheme': THEME,
@@ -371,6 +386,7 @@ async function main() {
     `--extensionDevelopmentPath=${ROOT}`,
     `--user-data-dir=${userData}`,
     `--extensions-dir=${extensionsDir}`,
+    `--extensionTestsPath=${path.join(ROOT, 'scripts', 'dogfood', 'extension-host-bootstrap.js')}`,
     `--remote-debugging-port=${TELEMETRY ? 0 : PORT}`,
     ...(process.env.LGVS_DOGFOOD_WINDOW_SIZE ? [`--window-size=${process.env.LGVS_DOGFOOD_WINDOW_SIZE}`] : []),
     '--disable-workspace-trust',
@@ -392,9 +408,7 @@ async function main() {
       cwd: ROOT,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: process.env.LGVS_DOGFOOD_UNDO_REDO
-        ? { ...process.env, LG_CONFIG_FILE: undoRedoConfig, LGVS_DOGFOOD_BOUNDARY_REPORT: undoRedoBoundaryReport }
-        : { ...process.env, LGVS_DOGFOOD_BOUNDARY_REPORT: panelNavigationBoundaryReport }
+      env: { ...process.env, ...(process.env.LGVS_DOGFOOD_UNDO_REDO ? { LG_CONFIG_FILE: undoRedoConfig } : {}), LGVS_DOGFOOD_EXTENSION_HOST_BOOTSTRAP: '1', LGVS_DOGFOOD_BOUNDARY_REPORT: panelNavigationBoundaryReport, LGVS_DOGFOOD_BOOTSTRAP_REQUEST: bootstrapRequest, LGVS_DOGFOOD_BOOTSTRAP_RESULT: bootstrapResult, LGVS_DOGFOOD_BOOTSTRAP_DONE: bootstrapDone }
     }),
     readIdentity: readProcessIdentity,
     publishFailure: ({ phase, error, rootProcessIdentity: capturedIdentity }) => {
@@ -410,6 +424,9 @@ async function main() {
   rootProcessIdentity = child.rootProcessIdentity;
   proc.stdout.on('data', d => procOut += d.toString());
   proc.stderr.on('data', d => procOut += d.toString());
+  const bootstrapIdentity = { root: rootProcessIdentity, boundaryPath: panelNavigationBoundaryReport };
+  const bootstrapDigest = crypto.createHash('sha256').update(JSON.stringify(bootstrapIdentity)).digest('hex');
+  publishBootstrapJson(bootstrapRequest, { identity: bootstrapIdentity, digest: bootstrapDigest, boundaryPath: panelNavigationBoundaryReport });
 
   lifecyclePhase = 'runtime';
   const finishDogfoodReport = (extra = {}) => finishReport({
@@ -439,6 +456,9 @@ async function main() {
       }, 45000, 100, 'owned CDP listener');
       PORT = cdpOwnership.port;
     }
+    const bootstrap = await waitForBootstrapResult(bootstrapResult, bootstrapIdentity, bootstrapDigest)
+      .catch(() => { const error = new Error('extension-host-bootstrap-unacknowledged|stage=pre-cdp-input|command=lazygitvs.openDashboard|ack=panelFocus:files|protocol=LGVS_DOGFOOD_BOUNDARY_REPORT|deadlineMs=30000'); error.classification = 'extension-host-bootstrap-unacknowledged'; throw error; });
+    evidence.push({ step: 'extension-host-bootstrap', bootstrap });
     writeTelemetryPhase('telemetry/cdp-connected');
     client = await cdpConnect();
     const { Page, Input, Runtime, Browser, Emulation, Performance } = client;
@@ -724,6 +744,7 @@ async function main() {
     evidence.push({ step: 'status-files-circular-panel-navigation', screenshot: await screenshot(Page, '03-status-files-circular-panel-navigation', { force: true }), keys: circularPanelEvidence });
     if (process.env.LGVS_DOGFOOD_PANEL_NAVIGATION) {
       finishDogfoodReport({ expectedTransitionChecks: circularPanelKeys.length * 2, transitionCheckCount: circularPanelEvidence.length });
+      publishBootstrapJson(bootstrapDone, { digest: bootstrapDigest });
       return;
     }
 

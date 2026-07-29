@@ -40,6 +40,12 @@ assert(extension.includes('void settleFocusRequest(vscode.commands.executeComman
 assert(extension.includes("void settleFocusRequest(view.webview.postMessage({ type: 'focusBody' }))"), 'panel focus body requests must also be bounded and fire-and-continue');
 assert(extension.includes("type === 'focusArea'") && extension.includes("recordDogfoodBoundary('panelFocus'"), 'physical webview focusArea/panelFocus acknowledgements must remain after request completion is decoupled');
 assert(extension.includes("document.body.focus();markPanelFocus();"), 'focusBody must retain the physical document focus and focus-area acknowledgement');
+const bootstrap = fs.readFileSync(path.join(root, 'scripts', 'dogfood', 'extension-host-bootstrap.js'), 'utf8');
+const dogfood = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
+assert(bootstrap.includes("executeCommand('lazygitvs.openDashboard')"), 'Extension Host bootstrap must open LazyGitVS through its existing command');
+assert(dogfood.indexOf('waitForBootstrapResult') < dogfood.indexOf('cdpConnect()'), 'dogfood must require the durable bootstrap acknowledgement before CDP connection');
+assert(extension.includes("process.env.LGVS_DOGFOOD_EXTENSION_HOST_BOOTSTRAP === '1' && process.env.LGVS_DOGFOOD_BOUNDARY_REPORT"), 'bootstrap attribution must be dual-gated by the test environment and boundary report');
+assert(!/\b(CDP|document\.|querySelector|mouse|coordinate|dispatchKeyEvent)\b/i.test(bootstrap), 'Extension Host bootstrap must not use CDP, root DOM, mouse, coordinates, or synthetic keys');
 assert(extension.includes('Date.now() <= this.suppressWebviewAutoFocusUntil'), 'webview bootstrap must remain guarded during editor/HUNK transitions');
 assert(!extension.includes('setTimeout(() => { void reveal(); }'), 'panel reveal must not schedule delayed focus retries that close Command Palette/QuickPick after it opens');
 assert(extension.includes("await this.releaseEditorOwnership();\n    if (filePath) await editPath(filePath);"), 'EDIT handoff must make LGVS disappear before handing the real editor to VS Code/Vim');
