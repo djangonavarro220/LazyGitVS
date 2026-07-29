@@ -28,8 +28,27 @@ async function allUnresponsiveStopsBeforeInput() {
   );
 }
 
+async function waitsForWorkbenchTargetWithinDeadline() {
+  const ready = target('ready', 'Extension Development Host');
+  let time = 0;
+  let enumerations = 0;
+  const sleeps = [];
+  const selected = await connectResponsiveWorkbench({
+    listTargets: async () => (++enumerations < 4 ? [] : [ready]),
+    connect: async () => ({ Runtime: { async evaluate() { return { result: { value: 'interactive' } }; } }, close() {} }),
+    timeoutMs: 100,
+    now: () => time,
+    sleep: async ms => { sleeps.push(ms); time += ms; }
+  });
+  assert.strictEqual(selected.target.id, 'ready');
+  assert.strictEqual(enumerations, 4);
+  assert.deepStrictEqual(sleeps, [25, 25, 25]);
+  assert.ok(sleeps.every(ms => ms > 0 && ms <= 25));
+}
+
 (async () => {
   await staleFirstReadySecond();
   await allUnresponsiveStopsBeforeInput();
+  await waitsForWorkbenchTargetWithinDeadline();
   console.log('ok - responsive workbench selection is bounded before input');
 })().catch(error => { console.error(error); process.exitCode = 1; });

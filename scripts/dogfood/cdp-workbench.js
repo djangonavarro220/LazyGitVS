@@ -2,6 +2,7 @@ const WORKBENCH_PAGE = /Visual Studio Code|Extension Development Host/i;
 const READY_STATES = new Set(['loading', 'interactive', 'complete']);
 const DEFAULT_DEADLINE_MS = 8000;
 const PROBE_CAP_MS = 2000;
+const TARGET_POLL_BACKOFF_MS = 25;
 const STOP_FINGERPRINT = 'cdp-root-dom-unreachable|stage=pre-input|operation=Runtime.evaluate(document.readyState)|reselect=once|deadlineMs=8000';
 
 class CdpRootDomUnreachableError extends Error {
@@ -37,12 +38,12 @@ function within(ms, operation) {
   ]).finally(() => clearTimeout(timer));
 }
 
-async function connectResponsiveWorkbench({ listTargets, connect, timeoutMs = DEFAULT_DEADLINE_MS, now = Date.now, sleep: _sleep }) {
+async function connectResponsiveWorkbench({ listTargets, connect, timeoutMs = DEFAULT_DEADLINE_MS, now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
   const started = now();
   const attemptedTargetIds = [];
   const observed = [];
   const seen = new Set();
-  for (let enumeration = 0; enumeration < 2; enumeration += 1) {
+  while (now() - started < timeoutMs) {
     const targets = eligiblePages(await listTargets());
     for (const target of targets) {
       const key = targetKey(target);
@@ -60,7 +61,9 @@ async function connectResponsiveWorkbench({ listTargets, connect, timeoutMs = DE
       } catch { /* Try the next eligible page without attributing product state. */ }
       if (client?.close) Promise.resolve(client.close()).catch(() => undefined);
     }
-    if (now() - started >= timeoutMs) break;
+    const remaining = timeoutMs - (now() - started);
+    if (remaining <= 0) break;
+    await sleep(Math.min(TARGET_POLL_BACKOFF_MS, remaining));
   }
   throw new CdpRootDomUnreachableError({ targets: observed, attemptedTargetIds, timeoutMs });
 }
