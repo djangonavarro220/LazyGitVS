@@ -18,7 +18,7 @@ import { showGitOperationOptions } from './statusGitOperation';
 import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, openPath, previewCommitFileDiff, previewDiff, previewStashFileDiff, revealVisibleEditorLine, showCommitPreview, showStashPreview } from './workspaceActions';
 import { deletedGhostDecorations, editorLineRange, excludeRangeLines, hunkChangedEditorRanges, rangeLineSet } from './hunkEditorDecorations';
 import { planAndPerformReflogAction, type ReflogDirection } from './undoRedo';
-import { panelBlockNavigationBindings } from './panelKeyboardRouter';
+import { panelBlockNavigationBindings } from './panelKeyboardRouter'; import { settleFocusRequest } from './focusRequest';
 function gutterBadge(letter: 'S' | 'U', fill: string) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="12" rx="3" fill="${fill}"/><text x="8" y="11.5" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="10" font-weight="700" fill="#ffffff">${letter}</text></svg>`;
   return vscode.Uri.parse(`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
@@ -479,7 +479,9 @@ class LazyGitVSController {
     await this.revealPanelView(panel);
     if (panel === 'status') await this.revealCurrentStatusRepo().catch(() => undefined);
     if (transition) this.pendingPanelFocusTransition = transition;
-    await new Promise(resolve => setTimeout(resolve, 50)); await this.views.get(panel)?.webview.postMessage({ type: 'focusBody' });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const view = this.views.get(panel);
+    if (view) void settleFocusRequest(view.webview.postMessage({ type: 'focusBody' }));
   }
   private async restorePanelFocusAfterModal(viewPanel: ViewPanel) {
     if (this.editorHunkMode || this.editorEditMode) return;
@@ -503,10 +505,10 @@ class LazyGitVSController {
     const viewId = VIEW_IDS[panel];
     const reveal = async () => {
       if (!this.visible()) {
-        try { await vscode.commands.executeCommand('workbench.view.scm'); } catch { /* ignore */ }
+        void settleFocusRequest(vscode.commands.executeCommand('workbench.view.scm'));
       }
       try { this.views.get(panel)?.show(false); } catch { /* ignore */ }
-      try { await vscode.commands.executeCommand(`${viewId}.focus`, { preserveFocus: false }); } catch { /* ignore */ }
+      void settleFocusRequest(vscode.commands.executeCommand(`${viewId}.focus`, { preserveFocus: false }));
     };
     await reveal();
   }
@@ -516,12 +518,10 @@ class LazyGitVSController {
     const item = items.find(item => item.id === getActiveWorkspaceRoot()) ?? items[0];
     if (item) await this.statusTree?.reveal(item, { select: true, focus: true }).then(undefined, () => undefined);
   }
-
   private requestWebviewAutoFocus() {
     this.pendingWebviewAutoFocus = true;
     this.suppressWebviewAutoFocusUntil = 0;
   }
-
   private consumeWebviewAutoFocus(viewPanel: ViewPanel): boolean {
     if (!this.pendingWebviewAutoFocus) return false;
     if (this.activeViewPanel() !== viewPanel) return false;
