@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { settleFocusRequest } = require('../out/focusRequest');
+const { detachFocusRequest, settleFocusRequest } = require('../out/focusRequest');
 
 function fakeTimers() {
   const timers = [];
@@ -15,6 +15,19 @@ function fakeTimers() {
 }
 
 (async () => {
+  let resolveDetached;
+  const detached = new Promise(resolve => { resolveDetached = resolve; });
+  assert.strictEqual(detachFocusRequest(detached), undefined, 'detached focus must return before an unresolved operation');
+  resolveDetached();
+
+  const unhandledRejections = [];
+  const onUnhandledRejection = reason => unhandledRejections.push(reason);
+  process.on('unhandledRejection', onUnhandledRejection);
+  detachFocusRequest(Promise.reject(new Error('detached focus failed')));
+  await new Promise(resolve => setImmediate(resolve));
+  process.off('unhandledRejection', onUnhandledRejection);
+  assert.deepStrictEqual(unhandledRejections, [], 'detached focus must consume async rejection');
+
   const pendingTimers = fakeTimers();
   let resolvePending;
   const pending = new Promise(resolve => { resolvePending = resolve; });

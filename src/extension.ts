@@ -18,7 +18,7 @@ import { showGitOperationOptions } from './statusGitOperation';
 import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, openPath, previewCommitFileDiff, previewDiff, previewStashFileDiff, revealVisibleEditorLine, showCommitPreview, showStashPreview } from './workspaceActions';
 import { deletedGhostDecorations, editorLineRange, excludeRangeLines, hunkChangedEditorRanges, rangeLineSet } from './hunkEditorDecorations';
 import { planAndPerformReflogAction, type ReflogDirection } from './undoRedo';
-import { panelBlockNavigationBindings } from './panelKeyboardRouter'; import { settleFocusRequest } from './focusRequest';
+import { panelBlockNavigationBindings } from './panelKeyboardRouter'; import { detachFocusRequest, settleFocusRequest } from './focusRequest';
 function gutterBadge(letter: 'S' | 'U', fill: string) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="12" rx="3" fill="${fill}"/><text x="8" y="11.5" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="10" font-weight="700" fill="#ffffff">${letter}</text></svg>`;
   return vscode.Uri.parse(`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
@@ -1772,7 +1772,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.statusRecentRepos', () => app.openRecentRepos()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.statusEnter', (target?: string | { repoPath?: string; operationOptions?: boolean }) => app.statusEnter(target)));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.openOperationOptions', (target?: string | { repoPath?: string }) => app.openOperationOptions(target)));
-  context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.openDashboard', () => app.focus()));
+  context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.openDashboard', () => detachFocusRequest(app.focus())));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.closeDashboard', () => app.close()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.resetState', () => app.resetState()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.dumpHealth', () => app.dumpHealth()));
@@ -1781,7 +1781,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.redoReflog', () => app.reflogRedo()));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.enterCurrentFileHunkMode', () => app.enterCurrentFileHunkMode()));
   PANEL_ORDER.forEach((panel, index) => {
-    context.subscriptions.push(vscode.commands.registerCommand(`lazygitvs.focusPanel${index + 1}`, () => app.focusNumberPanel(index + 1)));
+    context.subscriptions.push(vscode.commands.registerCommand(`lazygitvs.focusPanel${index + 1}`, () => detachFocusRequest(app.focusNumberPanel(index + 1))));
   });
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkNext', () => app.editorNextHunk(1)));
   context.subscriptions.push(vscode.commands.registerCommand('lazygitvs.editorHunkPrev', () => app.editorNextHunk(-1)));
