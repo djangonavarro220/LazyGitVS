@@ -15,6 +15,7 @@ const { targetLane, panelNavigationBoundaryMatches, finishReport, writeJson } = 
 const { makeFixtureResult, classifyFailure, collectProcessTreeMetrics } = require('./dogfood/telemetry');
 const { discoverOwnedCdp, makeChildTerminalFailure, publishJsonOnce, readProcessIdentity, readRunEnvelope, runChildPreRuntimeLifecycle, terminateOwnedProcessGroup } = require('./dogfood/run-envelope');
 const { writeNativeScreenshot, writeScreenshot } = require('./dogfood/screenshots');
+const { connectResponsiveWorkbench, CdpRootDomUnreachableError } = require('./dogfood/cdp-workbench');
 
 const CDP = require('chrome-remote-interface');
 const { downloadAndUnzipVSCode } = require('@vscode/test-electron');
@@ -156,12 +157,11 @@ function runMatrixIfNeeded() {
 }
 
 async function cdpConnect() {
-  const targets = await waitFor(async () => {
-    const t = await getJson(`http://127.0.0.1:${PORT}/json/list`, 3000);
-    return t && t.length ? t : null;
-  }, 45000, 500, 'CDP targets');
-  const page = targets.find(t => /Visual Studio Code|Extension Development Host/i.test(t.title || '') && t.type === 'page') || targets.find(t => t.type === 'page') || targets[0];
-  return CDP({ target: page, port: PORT });
+  const selected = await connectResponsiveWorkbench({
+    listTargets: () => getJson(`http://127.0.0.1:${PORT}/json/list`, 3000),
+    connect: target => CDP({ target, port: PORT })
+  });
+  return selected.client;
 }
 async function key(Input, key, opts = {}) {
   const mods = (opts.ctrl ? 2 : 0) | (opts.shift ? 8 : 0) | (opts.alt ? 1 : 0) | (opts.meta ? 4 : 0);
@@ -1427,14 +1427,15 @@ async function main() {
       schemaVersion: 1,
       status: 'failure',
       ok: false,
-      classification: classifyFailure(error),
+      classification: error?.classification || classifyFailure(error),
       generatedAt: new Date().toISOString(),
       runId: RUN_ENVELOPE.runId,
       lane: process.env.LGVS_TELEMETRY_LANE,
       envelopeDigest: RUN_ENVELOPE.digest,
       provenance: RUN_ENVELOPE.provenance,
       process: { root: rootProcessIdentity, listener: cdpOwnership?.listenerIdentity },
-      error: String(error && error.stack || error)
+      error: String(error && error.stack || error),
+      cdpTargetAttempts: error instanceof CdpRootDomUnreachableError ? { targets: error.targets, attemptedTargetIds: error.attemptedTargetIds } : undefined
     } : { ok: false, classification: classifyFailure(error), variant: VARIANT, vimExtension: useVim, vimExtensionInfo: vimExtension, started, finished: new Date().toISOString(), theme: THEME, fixture, checks, evidence, failureScreenshot, error: String(error && error.stack || error), processOutput: procOut.slice(-8000) };
     if (TELEMETRY && !terminalPublished) {
       publishJsonOnce(REPORT_JSON, report, { runRoot: RUN_ENVELOPE.paths.runRoot });
