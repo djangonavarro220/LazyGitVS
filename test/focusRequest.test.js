@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { detachFocusRequest, settleFocusRequest } = require('../out/focusRequest');
+const { detachFocusRequest, settleFocusRequest, FocusRequestStateMachine } = require('../out/focusRequest');
 
 function fakeTimers() {
   const timers = [];
@@ -46,4 +46,29 @@ function fakeTimers() {
   const rejectedTimers = fakeTimers();
   await settleFocusRequest(Promise.reject(new Error('focus failed')), 250, rejectedTimers.set, rejectedTimers.clear);
   assert.strictEqual(rejectedTimers.timers[0].cleared, true);
+
+  const requests = new FocusRequestStateMachine();
+  const first = requests.begin('files');
+  const firstRender = requests.rendered('files');
+  assert.strictEqual(requests.ready('files', firstRender), first, 'the matching rendered generation may dispatch a pending request');
+  assert.strictEqual(requests.acknowledge('files', firstRender, first.request), first, 'only the matching physical panel focus completes the request');
+  assert.strictEqual(requests.pending(), undefined);
+
+  const stale = requests.begin('files');
+  const staleRender = requests.rendered('files');
+  const current = requests.begin('files');
+  const currentRender = requests.rendered('files');
+  assert.strictEqual(requests.ready('files', staleRender), undefined, 'stale ready generations cannot dispatch a newer request');
+  assert.strictEqual(requests.acknowledge('files', staleRender, stale.request), undefined, 'stale focus acknowledgements cannot complete a newer request');
+  assert.strictEqual(requests.ready('files', currentRender), current);
+  assert.strictEqual(requests.acknowledge('files', currentRender, stale.request), undefined, 'an acknowledgement for an older request cannot complete the current request');
+  assert.strictEqual(requests.acknowledge('files', currentRender, current.request), current);
+
+  const branches = requests.begin('branches', 'files');
+  const filesRender = requests.rendered('files');
+  assert.strictEqual(requests.ready('files', filesRender), undefined, 'a ready event from another panel cannot dispatch the pending transition');
+  const branchesRender = requests.rendered('branches');
+  assert.strictEqual(requests.ready('branches', branchesRender), branches);
+  assert.strictEqual(requests.ready('branches', branchesRender), undefined, 'duplicate ready events cannot dispatch focusBody twice');
+  assert.strictEqual(requests.acknowledge('branches', branchesRender, branches.request), branches);
 })();

@@ -323,6 +323,7 @@ async function main() {
   let fixture;
   let useVim;
   let vimExtension;
+  let companionExtensionDir;
   let started;
   let checks = [];
   let evidence = [];
@@ -378,15 +379,24 @@ async function main() {
   ], null, 2));
   const extensionsDir = TELEMETRY ? path.join(TELEMETRY_CHILD_DIR, 'extensions') : fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-code-ext-'));
   if (TELEMETRY) fs.mkdirSync(extensionsDir, { mode: 0o700 });
+  companionExtensionDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-dogfood-companion-'));
+  fs.copyFileSync(path.join(ROOT, 'scripts', 'dogfood', 'extension-host-bootstrap.js'), path.join(companionExtensionDir, 'extension-host-bootstrap.js'));
+  fs.writeFileSync(path.join(companionExtensionDir, 'package.json'), JSON.stringify({
+    name: 'lazygitvs-dogfood-companion',
+    version: '0.0.0',
+    engines: { vscode: '^1.90.0' },
+    main: './extension-host-bootstrap.js',
+    activationEvents: ['onStartupFinished']
+  }, null, 2));
   useVim = VARIANT === 'vim';
   vimExtension = useVim ? installVSCodeVimExtension(extensionsDir) : undefined;
   const launchArgs = [
     codePath,
     ...fixtureRepositories,
     `--extensionDevelopmentPath=${ROOT}`,
+    `--extensionDevelopmentPath=${companionExtensionDir}`,
     `--user-data-dir=${userData}`,
     `--extensions-dir=${extensionsDir}`,
-    `--extensionTestsPath=${path.join(ROOT, 'scripts', 'dogfood', 'extension-host-bootstrap.js')}`,
     `--remote-debugging-port=${TELEMETRY ? 0 : PORT}`,
     ...(process.env.LGVS_DOGFOOD_WINDOW_SIZE ? [`--window-size=${process.env.LGVS_DOGFOOD_WINDOW_SIZE}`] : []),
     '--disable-workspace-trust',
@@ -1477,6 +1487,7 @@ async function main() {
     if (closingClient) {
       await Promise.race([closingClient, sleep(5000)]);
     }
+    if (companionExtensionDir) fs.rmSync(companionExtensionDir, { recursive: true, force: true });
     if (TELEMETRY) process.exit(process.exitCode || 0);
   }
 }

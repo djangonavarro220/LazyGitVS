@@ -57,10 +57,15 @@ test('panel-navigation dogfood proves focused panes per physical transition', ()
 
 test('panel-navigation owns a test-only Extension Host bootstrap with a durable Files focus ACK', () => {
   assert(dogfoodSource.includes("? undoRedoBoundaryReport : path.join(userData, 'lazygit-panel-navigation-boundary.jsonl')"), 'undo lane must share its boundary stream with the navigation preflight');
-  assert(dogfoodSource.includes('--extensionTestsPath=${path.join(ROOT, \'scripts\', \'dogfood\', \'extension-host-bootstrap.js\')}'), 'dogfood must load the bootstrap only as Extension Host tests');
-  assert(dogfoodSource.includes("LGVS_DOGFOOD_EXTENSION_HOST_BOOTSTRAP: '1'") && dogfoodSource.includes('LGVS_DOGFOOD_BOOTSTRAP_REQUEST: bootstrapRequest') && dogfoodSource.includes('LGVS_DOGFOOD_BOOTSTRAP_RESULT: bootstrapResult') && dogfoodSource.includes('LGVS_DOGFOOD_BOOTSTRAP_DONE: bootstrapDone'), 'bootstrap paths and gate must be explicit in the test-only environment');
+  assert(!dogfoodSource.includes('--extensionTestsPath'), 'dogfood must not turn its remote-control companion into Extension Host tests');
+  assert(dogfoodSource.includes("fs.mkdtempSync(path.join(os.tmpdir(), 'lgvs-dogfood-companion-'))"), 'dogfood must create an isolated temporary companion extension');
+  assert(dogfoodSource.includes("name: 'lazygitvs-dogfood-companion'") && dogfoodSource.includes("activationEvents: ['onStartupFinished']") && dogfoodSource.includes("main: './extension-host-bootstrap.js'"), 'the companion manifest must load the existing bootstrap on startup');
+  assert(dogfoodSource.includes("`--extensionDevelopmentPath=${ROOT}`") && dogfoodSource.includes('`--extensionDevelopmentPath=${companionExtensionDir}`'), 'dogfood must load LazyGitVS and its companion as separate development extensions');
+  assert(dogfoodSource.includes("LGVS_DOGFOOD_EXTENSION_HOST_BOOTSTRAP: '1'") && dogfoodSource.includes('LGVS_DOGFOOD_BOOTSTRAP_REQUEST: bootstrapRequest') && dogfoodSource.includes('LGVS_DOGFOOD_BOOTSTRAP_RESULT: bootstrapResult') && dogfoodSource.includes('LGVS_DOGFOOD_BOOTSTRAP_DONE: bootstrapDone'), 'bootstrap paths and gate must be explicit in the companion environment');
+  assert(dogfoodSource.includes("fs.rmSync(companionExtensionDir, { recursive: true, force: true })"), 'dogfood must clean the temporary companion extension on every exit');
   assert(dogfoodSource.indexOf('waitForBootstrapResult') < dogfoodSource.indexOf('cdpConnect()'), 'dogfood must await the Extension Host acknowledgement before CDP input');
   assert(bootstrapSource.includes("executeCommand('lazygitvs.openDashboard')"), 'bootstrap must open the real dashboard command');
+  assert(bootstrapSource.includes('exports.activate ='), 'bootstrap must be activatable as the companion extension main module');
   assert(bootstrapSource.includes("progress: 'loaded'"), 'bootstrap must atomically expose loaded progress');
   for (const progress of ['request-read', 'command-issued', 'command-settled', 'command-error']) assert(bootstrapSource.includes(`publishProgress(request, '${progress}'`), `bootstrap must atomically expose sanitized ${progress} progress`);
   assert(!bootstrapSource.includes("await vscode.commands.executeCommand('lazygitvs.openDashboard')"), 'bootstrap must not block on the dashboard command promise');

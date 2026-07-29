@@ -38,7 +38,7 @@ function waitForBoundary() {
   });
 }
 
-exports.run = async () => {
+async function run() {
   if (!requestPath || !resultPath || !donePath || !boundaryPath) throw new Error('Bootstrap paths are required');
   publish(resultPath, { progress: 'loaded' });
   const request = await waitFor(requestPath, value => value?.digest === digest(value.identity) && value.boundaryPath === boundaryPath);
@@ -54,4 +54,8 @@ exports.run = async () => {
   const observed = await waitForBoundary();
   publishProgress(request, 'success', { event: 'panelFocus', activeView: 'files', boundary: observed });
   await waitFor(donePath, value => value?.digest === request.digest);
-};
+}
+
+exports.run = run;
+exports.activate = () => run();
+exports.deactivate = () => undefined;

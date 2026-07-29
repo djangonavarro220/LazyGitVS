@@ -18,7 +18,7 @@ import { showGitOperationOptions } from './statusGitOperation';
 import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, openPath, previewCommitFileDiff, previewDiff, previewStashFileDiff, revealVisibleEditorLine, showCommitPreview, showStashPreview } from './workspaceActions';
 import { deletedGhostDecorations, editorLineRange, excludeRangeLines, hunkChangedEditorRanges, rangeLineSet } from './hunkEditorDecorations';
 import { planAndPerformReflogAction, type ReflogDirection } from './undoRedo';
-import { panelBlockNavigationBindings } from './panelKeyboardRouter'; import { detachFocusRequest, settleFocusRequest } from './focusRequest';
+import { panelBlockNavigationBindings } from './panelKeyboardRouter'; import { detachFocusRequest, FocusRequestStateMachine, settleFocusRequest } from './focusRequest';
 function gutterBadge(letter: 'S' | 'U', fill: string) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="12" rx="3" fill="${fill}"/><text x="8" y="11.5" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="10" font-weight="700" fill="#ffffff">${letter}</text></svg>`;
   return vscode.Uri.parse(`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
@@ -128,7 +128,7 @@ class LazyGitVSController {
   private lazygitConfigFiles: string[] = [];
   private suppressWebviewAutoFocusUntil = 0;
   private pendingWebviewAutoFocus = false;
-  private pendingPanelFocusTransition?: { from: ViewPanel; to: ViewPanel }; private defaultPanelsRevealed = false;
+  private readonly pendingPanelFocusTransition = new FocusRequestStateMachine();
   constructor(private readonly context: vscode.ExtensionContext) {
     this.unstagedHunkDecoration = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: 'rgba(210, 153, 34, 0.13)', borderWidth: '0 0 0 2px', borderStyle: 'solid', borderColor: '#d29922' });
     this.stagedHunkDecoration = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: 'rgba(46, 160, 67, 0.13)', borderWidth: '0 0 0 2px', borderStyle: 'solid', borderColor: '#2ea043' });
@@ -171,11 +171,21 @@ class LazyGitVSController {
     view.onDidChangeVisibility(() => { if (view.visible) this.scheduleRefresh(0); else if (!this.visible()) this.clearRuntimeTimers(); }, null, this.context.subscriptions);
     view.webview.onDidReceiveMessage(async rawMessage => {
       try {
+        if (rawMessage && typeof rawMessage === 'object' && (rawMessage as { type?: unknown }).type === 'ready') {
+          const generation = Number((rawMessage as { generation?: unknown }).generation);
+          const request = this.pendingPanelFocusTransition.ready(panel, generation);
+          recordBootstrapDiagnostic('webviewReady', { panel, generation, pending: Boolean(request) });
+          if (request) {
+            void view.webview.postMessage({ type: 'focusBody', request: request.request, generation: request.generation });
+            recordBootstrapDiagnostic('focusBodyDispatched', { panel, request: request.request, generation: request.generation });
+          }
+          return;
+        }
         const message = normalizeWebviewMessage(rawMessage);
         if (!message) return;
         const type = message.type;
         if (type === 'dogfoodBoundary') recordDogfoodBoundary(String(message.event ?? 'unknown'), { panel, key: String(message.key ?? '') });
-        if (type === 'focusArea') { recordBootstrapDiagnostic('incomingFocusArea', { panel, area: message.area }); this.setFocusArea(message.area === 'panel' ? 'panel' : 'none'); const transition = this.pendingPanelFocusTransition; if (message.area === 'panel' && transition?.to === panel) { recordDogfoodBoundary('panelFocus', { ...transition, activeView: this.activeViewPanel() }); this.pendingPanelFocusTransition = undefined; } }
+        if (type === 'focusArea') { recordBootstrapDiagnostic('incomingFocusArea', { panel, area: message.area, generation: message.generation, request: message.request }); this.setFocusArea(message.area === 'panel' ? 'panel' : 'none'); const transition = message.area === 'panel' ? this.pendingPanelFocusTransition.acknowledge(panel, Number(message.generation), Number(message.request)) : undefined; if (transition) recordDogfoodBoundary('panelFocus', { from: transition.from, to: transition.panel, activeView: this.activeViewPanel() }); }
         if (type === 'commandPalette') await this.openCommandPalette();
         if (type === 'move') await this.move(panel, message.delta);
         if (type === 'moveTo') await this.moveTo(panel, message.position);
@@ -349,16 +359,8 @@ class LazyGitVSController {
   }
   async focus() {
     this.loadLazyGitConfig();
-    await this.revealDefaultOpenPanels();
     const bootstrap = process.env.LGVS_DOGFOOD_EXTENSION_HOST_BOOTSTRAP === '1' && process.env.LGVS_DOGFOOD_BOUNDARY_REPORT ? { from: 'files' as ViewPanel, to: 'files' as ViewPanel } : undefined;
     return this.focusPanel(this.activeViewPanel(), bootstrap);
-  }
-  private async revealDefaultOpenPanels() {
-    if (this.defaultPanelsRevealed) return;
-    this.defaultPanelsRevealed = true;
-    for (const panel of PANEL_ORDER.filter((panel): panel is ViewPanel => panel !== 'status')) {
-      await this.revealPanelView(panel).catch(() => undefined);
-    }
   }
   async focusNumberPanel(index: number) {
     const panel = PANEL_ORDER[index - 1];
@@ -461,6 +463,7 @@ class LazyGitVSController {
   }
   private async focusPanel(panel: ViewPanel, transition?: { from: ViewPanel; to: ViewPanel }) {
     const previousViewPanel = this.activeViewPanel();
+    this.pendingPanelFocusTransition.begin(panel, transition?.from ?? previousViewPanel);
     this.ownsModeStatus = true;
     this.webviewKeyboardOwner = true;
     this.setFocusArea('panel');
@@ -480,10 +483,7 @@ class LazyGitVSController {
     this.renderActivePanel(panel);
     await this.revealPanelView(panel);
     if (panel === 'status') await this.revealCurrentStatusRepo().catch(() => undefined);
-    recordBootstrapDiagnostic('focusWorkflowAfterFinalReveal', { panel, attached: this.views.has(panel), visible: this.views.get(panel)?.visible ?? false });
-    if (transition) this.pendingPanelFocusTransition = transition;
-    const view = this.views.get(panel);
-    if (view) { let settled = false, error = ''; const focusBody = view.webview.postMessage({ type: 'focusBody' }); void Promise.resolve(focusBody).then(() => settled = true, e => error = String(e)); await settleFocusRequest(focusBody); recordBootstrapDiagnostic('focusBodyPostMessageSettled', { panel, settled, error }); }
+
   }
   private async restorePanelFocusAfterModal(viewPanel: ViewPanel) {
     if (this.editorHunkMode || this.editorEditMode) return;
@@ -1638,6 +1638,7 @@ class LazyGitVSController {
   private render(viewPanel: ViewPanel) {
     const view = this.views.get(viewPanel);
     if (!view) return;
+    const generation = this.pendingPanelFocusTransition.rendered(viewPanel);
     const panel = this.panelForView(viewPanel);
     const title = this.title(panel);
     const isActiveView = this.activeViewPanel() === viewPanel;
@@ -1657,7 +1658,7 @@ class LazyGitVSController {
       .status-pair{display:grid;grid-template-columns:12px 12px;column-gap:2px;align-items:center;font-family:var(--vscode-editor-font-family);font-size:10px}.slot{display:inline-grid;place-items:center;width:12px;height:14px;border-radius:2px;font-size:10px;font-weight:700;line-height:1;box-sizing:border-box;color:var(--vscode-button-foreground,#fff)}.slot.empty{visibility:hidden;background:transparent;border-color:transparent;box-shadow:none}.slot.index{background:var(--vscode-gitDecoration-addedResourceForeground,#6a9955)}.slot.worktree{background:var(--vscode-gitDecoration-modifiedResourceForeground,#e06c75)}.slot.deleted,.slot.conflict{background:var(--vscode-errorForeground,#f85149)}.slot.untracked{background:var(--vscode-gitDecoration-untrackedResourceForeground,#d7ba7d);color:var(--vscode-sideBar-background,#1e1e1e)}.row.dir,.row.file.tree{grid-template-columns:7px minmax(0,1fr);}.tree-line{display:inline-flex;align-items:center;gap:2px;min-width:0;overflow:hidden;text-overflow:ellipsis;}.tree-indent{display:inline-block;flex:0 0 auto;width:var(--tree-indent,0ch)}.tree-name{overflow:hidden;text-overflow:ellipsis;}.tree-arrow{color:var(--vscode-descriptionForeground);}.status-dashboard{padding:7px 9px 10px;display:flex;flex-direction:column;gap:5px;min-width:0}.lg-logo{font-family:var(--vscode-editor-font-family);font-size:20px;font-weight:800;letter-spacing:.5px;color:var(--vscode-foreground);line-height:1.05}.lg-sub{color:var(--vscode-descriptionForeground);font-size:11px;margin-bottom:4px}.lg-link{display:flex;align-items:center;gap:5px;min-height:19px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.lg-link span{overflow:hidden;text-overflow:ellipsis}.lg-repo{margin-top:6px;padding-top:6px;border-top:1px solid var(--vscode-sideBarSectionHeader-border);color:var(--vscode-descriptionForeground);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.current .path,.current .status{font-weight:700}.danger .status{color:var(--vscode-errorForeground)}.hint{color:var(--vscode-descriptionForeground);font-size:11px;line-height:1.35;padding:4px 8px 5px;border-top:1px solid var(--vscode-sideBarSectionHeader-border);background:var(--vscode-sideBar-background);}kbd{font-family:var(--vscode-editor-font-family);font-size:10px;color:var(--vscode-keybindingLabel-foreground);background:var(--vscode-keybindingLabel-background);border:1px solid var(--vscode-keybindingLabel-border);border-bottom-color:var(--vscode-keybindingLabel-bottomBorder);border-radius:3px;padding:0 3px;margin-right:2px;}.statusline{color:var(--vscode-descriptionForeground);padding-top:3px;}
       .boom{position:absolute;inset:0;display:grid;place-items:center;background:color-mix(in srgb,var(--vscode-sideBar-background) 55%,transparent);z-index:5;pointer-events:none;}.bomb{font-size:46px;animation:bomb .45s ease-in forwards}.blast{position:absolute;font-size:76px;opacity:0;animation:blast .5s ease-out .35s forwards}@keyframes bomb{to{transform:scale(.35) rotate(20deg);opacity:0}}@keyframes blast{0%{transform:scale(.2);opacity:0}35%{opacity:1}100%{transform:scale(1.6);opacity:0}}
     </style></head><body tabindex="0"><div class="root ${this.lazygitGui.wrapLinesInStagingView ? 'wrap-staging' : ''}">${boom}<div class="title">${title}</div><div class="rows" role="listbox" aria-label="${escapeHtml(title)}">${rows}</div>${footer}</div><script nonce="${nonce}">
-      const vscode=acquireVsCodeApi(); const panel='${viewPanel}'; const shouldFocus=${shouldFocus ? 'true' : 'false'}; let keyboardEnabled=${this.focusArea === 'panel' && this.ownsModeStatus && !this.editorHunkMode && !this.editorEditMode ? 'true' : 'false'}; window.addEventListener('message',event=>{if(event.data&&event.data.type==='keyboardEnabled')keyboardEnabled=!!event.data.enabled;if(event.data&&event.data.type==='focusBody'){document.body.focus();markPanelFocus();}}); function markPanelFocus(){keyboardEnabled=true;vscode.postMessage({type:'focusArea',area:'panel'});} window.addEventListener('focus',markPanelFocus); document.body.addEventListener('focus',markPanelFocus); setTimeout(()=>{document.querySelector('.row.sel')?.scrollIntoView({block:'nearest'}); if(shouldFocus){ document.body.focus(); markPanelFocus(); }},0);
+      const vscode=acquireVsCodeApi(); const panel='${viewPanel}'; const generation=${generation}; const shouldFocus=${shouldFocus ? 'true' : 'false'}; let keyboardEnabled=${this.focusArea === 'panel' && this.ownsModeStatus && !this.editorHunkMode && !this.editorEditMode ? 'true' : 'false'}; function markPanelFocus(request){keyboardEnabled=true;vscode.postMessage({type:'focusArea',area:'panel',generation,request});} window.addEventListener('message',event=>{if(event.data&&event.data.type==='keyboardEnabled')keyboardEnabled=!!event.data.enabled;if(event.data&&event.data.type==='focusBody'&&event.data.generation===generation){document.body.focus();markPanelFocus(event.data.request);}}); window.addEventListener('focus',()=>markPanelFocus()); document.body.addEventListener('focus',()=>markPanelFocus()); vscode.postMessage({type:'ready',generation}); setTimeout(()=>{document.querySelector('.row.sel')?.scrollIntoView({block:'nearest'}); if(shouldFocus){ document.body.focus(); markPanelFocus(); }},0);
       const keymap=${scriptJson(this.lazygitKeymap)};
       const blockNavigation=${scriptJson(panelBlockNavigationBindings(this.lazygitKeymap.universal))};
       const panels={1:'status',2:'files',3:'branches',4:'commits',5:'stash',6:'conflicts',7:'tags',8:'remotes'};
