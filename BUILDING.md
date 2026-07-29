@@ -25,7 +25,7 @@ For the detailed testing policy, future-agent checklist, coverage target, dogfoo
 docs/testing-and-verification.md
 ```
 
-Short version: every feature request and bug fix should add automated coverage for the touched behavior, aiming for 100% where practical. UI/focus/keybinding/editor work also needs real VS Code dogfood.
+Short version: every feature request and bug fix should add automated coverage for the touched behavior, aiming for 100% where practical. UI/focus/keybinding/editor work also runs real VS Code dogfood as an advisory diagnostic; isolated webview-focus failures are not release blockers.
 
 ## UI dogfood
 

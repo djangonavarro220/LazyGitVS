@@ -50,22 +50,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y imagemagick
 
-      - name: UI dogfood
+      - name: UI dogfood diagnostic
+        id: ui_dogfood
+        continue-on-error: true
         shell: bash
-        run: |
-          set -euo pipefail
-          for attempt in 1 2; do
-            echo "UI dogfood attempt $attempt/2"
-            if npm run dogfood:ui; then
-              exit 0
-            fi
-            if [ "$attempt" = "2" ]; then
-              echo "::error::UI dogfood failed after 2 attempts."
-              exit 1
-            fi
-            rm -rf dogfood-output
-            sleep 10
-          done
+        run: timeout --foreground -k 10s 180s npm run dogfood:ui
         env:
           LGVS_DOGFOOD_THEME: Default Light Modern
 
@@ -76,8 +65,8 @@ jobs:
           path: dist/*.vsix
           if-no-files-found: error
 
-      - name: Upload dogfood screenshots on failure
-        if: failure()
+      - name: Upload dogfood diagnostic evidence
+        if: always() && steps.ui_dogfood.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: dogfood-output

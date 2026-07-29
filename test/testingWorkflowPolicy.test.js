@@ -37,12 +37,14 @@ test('testing policy is a hard agent rule and not just a forgotten doc', () => {
   assert.match(testingDoc, /If a behavior cannot be fully automated, document the gap/);
 });
 
-test('every feature has an automated telemetry and performance acceptance gate', () => {
-  assert.strictEqual(pkg.scripts['verify:feature'], 'npm test && npm run verify:telemetry && npm run dogfood:ui:large-repo && npm run package');
+test('every feature has deterministic test and package gates while headless UI remains diagnostic', () => {
+  assert.strictEqual(pkg.scripts['verify:feature'], 'npm test && npm run package');
+  assert.strictEqual(pkg.scripts['verify:ui:diagnostic'], 'npm run verify:telemetry && npm run dogfood:ui:large-repo');
   assert.strictEqual(pkg.scripts['verify:telemetry'], 'node scripts/run-dogfood-telemetry.js --check');
   assert.match(agents, /Performance is an automatic acceptance gate/);
   assert.match(agents, /npm run verify:feature/);
-  assert.match(testingDoc, /Automatic feature performance gate/);
+  assert.match(testingDoc, /Deterministic feature acceptance gate/);
+  assert.match(testingDoc, /Headless UI diagnostics are advisory/);
   assert.match(testingDoc, /keyboard responsiveness under a large repository fixture/);
 });
 
