@@ -124,6 +124,14 @@ d           Discard menu
 D           Reset/nuke menu
 ```
 
+### Commits panel
+
+```text
+b           View bisect options for the selected commit
+```
+
+The key follows lazygit's `keybinding.commits.viewBisectOptions` setting (default `b`). The native `Bisect` picker offers only actions valid for the current Git bisect state and asks before resetting a bisect.
+
 Files use explicit staged/worktree badges instead of raw porcelain soup:
 
 - `S` lane: staged/index state
@@ -166,7 +174,7 @@ Hunk/line selection is shown in the editor with highlights and gutter markers. S
 - range selection in Files
 - hunk and line stage/unstage
 - branch, commit, stash, conflict, tag, and remote panels
-- push, pull/fetch, stash, discard, reset, branch, commit, and conflict QuickPick menus
+- push, pull/fetch, stash, discard, reset, branch, commit, conflict, and selected-commit bisect QuickPick menus
 - confirmed `z` / `Z` undo/redo for commit and branch actions via Git reflog
 - lazygit config/keybinding reading where implemented
 - `LazyGitVS: Reset state`, `LazyGitVS: Dump health`, and `LazyGitVS: Enter current file HUNK mode` recovery/debug commands

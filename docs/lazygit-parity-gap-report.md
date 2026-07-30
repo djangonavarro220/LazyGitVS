@@ -159,7 +159,7 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 - [x] Show merge/rebase/cherry-pick state in Status as `(operation) repo → branch`.
 - [x] Open operation options with `m`: `c` continue, `a` abort, and `s` skip where applicable.
 - [x] Detect revert operation status and expose `c` continue, `a` abort, and `s` skip options.
-- [ ] Bisect remains a Commits-panel gap (`b` / bisect controller); it is intentionally not a Status operation.
+- [x] Commits `viewBisectOptions` (default `b`) opens the upstream `Bisect` menu for the selected commit: before start it preserves `b/g/t`; while started it exposes only state-valid `b/g/s/S/r` actions, confirms reset, executes Git argv against the active repository, and refreshes while preserving the commit selection/preview. Bisect remains intentionally outside Status.
 - [ ] Conflict follow-up prompts matching lazygit.
 
 ### Files gaps
