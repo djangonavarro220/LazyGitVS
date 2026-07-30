@@ -45,6 +45,7 @@ export const allowedMessageTypes = new Set([
   'stashMenu',
   'discardMenu',
   'resetMenu',
+  'resetToUpstreamMenu',
   'search',
   'clearFilter',
   'statusFilter',

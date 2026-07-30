@@ -163,7 +163,7 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 - [ ] Conflict follow-up prompts matching lazygit.
 
 ### Files gaps
-- [ ] Upstream reset options on Files `g`.
+- [x] Upstream reset options on Files `g`: `keybinding.commits.viewResetOptions` opens the exact `Reset to @{upstream}` mixed/soft/hard menu, executes argv against the repository captured when the menu opens, confirms every reset through the central destructive contract, warns hard reset about index/worktree loss, and leaves no-upstream/cancel paths unchanged.
 - [ ] Find base commit for fixup `<ctrl+f>`.
 - [ ] External difftool `<ctrl+t>`.
 - [ ] Merge conflict options from Files `M` exact lazygit flow.
@@ -274,7 +274,7 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 
 1. Bisect options in Commits.
 2. Commit workflows: squash/drop/edit/rebase/move/autosquash.
-3. Files missing keys: `g`, `<ctrl+f>`, `<ctrl+t>`, `M`.
+3. Files missing keys: `<ctrl+f>`, `<ctrl+t>`, `M`.
 4. Worktrees/Reflog/Submodules panels.
 5. Custom commands/custom pagers, late and sandboxed. This is useful but sharp.
 6. i18n/options-map label cleanup.

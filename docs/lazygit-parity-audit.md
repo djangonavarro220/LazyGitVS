@@ -39,9 +39,9 @@ Objetivo: LazyGitVS no debe ser “inspirado en lazygit”; debe copiar lazygit 
 
 - Config reader lazygit: parser YAML + defaults internos lazygit.
 - Reemplazar keymap hardcoded de LGVS por `keybinding.*`.
-- Files panel exacto: `<space>`, `<enter>`, `a`, `c`, `d`, `D`, `S`, `s`, `r`, `e`, `o`, `i`, `` ` ``, `-`, `=`, `/`.
+- Files panel exacto: `<space>`, `<enter>`, `a`, `c`, `d`, `g`, `D`, `S`, `s`, `r`, `e`, `o`, `i`, `` ` ``, `-`, `=`, `/`.
 - Main panel staging exacto: `<left>/<right>` hunks, `a` toggle hunk/line mode, `<space>` stage/unstage, `d`, `<tab>`, `<esc>`, `E`, `c/w/C`.
-- Menús MVP exactos: stash options, discard changes, reset/nuke, status filter, branch delete/upstream, commit reset/log/fixup.
+- Menús MVP exactos: stash options, discard changes, upstream reset, reset/nuke, status filter, branch delete/upstream, commit reset/log/fixup.
 
 ### Fase 2 — panels que LGVS aún simplifica demasiado
 
@@ -358,7 +358,7 @@ The canonical rows and immutable source links are in `docs/lazygit-parity-ledger
 - `a`: **Stage all** — Toggle staged/unstaged for all files in working tree.
 - `<enter>`: **Stage lines / Collapse directory** — If the selected item is a file, focus the staging view so you can stage individual hunks/lines. If the selected item is a directory, collapse/expand it.
 - `d`: **Discard** — View options for discarding changes to the selected file.
-- `g`: **View upstream reset options**
+- `g`: **View upstream reset options** — In Files, `keybinding.commits.viewResetOptions` opens `Reset to @{upstream}` in mixed, soft, hard order; all choices require the central reset confirmation and hard reset warns about index/worktree loss.
 - `D`: **Reset** — View reset options for working tree (e.g. nuking the working tree).
 - ```: **Toggle file tree view** — Toggle file view between flat and tree layout. Flat layout shows all file paths in a single list, tree layout groups files by directory. The default can be changed in the config file with the key 'gui.showFileTree'.
 - `<c-t>`: **Open external diff tool (git difftool)**
@@ -794,7 +794,7 @@ LGVS no debería escribir ayuda manual por panel. Debe generar la ayuda desde el
 - `a`: **Stage all** — Toggle staged/unstaged for all files in working tree.
 - `<enter>`: **Stage lines / Collapse directory** — If the selected item is a file, focus the staging view so you can stage individual hunks/lines. If the selected item is a directory, collapse/expand it.
 - `d`: **Discard** — View options for discarding changes to the selected file.
-- `g`: **View upstream reset options**
+- `g`: **View upstream reset options** — In Files, `keybinding.commits.viewResetOptions` opens `Reset to @{upstream}` in mixed, soft, hard order; all choices require the central reset confirmation and hard reset warns about index/worktree loss.
 - `D`: **Reset** — View reset options for working tree (e.g. nuking the working tree).
 - ```: **Toggle file tree view** — Toggle file view between flat and tree layout. Flat layout shows all file paths in a single list, tree layout groups files by directory. The default can be changed in the config file with the key 'gui.showFileTree'.
 - `<c-t>`: **Open external diff tool (git difftool)**

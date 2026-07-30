@@ -61,7 +61,7 @@ export function discardAllConfirmation(target: string): string {
 
 export function resetConfirmation(ref: string, mode: 'soft' | 'mixed' | 'hard'): string {
   const prefix = mode[0].toUpperCase() + mode.slice(1);
-  return mode === 'hard' ? `${prefix} reset to ${ref}? Not undoable here.` : `${prefix} reset to ${ref}?`;
+  return mode === 'hard' ? `${prefix} reset to ${ref}? This discards index and working tree changes. Not undoable here.` : `${prefix} reset to ${ref}?`;
 }
 
 export function nukeWorkingTreeConfirmation(): string {

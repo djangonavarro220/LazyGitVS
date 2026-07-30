@@ -7,6 +7,8 @@ import { decorateMenuItems, findMenuItemByKey } from './lazygitMenu';
 
 export type GitMenuItem = vscode.QuickPickItem & { key?: string; args?: string[]; danger?: boolean; confirm?: string; run?: () => Promise<void> };
 export type CopyText = (text: string, label?: string) => Promise<void>;
+export type GitRunner = (args: string[], cwd?: string) => Promise<string>;
+export type GitMenuExecution = { cwd?: string; runGit?: GitRunner };
 
 async function upstreamBranch(): Promise<string | undefined> {
   return git(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}']).then(out => out.trim()).catch(() => undefined);
@@ -23,23 +25,24 @@ export async function originCommitUrl(hash: string): Promise<string | undefined>
   return `${base}/commit/${encodeURIComponent(hash)}`;
 }
 
-export async function runGitAction(title: string, args: string[]) {
-  await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title, cancellable: false }, async () => git(args));
+export async function runGitAction(title: string, args: string[], execution: GitMenuExecution = {}) {
+  const runGit = execution.runGit ?? git;
+  await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title, cancellable: false }, async () => runGit(args, execution.cwd));
   vscode.window.showInformationMessage(`LazyGitVS: ${title} done.`);
 }
 
-export async function executeGitMenuItem(item: GitMenuItem) {
+export async function executeGitMenuItem(item: GitMenuItem, execution: GitMenuExecution = {}) {
   const destructiveReason = destructiveGitActionReason(item.args);
   if (item.danger || item.confirm || destructiveReason) {
     const ok = await vscode.window.showWarningMessage(item.confirm ?? `Run destructive Git action (${destructiveReason}) for ${item.label}?`, { modal: true }, 'Run');
     if (ok !== 'Run') return false;
   }
   if (item.run) await item.run();
-  else if (item.args) await runGitAction(item.label.replace(/^([^ ]+\s+)?\$\([^)]*\)\s*/, '').replace(/^[^ ]+\s+/, ''), item.args);
+  else if (item.args) await runGitAction(item.label.replace(/^([^ ]+\s+)?\$\([^)]*\)\s*/, '').replace(/^[^ ]+\s+/, ''), item.args, execution);
   return true;
 }
 
-export async function pickGitAction(title: string, items: GitMenuItem[]) {
+export async function pickGitAction(title: string, items: GitMenuItem[], execution: GitMenuExecution = {}) {
   const qp = vscode.window.createQuickPick<GitMenuItem>();
   qp.title = title;
   qp.placeholder = 'type the lazygit key or filter options';
@@ -51,7 +54,7 @@ export async function pickGitAction(title: string, items: GitMenuItem[]) {
       done = true;
       qp.hide();
       if (!item || !('args' in item || 'run' in item)) { resolve(false); return; }
-      resolve(await executeGitMenuItem(item));
+      resolve(await executeGitMenuItem(item, execution));
     };
     qp.onDidChangeValue(value => {
       const item = findMenuItemByKey(items, value);
@@ -69,6 +72,27 @@ export async function showCommitResetMenu(commit: Commit) {
     dangerousGitMenuItem({ key: 'm', label: '$(debug-restart) Mixed reset to commit', description: 'keep working tree', args: ['reset', '--mixed', commit.hash] }, resetConfirmation(commit.hash, 'mixed'), 'history-rewrite'),
     dangerousGitMenuItem({ key: 'h', label: '$(warning) Hard reset to commit', description: 'discard index and working tree', args: ['reset', '--hard', commit.hash] }, resetConfirmation(commit.hash, 'hard'), 'history-rewrite')
   ]);
+}
+
+export const RESET_TO_UPSTREAM_MENU_TITLE = 'Reset to @{upstream}';
+
+export function buildResetToUpstreamMenuItems(): GitMenuItem[] {
+  const upstream = '@{upstream}';
+  return [
+    dangerousGitMenuItem({ key: 'm', label: 'Mixed reset', description: 'reset --mixed @{upstream}', args: ['reset', '--mixed', '@{upstream}'] }, resetConfirmation(upstream, 'mixed'), 'history-rewrite'),
+    dangerousGitMenuItem({ key: 's', label: 'Soft reset', description: 'reset --soft @{upstream}', args: ['reset', '--soft', '@{upstream}'] }, resetConfirmation(upstream, 'soft'), 'history-rewrite'),
+    dangerousGitMenuItem({ key: 'h', label: 'Hard reset', description: 'reset --hard @{upstream}', args: ['reset', '--hard', '@{upstream}'] }, resetConfirmation(upstream, 'hard'), 'history-rewrite')
+  ];
+}
+
+export async function showResetToUpstreamMenu(repoPath: string, runGit: GitRunner = git): Promise<boolean> {
+  try {
+    await runGit(['rev-parse', '--verify', '@{upstream}'], repoPath);
+  } catch {
+    vscode.window.showErrorMessage('LazyGitVS: no upstream configured for the current branch; cannot reset to @{upstream}.');
+    return false;
+  }
+  return pickGitAction(RESET_TO_UPSTREAM_MENU_TITLE, buildResetToUpstreamMenuItems(), { cwd: repoPath, runGit });
 }
 
 export async function showCommitCopyMenu(commit: Commit, copyText: CopyText) {

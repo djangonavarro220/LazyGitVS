@@ -121,8 +121,11 @@ p           Pull/fetch menu
 s           Stash all
 S           Stash options
 d           Discard menu
+g           Reset to @{upstream} (mixed / soft / hard)
 D           Reset/nuke menu
 ```
+
+`g` follows lazygit's `keybinding.commits.viewResetOptions` setting (default `g`) in Files. It opens `Reset to @{upstream}` with mixed, soft, and hard reset choices; every history reset asks for confirmation, and hard reset explicitly warns that index and working-tree changes are discarded.
 
 ### Commits panel
 
