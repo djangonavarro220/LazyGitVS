@@ -20,6 +20,17 @@ This repo builds **LazyGitVS / LGVS**, a VS Code extension that adapts real lazy
 - Never bind broad/global keys casually. Scope keybindings tightly with `when` clauses.
 - Avoid duplicate mode labels with Vim/Neovim. If in doubt, hide LGVS status bar outside LGVS-owned modes.
 
+## Goal-alignment checkpoint
+
+Before opening a story or batch, state the exact lazygit user workflow being improved, the current parity gap, the expected user-visible gain, and the evidence that can prove it. Rank candidates by core-workflow impact, parity leverage, confidence, risk, and total effort; do not choose work merely because it is easy or already partially built.
+
+- Prefer product work over process, harness, controller, and evidence machinery. Build infrastructure only when it directly unlocks acceptance of the current highest-value product gap.
+- Keep one mutable integration lane and one bounded hypothesis at a time. One implementation, one correction, and one fresh review are the default ceiling; a repeated blocker fingerprint without new evidence triggers a stop and reframe, not another retry.
+- If verification/harness work becomes larger than the product change, or a batch produces no accepted user-visible delta, pause immediately and reconsider the approach.
+- Measure progress by accepted user workflows, closed parity gaps, preserved responsiveness, and real installed behavior, not commits, sessions, agents, tests added, or activity volume.
+- Finish and verify the current story before preparing future-story infrastructure. Remove obsolete scaffolding once its hypothesis is rejected.
+- After three accepted stories, or after any failed/stalled batch, re-read the parity ledger and product direction before selecting more work. It is valid to choose no change when the candidate does not efficiently move LGVS toward lazygit-quality core workflows.
+
 ## Repository layout
 
 - Main extension code: `src/extension.ts`

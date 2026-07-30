@@ -37,6 +37,14 @@ test('testing policy is a hard agent rule and not just a forgotten doc', () => {
   assert.match(testingDoc, /If a behavior cannot be fully automated, document the gap/);
 });
 
+test('project work is selected and stopped by product-goal efficiency rather than activity', () => {
+  assert.match(agents, /Goal-alignment checkpoint/);
+  assert.match(agents, /exact lazygit user workflow being improved/);
+  assert.match(agents, /no accepted user-visible delta/);
+  assert.match(agents, /repeated blocker fingerprint without new evidence triggers a stop and reframe/);
+  assert.match(agents, /Measure progress by accepted user workflows, closed parity gaps, preserved responsiveness, and real installed behavior/);
+});
+
 test('every feature has deterministic test and package gates while headless UI remains diagnostic', () => {
   assert.strictEqual(pkg.scripts['verify:feature'], 'npm test && npm run package');
   assert.strictEqual(pkg.scripts['verify:ui:diagnostic'], 'npm run verify:telemetry && npm run dogfood:ui:large-repo');
