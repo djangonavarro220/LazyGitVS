@@ -31,6 +31,7 @@ export const allowedMessageTypes = new Set([
   'commitAction',
   'checkoutCommitFile',
   'discardCommitFile',
+  'copyCommitFileInfo',
   'panelAction',
   'moveBlock',
   'focusMainView',
