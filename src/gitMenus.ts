@@ -5,7 +5,7 @@ import { git, type ChangedFile, type Commit } from './gitService';
 import { type Hunk } from './hunkPatch';
 import { decorateMenuItems, findMenuItemByKey } from './lazygitMenu';
 
-export type GitMenuItem = vscode.QuickPickItem & { key?: string; args?: string[]; danger?: boolean; confirm?: string; run?: () => Promise<void> };
+export type GitMenuItem = vscode.QuickPickItem & { key?: string; args?: string[]; danger?: boolean; confirm?: string; disabled?: boolean; run?: () => Promise<void> };
 export type CopyText = (text: string, label?: string) => Promise<void>;
 export type GitRunner = (args: string[], cwd?: string) => Promise<string>;
 export type GitMenuExecution = { cwd?: string; runGit?: GitRunner };
@@ -32,6 +32,7 @@ export async function runGitAction(title: string, args: string[], execution: Git
 }
 
 export async function executeGitMenuItem(item: GitMenuItem, execution: GitMenuExecution = {}) {
+  if (item.disabled) return false;
   const destructiveReason = destructiveGitActionReason(item.args);
   if (item.danger || item.confirm || destructiveReason) {
     const ok = await vscode.window.showWarningMessage(item.confirm ?? `Run destructive Git action (${destructiveReason}) for ${item.label}?`, { modal: true }, 'Run');
@@ -51,6 +52,7 @@ export async function pickGitAction(title: string, items: GitMenuItem[], executi
     let done = false;
     const finish = async (item?: GitMenuItem) => {
       if (done) return;
+      if (item?.disabled) return;
       done = true;
       qp.hide();
       if (!item || !('args' in item || 'run' in item)) { resolve(false); return; }

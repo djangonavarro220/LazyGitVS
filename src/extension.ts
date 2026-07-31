@@ -23,7 +23,7 @@ import { panelBlockNavigationBindings } from './panelKeyboardRouter';
 import { gutterBadge } from './gutterBadge';
 import * as commitFileCheckout from './commitFileCheckout';
 import * as commitFileClipboard from './commitFileClipboard';
-import { EMPTY_COMMIT_RANGE, clampCommitRange, extendNonStickyCommitRange, findCommitIndexByHash, hasVisibleCopiedCommit, isCommitInRange, moveCommitSelection, pasteCopiedCommits as pasteCherryPickBuffer, resetCherryPickBuffer, toggleCopiedCommitRange, toggleStickyCommitRange, type CherryPickBuffer, type CommitRangeSelection } from './commitCherryPick'; import { dropSelectedCommits } from './commitDrop'; import { discardCommitFileChanges } from './commitFileDiscard'; import { FIXUP_MENU_ITEMS, FIXUP_MENU_TITLE, fixupSelectedCommits } from './commitFixup'; import { squashSelectedCommits } from './commitSquash';
+import { EMPTY_COMMIT_RANGE, clampCommitRange, extendNonStickyCommitRange, findCommitIndexByHash, hasVisibleCopiedCommit, isCommitInRange, moveCommitSelection, pasteCopiedCommits as pasteCherryPickBuffer, resetCherryPickBuffer, toggleCopiedCommitRange, toggleStickyCommitRange, type CherryPickBuffer, type CommitRangeSelection } from './commitCherryPick'; import { dropSelectedCommits } from './commitDrop'; import { discardCommitFileChanges } from './commitFileDiscard'; import { FIXUP_MENU_ITEMS, FIXUP_MENU_TITLE, fixupSelectedCommits } from './commitFixup'; import { nativeCreateFixupCommitMenuItem } from './commitCreateFixupUi'; import { squashSelectedCommits } from './commitSquash';
 import { chooseApplyFixupCommitsAction, commitAutosquashMenuItem } from './commitAutosquash'; import { commitEditMenuItem } from './commitEdit'; import { commitMoveMenuItem } from './commitMove'; import { commitRewordMenuItem } from './commitReword';
 import { showChangedFilesQuickPick } from './changedFilesQuickPick';
 import { recordDogfoodBoundary, repoChangeDescription, repoDescription, statusClass, statusIcon, statusRepositoryLabel } from './viewFormatting';
@@ -1099,7 +1099,7 @@ class LazyGitVSController {
       this.commitRewordItem(key(k.renameCommit) || 'r'),
       commitEditMenuItem({ ...this.commitHistoryActionInput(), key: key(u.edit) || 'e' }),
       { key: key(k.amendToCommit) || 'A', label: '$(history) Amend HEAD with staged changes', description: 'git commit --amend --no-edit', danger: true, confirm: 'Amend HEAD with staged changes?', args: ['commit', '--amend', '--no-edit'] },
-      { key: key(k.createFixupCommit) || 'F', label: '$(tools) Create fixup commit', description: c.hash, args: ['commit', '--fixup', c.hash] },
+      nativeCreateFixupCommitMenuItem({ ...this.commitHistoryActionInput(), key: key(k.createFixupCommit) || 'F', label: '$(tools) Create fixup commit', onSuccess: outcome => { this.commitSelected = outcome.selectionIndex; this.commitRange = EMPTY_COMMIT_RANGE; } }),
       { key: key(k.markCommitAsFixup) || 'f', label: '$(combine) Fixup selected commit(s)', description: c.hash, run: async () => this.fixupCurrentCommitRange() },
       { key: key(u.remove) || 'd', label: '$(trash) Drop selected commit(s)', description: c.hash, run: async () => this.dropCurrentCommitRange() },
       { key: key(k.squashDown) || 's', label: '$(combine) Squash selected commit(s)', description: c.hash, run: async () => this.squashCurrentCommitRange() },
