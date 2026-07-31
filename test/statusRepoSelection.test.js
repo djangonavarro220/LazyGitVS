@@ -24,6 +24,8 @@ const { changedFiles, discoverWorkspaceRepositories, getActiveWorkspaceRoot, set
 
 const root = path.join(__dirname, '..');
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
+const controllerSource = fs.readFileSync(path.join(root, 'src', 'commitFilesController.ts'), 'utf8');
+const commitFileHunkSource = fs.readFileSync(path.join(root, 'src', 'commitFileHunk.ts'), 'utf8');
 const formatting = fs.readFileSync(path.join(root, 'src', 'viewFormatting.ts'), 'utf8');
 const gitService = fs.readFileSync(path.join(root, 'src', 'gitService.ts'), 'utf8');
 const lazygitConfig = fs.readFileSync(path.join(root, 'src', 'lazygitConfig.ts'), 'utf8');
@@ -64,6 +66,14 @@ assert(extension.includes('qp.activeItems = items.filter(item => item.repo.path 
 assert(extension.includes("qp.title = 'Recent repositories';"), 'Repository selector title should mirror lazygit original wording');
 assert(!gitService.includes("if (!activeWorkspaceRoot || !roots.has(activeWorkspaceRoot)) activeWorkspaceRoot = roots.keys().next().value"), 'Active repo must not silently fall back to the first discovered repository when multiple repos are open');
 assert(extension.includes('setActiveWorkspaceRoot(repo.path)'), 'Selecting a repository must switch the active Git root used by LGVS commands');
+assert(extension.includes('private async resetCommitFilesState(clearCommitList = true)') && extension.includes('this.commitFilesController.invalidate()'), 'Commit-files reset must delegate invalidation and drilldown clearing to one controller boundary');
+assert(!extension.includes('commitFilesRepoPath') && !extension.includes('commitFilesGeneration') && !extension.includes('commitFilesOwner ='), 'Commit-files authority must not retain parallel captured-repository/generation/owner fields in the controller');
+assert(extension.includes('getActiveWorkspaceRoot()') && extension.includes('liveRootAfterDiscovery'), 'Discovery must compare the live active workspace root before publishing refreshed state');
+assert(controllerSource.includes('beginLoad') && controllerSource.includes('liveRepo') && controllerSource.includes('selectionEpoch'), 'Commit-files controller must install a complete live-repository/selection token before awaiting Git');
+assert(controllerSource.includes('loadIsCurrent') && controllerSource.includes('return false'), 'Stale or undefined loads must stop before rendering or opening a preview');
+assert(extension.includes('commitFilesHostMessageAllowed') && controllerSource.includes("physicalPanel === 'commits'") && controllerSource.includes("activeViewPanel === 'commits'"), 'Host Commit-files messages must require normalized capability, physical commits panel, and active commits view');
+assert(controllerSource.includes('validateContext: () => this.revalidateOwner(owner)') && controllerSource.includes('canMutate: () => this.ownerIsCurrent(owner)'), 'Mutation actions must finish async owner/ref/status validation, then perform a synchronous capability check before Git');
+assert(controllerSource.includes('revalidateOwner: () => this.revalidateOwner(owner)') && commitFileHunkSource.includes('isHunkCurrent') && commitFileHunkSource.includes('await input.showText'), 'Commit-file HUNK work must use the controller/editor token before publication and focus');
 assert(extension.indexOf('this.workspaceRepos = await discoverWorkspaceRepositories().catch(() => []);') < extension.indexOf('changedFiles(this.lazygitGit)'), 'Refresh must discover workspace repos before Git status so nested/non-root repos can become the active root');
 const dogfoodUi = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
 const dogfoodFixtures = fs.readFileSync(path.join(root, 'scripts', 'dogfood', 'fixtures.js'), 'utf8');

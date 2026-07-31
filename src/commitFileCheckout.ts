@@ -7,6 +7,8 @@ import { buildTreeRows, type TreeRow, type TreeSortOptions } from './panels';
 export type CommitFileTreeItem = ChangedFile & CommitFile;
 export type CommitFileTreeRow = TreeRow<CommitFileTreeItem>;
 export type CommitFileGitRunner = (args: string[], cwd: string) => Promise<string>;
+export type CommitFileContextCheck = () => boolean | Promise<boolean>;
+export type CommitFileSynchronousMutationCheck = () => boolean;
 export type PorcelainV1Status = { xy: string; path: string; originalPath?: string };
 
 export const COMMIT_FILE_RANGE_MESSAGE = 'Commit files only supports a single inspected commit. Clear the visual commit range before pressing Enter.';
@@ -54,10 +56,10 @@ export async function commitFileDrilldownState<T extends { hash: string }>(commi
   return { commitFilesFor: commit, commitFileItems: await loadFiles(commit.hash), commitFileSelected: 0 };
 }
 
-export async function checkoutCommitFileTreeRow(input: { repoPath: string; commitHash: string; row: CommitFileTreeRow | undefined; runGit: CommitFileGitRunner }): Promise<boolean> {
+export async function checkoutCommitFileTreeRow(input: { repoPath: string; commitHash: string; row: CommitFileTreeRow | undefined; runGit: CommitFileGitRunner; isContextCurrent?: CommitFileContextCheck; validateContext?: () => Promise<boolean>; canMutate?: CommitFileSynchronousMutationCheck }): Promise<boolean> {
   const checkoutPath = commitFileCheckoutPath(input.row);
   if (!checkoutPath) return false;
-  await checkoutCommitFile({ repoPath: input.repoPath, commitHash: input.commitHash, path: checkoutPath, runGit: input.runGit });
+  await checkoutCommitFile({ repoPath: input.repoPath, commitHash: input.commitHash, path: checkoutPath, runGit: input.runGit, isContextCurrent: input.isContextCurrent, validateContext: input.validateContext, canMutate: input.canMutate });
   return true;
 }
 
@@ -146,14 +148,14 @@ function sourcePaths(output: string): string[] {
   return output.split('\0').filter(Boolean);
 }
 
-function untrackedPathWouldCollide(entries: readonly PorcelainV1Status[], pathsInCommit: readonly string[]): boolean {
-  const untracked = entries.filter(entry => entry.xy === '??').map(entry => entry.path.replace(/\/$/, ''));
-  return untracked.some(candidate => pathsInCommit.some(sourcePath => sourcePath === candidate || sourcePath.startsWith(`${candidate}/`) || candidate.startsWith(`${sourcePath}/`)));
+function untrackedPathWouldCollide(entries: readonly PorcelainV1Status[], pathsInCommit: readonly string[], selectedPath: string): boolean {
+  const untrackedOrIgnored = entries.filter(entry => entry.xy === '??' || entry.xy === '!!').map(entry => entry.path.replace(/\/$/, ''));
+  return untrackedOrIgnored.some(candidate => pathsInCommit.some(sourcePath => sourcePath === candidate || sourcePath.startsWith(`${candidate}/`) || candidate.startsWith(`${sourcePath}/`) || (sourcePath.startsWith(`${selectedPath}/`) && candidate.startsWith(`${selectedPath}/`))));
 }
 
-function assertSafePathStatus(entries: readonly PorcelainV1Status[], pathsInCommit: readonly string[]): void {
+function assertSafePathStatus(entries: readonly PorcelainV1Status[], pathsInCommit: readonly string[], selectedPath: string): void {
   if (hasTrackedPorcelainChanges(entries)) throw new Error(LOCAL_MODIFICATIONS_MESSAGE);
-  if (untrackedPathWouldCollide(entries, pathsInCommit)) throw new Error(UNTRACKED_COLLISION_MESSAGE);
+  if (untrackedPathWouldCollide(entries, pathsInCommit, selectedPath)) throw new Error(UNTRACKED_COLLISION_MESSAGE);
 }
 
 export async function checkoutCommitFile(input: {
@@ -161,18 +163,28 @@ export async function checkoutCommitFile(input: {
   commitHash: string;
   path: string;
   runGit: CommitFileGitRunner;
+  isContextCurrent?: CommitFileContextCheck;
+  validateContext?: () => Promise<boolean>;
+  canMutate?: CommitFileSynchronousMutationCheck;
 }): Promise<void> {
+  const assertContextCurrent = async () => { if (input.isContextCurrent && !await input.isContextCurrent()) throw new Error('LazyGitVS: Commit-files context changed; checkout was not started.'); };
+  await assertContextCurrent();
   assertValidRepoPath(input.repoPath);
   assertValidCommitHash(input.commitHash);
   assertValidCommitFileCheckoutPath(input.path);
-  const statusArgs = ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', input.path];
+  const statusArgs = ['status', '--porcelain=v1', '-z', '--ignored', '--untracked-files=all', '--', input.path];
   const verifyArgs = ['rev-parse', '--verify', `${input.commitHash}^{commit}`];
   await input.runGit(verifyArgs, input.repoPath);
   const initialStatus = parsePorcelainV1Status(await input.runGit(statusArgs, input.repoPath));
   const pathsInCommit = sourcePaths(await input.runGit(['ls-tree', '-r', '--name-only', '-z', input.commitHash, '--', input.path], input.repoPath));
-  assertSafePathStatus(initialStatus, pathsInCommit);
+  assertSafePathStatus(initialStatus, pathsInCommit, input.path);
+  if (input.validateContext && !await input.validateContext()) throw new Error('LazyGitVS: Commit-files context changed; checkout was not started.');
   await input.runGit(verifyArgs, input.repoPath);
   const currentStatus = parsePorcelainV1Status(await input.runGit(statusArgs, input.repoPath));
-  assertSafePathStatus(currentStatus, pathsInCommit);
-  await input.runGit(['checkout', input.commitHash, '--', input.path], input.repoPath);
+  assertSafePathStatus(currentStatus, pathsInCommit, input.path);
+  // This check is deliberately synchronous. Its next statement invokes Git
+  // without an intervening await, closing the final validation/mutation gap.
+  if (input.canMutate && !input.canMutate()) throw new Error('LazyGitVS: Commit-files context changed; checkout was not started.');
+  const mutation = input.runGit(['checkout', input.commitHash, '--', input.path], input.repoPath);
+  await mutation;
 }

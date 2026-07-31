@@ -6,7 +6,7 @@ import { type Hunk } from './hunkPatch';
 import { decorateMenuItems, findMenuItemByKey } from './lazygitMenu';
 
 export type GitMenuItem = vscode.QuickPickItem & { key?: string; args?: string[]; danger?: boolean; confirm?: string; disabled?: boolean; run?: () => Promise<void> };
-export type CopyText = (text: string, label?: string) => Promise<void>;
+export type CopyText = (text: string, label?: string, shouldNotify?: () => boolean) => Promise<void>;
 export type GitRunner = (args: string[], cwd?: string) => Promise<string>;
 export type GitMenuExecution = { cwd?: string; runGit?: GitRunner };
 

@@ -254,8 +254,8 @@ export async function stashes(): Promise<Stash[]> {
   return out.split('\n').filter(Boolean).map(line => { const [ref, ...msg] = line.split('\t'); return { ref, message: msg.join('\t') }; });
 }
 
-export async function commitFiles(hash: string): Promise<CommitFile[]> {
-  const out = await git(['diff-tree', '--root', '--no-commit-id', '--name-status', '-r', hash]);
+export async function commitFiles(hash: string, cwd = workspaceRoot()): Promise<CommitFile[]> {
+  const out = await git(['diff-tree', '--root', '--no-commit-id', '--name-status', '-r', hash], cwd);
   return out.split('\n').filter(Boolean).map(line => { const parts = line.split('\t'); return { status: parts[0], oldPath: parts.length > 2 ? parts[1] : undefined, path: parts[parts.length - 1] }; });
 }
 

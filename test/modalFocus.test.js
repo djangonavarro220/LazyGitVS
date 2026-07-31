@@ -6,7 +6,7 @@ const root = path.join(__dirname, '..');
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
 const dogfood = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
 
-assert(extension.includes('private async restorePanelFocusAfterModal(viewPanel: ViewPanel)'), 'modal/QuickPick actions must restore LGVS panel focus after dismissal or execution');
+assert(extension.includes('private async restorePanelFocusAfterModal(viewPanel: ViewPanel, shouldContinue'), 'modal/QuickPick actions must restore LGVS panel focus after dismissal or execution');
 assert(extension.includes("await this.restorePanelFocusAfterModal(viewPanel);"), 'discard/file modal path must refocus the originating panel');
 assert(extension.includes("await this.runMenu(showPullMenu, panel)"), 'message handlers must pass the originating panel into generic modal menus');
 assert(extension.includes("await this.runMenu(showStashCreateMenu, panel)"), 'stash modal menus must restore focus to the originating panel');

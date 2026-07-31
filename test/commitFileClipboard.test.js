@@ -7,6 +7,7 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const modulePath = path.join(root, 'out', 'commitFileClipboard.js');
 const extensionPath = path.join(root, 'src', 'extension.ts');
+const controllerPath = path.join(root, 'src', 'commitFilesController.ts');
 const configPath = path.join(root, 'src', 'lazygitConfig.ts');
 const securityPath = path.join(root, 'src', 'webviewSecurity.ts');
 const readmePath = path.join(root, 'README.md');
@@ -147,6 +148,7 @@ keybinding:
 
   await test('source routing keeps configured files y inside Commit-files and allows the dedicated webview message', () => {
     const extension = fs.readFileSync(extensionPath, 'utf8');
+    const controller = fs.readFileSync(controllerPath, 'utf8');
     const config = fs.readFileSync(configPath, 'utf8');
     const security = fs.readFileSync(securityPath, 'utf8');
     const model = fs.readFileSync(path.join(root, 'src', 'commitFileClipboard.ts'), 'utf8');
@@ -154,14 +156,14 @@ keybinding:
     const keybindingAudit = fs.readFileSync(keybindingAuditPath, 'utf8');
     const parity = fs.readFileSync(parityPath, 'utf8');
 
-    assert(extension.includes("from './commitFileClipboard'"), 'extension controller must delegate copy semantics to the small Commit-files clipboard module');
+    assert(extension.includes("from './commitFilesController'") && controller.includes("import * as commitFileClipboard"), 'the authoritative controller must delegate copy semantics to the small Commit-files clipboard module');
     assert(config.includes("copyFileInfoToClipboard: 'y'"), 'default y must remain lazygit keybinding.files.copyFileInfoToClipboard');
-    assert(extension.includes("panel==='commits'&&${this.commitFilesFor ? 'true' : 'false'}&&hit(e,f.copyFileInfoToClipboard)"), 'configured y must route only while Commit-files is active');
+    assert(extension.includes("panel==='commits'&&${this.commitFilesController.commit ? 'true' : 'false'}&&hit(e,f.copyFileInfoToClipboard)"), 'configured y must route only while Commit-files is active');
     assert(extension.includes("vscode.postMessage({type:'copyCommitFileInfo'})"), 'Commit-files y must have its own message instead of entering top-level Commit copy');
-    assert(extension.includes('commitFileClipboard.runCommitFileClipboardAction('), 'controller must delegate the menu integration to the extracted clipboard coordinator');
+    assert(controller.includes('commitFileClipboard.runCommitFileClipboardAction('), 'controller must delegate the menu integration to the extracted clipboard coordinator');
     assert(security.includes("'copyCommitFileInfo'"), 'the normalized webview contract must admit the dedicated menu message');
     assert(model.includes('export async function runCommitFileClipboardAction('), 'clipboard module must own the menu coordinator, not grow extension.ts');
-    assert(extension.indexOf("if(panel==='commits'&&${this.commitFilesFor ? 'true' : 'false'}&&hit(e,f.copyFileInfoToClipboard)") < extension.indexOf("if(panel!=='files'&&hit(e,u.copyToClipboard))"), 'Commit-files y must be intercepted before generic non-Files copy routing');
+    assert(extension.indexOf("if(panel==='commits'&&${this.commitFilesController.commit ? 'true' : 'false'}&&hit(e,f.copyFileInfoToClipboard)") < extension.indexOf("if(panel!=='files'&&hit(e,u.copyToClipboard))"), 'Commit-files y must be intercepted before generic non-Files copy routing');
     for (const label of ['File name', 'Relative path', 'Absolute path', 'Diff of selected file', 'Diff of all files', 'Content of selected file']) assert(model.includes(`label: '${label}'`), `catalog must retain exact upstream label ${label}`);
     assert(readme.includes('bounded Commit-files clipboard parity'), 'README must state the bounded Commit-files clipboard contract');
     assert(keybindingAudit.includes('configured `keybinding.files.copyFileInfoToClipboard`'), 'keybinding audit must state that Commit-files shares the configured upstream files y binding');
@@ -241,6 +243,43 @@ keybinding:
     await assert.rejects(() => runCommitFileClipboardAction(source, async () => { throw new Error('picker failure'); }, async () => { focusRestores += 1; }), /picker failure/);
     assert.equal(focusRestores, 2);
     await runCommitFileClipboardAction({ ...source, commitHash: undefined }, async () => { throw new Error('menu must not open without a captured commit'); }, async () => { throw new Error('focus must not restore without a menu'); });
+  });
+
+  await test('clipboard actions fail closed after QuickPick when the immutable row owner is stale', async () => {
+    const { input } = clipboardInput();
+    let current = true;
+    const copies = [];
+    const source = {
+      commitHash: input.commitHash,
+      row: input.row,
+      repoPath: input.repoPath,
+      gitConfig: input.gitConfig,
+      runGit: input.runGit,
+      copyText: async (text, label) => copies.push({ text, label }),
+      isContextCurrent: async () => current,
+    };
+    let focusRestores = 0;
+    await runCommitFileClipboardAction(source, async (_title, items) => {
+      current = false;
+      await items[0].run();
+    }, async () => { focusRestores += 1; });
+    assert.deepEqual(copies, [], 'a stale row must not publish clipboard text');
+    assert.equal(focusRestores, 0, 'a stale row must not restore/focus the old Commit-files view');
+  });
+
+  await test('clipboard actions suppress stale success after the clipboard write starts', async () => {
+    const { input } = clipboardInput();
+    let current = true;
+    let notified;
+    const item = commitFileClipboardCatalog({
+      ...input,
+      isContextCurrent: async () => current,
+      validateContext: async () => current,
+      canPublish: () => current,
+      copyText: async (_text, _label, shouldNotify) => { current = false; notified = shouldNotify(); },
+    })[0];
+    await assert.rejects(() => item.run(), /context changed/);
+    assert.equal(notified, false, 'a write invalidated in flight must not announce stale clipboard success');
   });
 
   await test('selected, all, content, and root-copy use actual captured Git objects without changing HEAD or the worktree', async () => {

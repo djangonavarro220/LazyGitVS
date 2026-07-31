@@ -210,7 +210,7 @@ function assertBlocked(outcome, reason, fragment) {
     assert(config.includes("squashAboveCommits: 'S'"), 'the default must remain lazygit keybinding.commits.squashAboveCommits = S');
     assert(extension.includes("key: key(k.squashAboveCommits) || 'S'"), 'Commits must read configured squashAboveCommits instead of inventing a new setting');
     assert(extension.includes('c.squashAboveCommits'), 'the existing top-level commitAction allowlist must explicitly own configured S');
-    assert(extension.includes('autosquashAction') && extension.includes('this.commitFilesFor) return;'), 'Commit-files must never run configured S');
+    assert(extension.includes('autosquashAction') && extension.includes('this.commitFilesController.commit) return;'), 'Commit-files must never run configured S');
     assert(!extension.includes("panel==='hunks'&&hit(e,u.select,u.togglePanel,u.remove,c.squashAboveCommits"), 'Hunks must retain their own actions and never route S to autosquash');
     assert(model.includes("APPLY_FIXUP_COMMITS_TITLE = 'Apply fixup commits'"), 'the native menu title must match upstream English exactly');
     assert(model.includes("SQUASHING_STATUS = 'Squashing'"), 'the transient mutation status must match upstream English exactly');

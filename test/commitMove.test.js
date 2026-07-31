@@ -259,7 +259,7 @@ function assertBlocked(outcome, reason, fragment) {
     assert(config.includes("moveDownCommit: '<ctrl+j>'") && config.includes("moveUpCommit: '<ctrl+k>'"), 'the defaults must match lazygit keybinding.commits.moveDownCommit/moveUpCommit');
     assert(extension.includes("key: key(k.moveDownCommit) || '<ctrl+j>'") && extension.includes("key: key(k.moveUpCommit) || '<ctrl+k>'"), 'the Commits catalog must use both configured move keys');
     assert(extension.includes('c.moveDownCommit,c.moveUpCommit'), 'only the top-level commitAction webview route may own the configured move keys');
-    assert(extension.includes('moveAction') && extension.includes('this.commitFilesFor) return'), 'Commit-files must never run a top-level move action');
+    assert(extension.includes('moveAction') && extension.includes('this.commitFilesController.commit) return'), 'Commit-files must never run a top-level move action');
     assert(extension.includes("if(panel==='hunks'&&hit(e,u.select,u.togglePanel,u.remove"), 'Files/Hunks must retain their own routes');
     assert.equal(extension.trimEnd().split(/\r?\n/).length < 1800, true, 'extension.ts must remain under the controller ceiling');
 

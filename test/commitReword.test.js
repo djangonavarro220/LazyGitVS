@@ -198,8 +198,8 @@ function assertBlocked(outcome, reason, fragment) {
     assert(extension.includes("from './commitReword'"), 'extension.ts must delegate selected-commit Reword behavior to the bounded module');
     assert(config.includes("renameCommit: 'r'"), 'the default must remain lazygit keybinding.commits.renameCommit = r');
     assert(extension.includes("this.commitRewordItem(key(k.renameCommit) || 'r')"), 'the catalog must use configured renameCommit rather than a HEAD-only command');
-    assert(extension.includes("!${this.commitFilesFor ? 'true' : 'false'}&&hit(e,u.remove,c.squashDown") && extension.includes('c.renameCommit,c.amendToCommit'), 'only the top-level Commits keyboard route may promote configured r into existing commitAction');
-    assert(!extension.includes("${this.commitFilesFor ? 'true' : 'false'}&&hit(e,u.remove,c.renameCommit"), 'Commit-files must not promote top-level Reword');
+    assert(extension.includes("!${this.commitFilesController.commit ? 'true' : 'false'}&&hit(e,u.remove,c.squashDown") && extension.includes('c.renameCommit,c.amendToCommit'), 'only the top-level Commits keyboard route may promote configured r into existing commitAction');
+    assert(!extension.includes("${this.commitFilesController.commit ? 'true' : 'false'}&&hit(e,u.remove,c.renameCommit"), 'Commit-files must not promote top-level Reword');
     assert(!extension.includes('Reword HEAD commit'), 'misleading HEAD-only catalog/title/confirmation wording must be gone');
     assert(!extension.includes("dangerousGitMenuItem({ key: key(k.renameCommit)"), 'Reword r must not add a destructive confirmation wrapper');
     assert(extension.includes('prompt: async (title, initialSummary) => vscode.window.showInputBox({ title, value: initialSummary'), 'the existing commitAction route must open one native summary InputBox');

@@ -163,8 +163,8 @@ function assertBlocked(outcome, reason, fragment) {
     assert(extension.includes("from './commitSquash'"), 'extension.ts must delegate Squash-down to the bounded module');
     assert(config.includes("squashDown: 's'"), 'the default must remain lazygit keybinding.commits.squashDown = s');
     assert(extension.includes("key: key(k.squashDown) || 's', label: '$(combine) Squash selected commit(s)'"), 'Commits Squash must read keybinding.commits.squashDown');
-    assert(extension.includes("panel==='commits'&&!${this.commitFilesFor ? 'true' : 'false'}&&hit(e,u.remove,c.squashDown"), 'only the top-level Commits route may promote configured squashDown into a commit action');
-    assert(extension.includes('if ((cherryPickBufferAction || dropAction || squashAction || fixupAction || autosquashAction) && this.commitFilesFor) return;'), 'Squash must not execute from the commit-files subview alongside autosquash');
+    assert(extension.includes("panel==='commits'&&!${this.commitFilesController.commit ? 'true' : 'false'}&&hit(e,u.remove,c.squashDown"), 'only the top-level Commits route may promote configured squashDown into a commit action');
+    assert(extension.includes('if ((cherryPickBufferAction || dropAction || squashAction || fixupAction || autosquashAction) && this.commitFilesController.commit) return;'), 'Squash must not execute from the commit-files subview alongside autosquash');
     assert(extension.includes("if(panel==='hunks'&&hit(e,u.select,u.togglePanel,u.remove"), 'Hunks must retain their own configured d path');
     assert(extension.includes("if(hit(e,u.remove)){e.preventDefault();vscode.postMessage({type:'discardMenu'});return;}"), 'Files must retain their configured d discard path');
     assert(model.includes("SQUASH_COMMIT_TITLE = 'Squash'") && model.includes("SQUASH_COMMIT_PROMPT = 'Are you sure you want to squash the selected commit(s) into the commit below?'"), 'Squash must retain the upstream title and prompt');

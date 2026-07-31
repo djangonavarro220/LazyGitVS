@@ -7,6 +7,7 @@ import { gitDiffConfigArgs } from './gitActions';
 import { EMPTY_PREVIEW_SCHEME, VIRTUAL_PREVIEW_SCHEME } from './previewDocuments';
 import { commitPatchPreviewHtml } from './richPreview';
 import { PreviewRequestGate } from './previewRequestGate';
+import { LatestWinsAsyncGate } from './previewRequestGate';
 
 function shellWords(command: string): string[] {
   const words: string[] = [];
@@ -65,18 +66,25 @@ export async function previewDiff(file: ChangedFile | ConflictFile, preserveFocu
   return true;
 }
 
-export async function previewCommitFileDiff(commit: Commit, file: CommitFile, preserveFocus = true) {
-  await closeLazyGitVSPreviewTabsIfSingle();
-  const root = workspaceRoot();
-  const beforePath = file.oldPath ?? file.path;
-  const afterPath = file.path;
-  const before = vscode.Uri.file(path.join(root, beforePath)).with({ scheme: 'git', query: JSON.stringify({ path: path.join(root, beforePath), ref: `${commit.hash}^` }) });
-  const after = vscode.Uri.file(path.join(root, afterPath)).with({ scheme: 'git', query: JSON.stringify({ path: path.join(root, afterPath), ref: commit.hash }) });
-  const empty = vscode.Uri.parse(`${EMPTY_PREVIEW_SCHEME}:${encodeURIComponent(`${commit.hash}:${file.path}:empty`)}`);
-  const status = file.status[0];
-  const left = status === 'A' ? empty : before;
-  const right = status === 'D' ? empty : after;
-  await vscode.commands.executeCommand('vscode.diff', left, right, `LazyGitVS: ${file.path}`, { preview: preserveFocus, preserveFocus, viewColumn: vscode.ViewColumn.Active });
+export async function previewCommitFileDiff(commit: Commit, file: CommitFile, preserveFocus = true, shouldOpen: () => boolean = () => true, capturedRepoPath?: string) {
+  const publication = await commitFilePreviewPublication.request(async isCurrent => {
+    await closeLazyGitVSPreviewTabsIfSingle();
+    if (!isCurrent() || !shouldOpen()) return false;
+    const root = capturedRepoPath ?? workspaceRoot();
+    if (!isCurrent() || !shouldOpen()) return false;
+    const beforePath = file.oldPath ?? file.path;
+    const afterPath = file.path;
+    const before = vscode.Uri.file(path.join(root, beforePath)).with({ scheme: 'git', query: JSON.stringify({ path: path.join(root, beforePath), ref: `${commit.hash}^` }) });
+    const after = vscode.Uri.file(path.join(root, afterPath)).with({ scheme: 'git', query: JSON.stringify({ path: path.join(root, afterPath), ref: commit.hash }) });
+    const empty = vscode.Uri.parse(`${EMPTY_PREVIEW_SCHEME}:${encodeURIComponent(`${commit.hash}:${file.path}:empty`)}`);
+    const status = file.status[0];
+    const left = status === 'A' ? empty : before;
+    const right = status === 'D' ? empty : after;
+    if (!isCurrent() || !shouldOpen()) return false;
+    await vscode.commands.executeCommand('vscode.diff', left, right, `LazyGitVS: ${file.path}`, { preview: preserveFocus, preserveFocus, viewColumn: vscode.ViewColumn.Active });
+    return isCurrent() && shouldOpen();
+  });
+  return publication === true;
 }
 
 export async function previewStashFileDiff(stash: Stash, file: StashFile, preserveFocus = true) {
@@ -94,6 +102,13 @@ export async function previewStashFileDiff(stash: Stash, file: StashFile, preser
 }
 
 const richPreviewRequests = new PreviewRequestGate();
+const commitFilePreviewPublication = new LatestWinsAsyncGate();
+
+export async function reconcileCommitFilePreviewPublication(): Promise<void> {
+  await commitFilePreviewPublication.request(async isCurrent => {
+    if (isCurrent()) await closeLazyGitVSPreviewTabsIfSingle();
+  });
+}
 
 function richPreviewShouldOpen(key: string): () => boolean {
   const request = richPreviewRequests.begin(key);
@@ -189,8 +204,19 @@ export async function openPath(filePath: string) {
   await vscode.env.openExternal(vscode.Uri.file(path.join(workspaceRoot(), filePath)));
 }
 
-export async function copyText(text: string, label = 'Copied') {
+export async function copyText(text: string, label = 'Copied', shouldNotify?: () => boolean) {
+  if (!shouldNotify) {
+    await vscode.env.clipboard.writeText(text);
+    vscode.window.showInformationMessage(`LazyGitVS: ${label}.`);
+    return;
+  }
+  const previous = await vscode.env.clipboard.readText();
+  if (!shouldNotify()) return;
   await vscode.env.clipboard.writeText(text);
+  if (!shouldNotify()) {
+    if (await vscode.env.clipboard.readText() === text) await vscode.env.clipboard.writeText(previous);
+    return;
+  }
   vscode.window.showInformationMessage(`LazyGitVS: ${label}.`);
 }
 

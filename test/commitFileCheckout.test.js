@@ -7,6 +7,7 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const modulePath = path.join(root, 'out', 'commitFileCheckout.js');
 const extensionPath = path.join(root, 'src', 'extension.ts');
+const controllerPath = path.join(root, 'src', 'commitFilesController.ts');
 const configPath = path.join(root, 'src', 'lazygitConfig.ts');
 const readmePath = path.join(root, 'README.md');
 const keybindingAuditPath = path.join(root, 'docs', 'lazygit-keybinding-audit.md');
@@ -23,7 +24,13 @@ const {
   hasTrackedPorcelainChanges,
   parsePorcelainV1Status,
   projectCommitFileTreeRows,
+  checkoutCommitFileTreeRow,
 } = require(modulePath);
+const {
+  captureCommitFilesOwner,
+  commitFilesOwnerWithRow,
+  isCommitFilesOwnerRepositoryCurrent,
+} = require('../out/commitFilesController');
 const { DEFAULT_LAZYGIT_GUI, DEFAULT_LAZYGIT_KEYMAP, readLazyGitConfig } = require('../out/lazygitConfig');
 
 function test(name, fn) {
@@ -149,21 +156,22 @@ keybinding:
 
   await test('source routing isolates configured c to Commit-files and keeps range entry read-only', () => {
     const extension = fs.readFileSync(extensionPath, 'utf8');
+    const controller = fs.readFileSync(controllerPath, 'utf8');
     const config = fs.readFileSync(configPath, 'utf8');
     const model = fs.readFileSync(path.join(root, 'src', 'commitFileCheckout.ts'), 'utf8');
     const readme = fs.readFileSync(readmePath, 'utf8');
     const keybindingAudit = fs.readFileSync(keybindingAuditPath, 'utf8');
     const parity = fs.readFileSync(parityPath, 'utf8');
 
-    assert(extension.includes("from './commitFileCheckout'"), 'controller must delegate checkout/path safety to the small Commit-files module');
+    assert(extension.includes("from './commitFilesController'") && controller.includes("import * as commitFileCheckout"), 'the authoritative controller must delegate checkout/path safety to the small Commit-files module');
     assert(config.includes("commitFiles: { checkoutCommitFile: 'c' }"), 'default must use lazygit keybinding.commitFiles.checkoutCommitFile = c');
-    assert(extension.includes("panel==='commits'&&${this.commitFilesFor ? 'true' : 'false'}&&hit(e,cf.checkoutCommitFile)"), 'configured c must route only while Commit-files is active');
+    assert(extension.includes("panel==='commits'&&${this.commitFilesController.commit ? 'true' : 'false'}&&hit(e,cf.checkoutCommitFile)"), 'configured c must route only while Commit-files is active');
     assert(extension.includes("vscode.postMessage({type:'checkoutCommitFile'})"), 'Commit-files c must have its own message rather than entering top-level commit actions');
     assert(extension.includes('private async checkoutCurrentCommitFile()'), 'controller needs an explicit Commit-files checkout action');
-    assert(extension.includes("if (!commitFileCheckout.canInspectSingleCommit(this.commitRange.mode)) return void vscode.window.showErrorMessage(commitFileCheckout.COMMIT_FILE_RANGE_MESSAGE);"), 'Enter with a visual commit range must refuse before setting commitFilesFor');
+    assert(extension.includes("if (!canInspectSingleCommit(this.commitRange.mode)) return void vscode.window.showErrorMessage(COMMIT_FILE_RANGE_MESSAGE);"), 'Enter with a visual commit range must refuse before setting commitFilesFor');
     assert(extension.includes("if(panel==='hunks'&&hit(e,u.select,u.togglePanel,u.remove,m.toggleSelectHunk))"), 'Hunks retain their own configured c/action surface');
     assert(extension.includes("key: key(f.commitChanges) || 'c', label: '$(git-commit) Commit'"), 'Files retain configured c commit semantics');
-    assert(extension.includes("panel==='commits'&&!${this.commitFilesFor ? 'true' : 'false'}&&hit(e,u.remove,c.squashDown,c.squashAboveCommits,c.markCommitAsFixup"), 'top-level Commits retains its history-action routing without promoting Commit-files c');
+    assert(extension.includes("panel==='commits'&&!${this.commitFilesController.commit ? 'true' : 'false'}&&hit(e,u.remove,c.squashDown,c.squashAboveCommits,c.markCommitAsFixup"), 'top-level Commits retains its history-action routing without promoting Commit-files c');
     assert(model.includes("label: '$(debug-step-over) Checkout'"), 'Commit-files command/help path must use the upstream action description Checkout');
     assert(!model.includes('confirm:'), 'upstream Commit-files checkout has no confirmation callback');
     assert(!model.includes('showWarningMessage'), 'Commit-files checkout stays VS Code-native without a terminal or confirmation modal');
@@ -225,12 +233,61 @@ keybinding:
     });
     assert.deepStrictEqual(calls, [
       { args: ['rev-parse', '--verify', `${hash}^{commit}`], cwd: repoPath },
-      { args: ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', 'dir/file.txt'], cwd: repoPath },
+      { args: ['status', '--porcelain=v1', '-z', '--ignored', '--untracked-files=all', '--', 'dir/file.txt'], cwd: repoPath },
       { args: ['ls-tree', '-r', '--name-only', '-z', hash, '--', 'dir/file.txt'], cwd: repoPath },
       { args: ['rev-parse', '--verify', `${hash}^{commit}`], cwd: repoPath },
-      { args: ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', 'dir/file.txt'], cwd: repoPath },
+      { args: ['status', '--porcelain=v1', '-z', '--ignored', '--untracked-files=all', '--', 'dir/file.txt'], cwd: repoPath },
       { args: ['checkout', hash, '--', 'dir/file.txt'], cwd: repoPath },
     ]);
+  });
+
+  await test('an immutable owner rejects a shared-history branch switch before checkout', async () => {
+    const fixture = sourceFixture('lgvs-commit-file-owner-shared-history-');
+    try {
+      const branch = git(fixture.dir, 'branch', '--show-current').trim();
+      const owner = await captureCommitFilesOwner({
+        repoPath: fixture.dir,
+        commitHash: fixture.three,
+        generation: 4,
+        selectionEpoch: 9,
+        selectedRowIdentity: 'commit:' + fixture.three,
+        runGit: async (args, cwd) => runGit(args, cwd),
+      });
+      git(fixture.dir, 'branch', 'shared-history');
+      git(fixture.dir, 'checkout', 'shared-history');
+      assert.equal(git(fixture.dir, 'rev-parse', 'HEAD').trim(), owner.head, 'the branches must share the exact HEAD');
+      assert.equal(await isCommitFilesOwnerRepositoryCurrent(owner, async (args, cwd) => runGit(args, cwd)), false, 'branch/ref changes must invalidate even when HEAD is shared');
+      const calls = [];
+      await assert.rejects(checkoutCommitFileTreeRow({
+        repoPath: fixture.dir,
+        commitHash: owner.commitHash,
+        row: { kind: 'file', path: 'file.txt', label: 'file.txt', depth: 0, file: { status: 'M', path: 'file.txt' } },
+        runGit: async (args, cwd) => { calls.push({ args, cwd }); return runGit(args, cwd); },
+        isContextCurrent: () => isCommitFilesOwnerRepositoryCurrent(owner, async (args, cwd) => runGit(args, cwd)),
+      }), /context changed|owner/i);
+      assertNoCheckout(calls, 'a shared-history branch switch must not execute checkout');
+      assert.equal(git(fixture.dir, 'branch', '--show-current').trim(), 'shared-history');
+      assert.equal(branch !== 'shared-history', true);
+    } finally {
+      cleanup(fixture.dir);
+    }
+  });
+
+  await test('stale generation and selected-row owners fail closed for checkout actions', async () => {
+    const owner = Object.freeze({ repoPath: '/captured/repository', branchRef: 'refs/heads/main', head: 'a'.repeat(40), commitHash: 'b'.repeat(40), generation: 3, selectionEpoch: 8, selectedRowIdentity: 'file:dir/a.txt' });
+    const newer = commitFilesOwnerWithRow(owner, 9, { kind: 'file', path: 'dir/b.txt', label: 'dir/b.txt', depth: 0, file: { status: 'M', path: 'dir/b.txt' } });
+    assert.equal(Object.isFrozen(newer), true);
+    assert.equal(owner.selectedRowIdentity, 'file:dir/a.txt');
+    assert.equal(newer.selectedRowIdentity, 'file:dir/b.txt');
+    let calls = 0;
+    await assert.rejects(checkoutCommitFileTreeRow({
+      repoPath: owner.repoPath,
+      commitHash: owner.commitHash,
+      row: { kind: 'file', path: 'dir/a.txt', label: 'dir/a.txt', depth: 0, file: { status: 'M', path: 'dir/a.txt' } },
+      runGit: async () => { calls += 1; return ''; },
+      isContextCurrent: () => newer.generation === owner.generation && newer.selectionEpoch === owner.selectionEpoch && newer.selectedRowIdentity === owner.selectedRowIdentity,
+    }), /context changed/i);
+    assert.equal(calls, 0, 'a stale generation/row action must not reach Git');
   });
 
   await test('real Git file checkout restores the inspected commit content and leaves Files-visible modification', async () => {
@@ -359,6 +416,74 @@ keybinding:
     }
   });
 
+  await test('an ignored collision is rejected before Git can silently overwrite it', async () => {
+    const dir = initRepo('lgvs-commit-file-ignored-collision-');
+    try {
+      const base = commit(dir, 'base', { '.gitignore': 'ignored.txt\n', 'base.txt': 'base\n' });
+      write(dir, 'ignored.txt', 'from source\n');
+      git(dir, 'add', '-f', 'ignored.txt');
+      git(dir, 'commit', '-m', 'source adds ignored file');
+      const source = git(dir, 'rev-parse', 'HEAD').trim();
+      git(dir, 'checkout', '--detach', base);
+      write(dir, 'ignored.txt', 'ignored local must survive\n');
+      const calls = [];
+      await assert.rejects(checkoutInput(dir, source, 'ignored.txt', calls), /untracked.*overwrit/i);
+      assertNoCheckout(calls, 'ignored collision must not execute checkout');
+      assert.equal(fs.readFileSync(path.join(dir, 'ignored.txt'), 'utf8'), 'ignored local must survive\n');
+      assert.match(git(dir, 'status', '--porcelain=v1', '-z', '--ignored', '--untracked-files=all', '--', 'ignored.txt'), /!! ignored\.txt/);
+    } finally {
+      cleanup(dir);
+    }
+  });
+
+  await test('ignored directory descendants and both file-directory collisions preserve sentinels without checkout', async () => {
+    const descendant = initRepo('lgvs-commit-file-ignored-directory-descendant-');
+    try {
+      const base = commit(descendant, 'base', { '.gitignore': 'ignored/\n', 'base.txt': 'base\n' });
+      write(descendant, 'ignored/from-source.txt', 'source\n');
+      git(descendant, 'add', '-f', 'ignored/from-source.txt');
+      git(descendant, 'commit', '-m', 'source adds ignored descendant');
+      const source = git(descendant, 'rev-parse', 'HEAD').trim();
+      git(descendant, 'checkout', '--detach', base);
+      write(descendant, 'ignored/sentinel.txt', 'directory sentinel\n');
+      const calls = [];
+      await assert.rejects(checkoutInput(descendant, source, 'ignored', calls), /untracked.*overwrit/i);
+      assertNoCheckout(calls, 'an ignored descendant collision must not execute checkout');
+      assert.equal(fs.readFileSync(path.join(descendant, 'ignored', 'sentinel.txt'), 'utf8'), 'directory sentinel\n');
+      assert.equal(fs.existsSync(path.join(descendant, 'ignored', 'from-source.txt')), false);
+    } finally {
+      cleanup(descendant);
+    }
+
+    const sourceFile = initRepo('lgvs-commit-file-file-directory-source-file-');
+    try {
+      const base = commit(sourceFile, 'base', { 'base.txt': 'base\n' });
+      const source = commit(sourceFile, 'source file', { 'collision': 'source file\n', 'base.txt': 'base\n' });
+      git(sourceFile, 'checkout', '--detach', base);
+      write(sourceFile, 'collision/sentinel.txt', 'file-directory sentinel\n');
+      const calls = [];
+      await assert.rejects(checkoutInput(sourceFile, source, 'collision', calls), /untracked.*overwrit/i);
+      assertNoCheckout(calls, 'a source file versus local directory collision must not execute checkout');
+      assert.equal(fs.readFileSync(path.join(sourceFile, 'collision', 'sentinel.txt'), 'utf8'), 'file-directory sentinel\n');
+    } finally {
+      cleanup(sourceFile);
+    }
+
+    const sourceDirectory = initRepo('lgvs-commit-file-file-directory-source-directory-');
+    try {
+      const base = commit(sourceDirectory, 'base', { 'base.txt': 'base\n' });
+      const source = commit(sourceDirectory, 'source directory', { 'tree/from-source.txt': 'source\n', 'base.txt': 'base\n' });
+      git(sourceDirectory, 'checkout', '--detach', base);
+      write(sourceDirectory, 'tree', 'directory-file sentinel\n');
+      const calls = [];
+      await assert.rejects(checkoutInput(sourceDirectory, source, 'tree', calls), /untracked.*overwrit/i);
+      assertNoCheckout(calls, 'a source directory versus local file collision must not execute checkout');
+      assert.equal(fs.readFileSync(path.join(sourceDirectory, 'tree'), 'utf8'), 'directory-file sentinel\n');
+    } finally {
+      cleanup(sourceDirectory);
+    }
+  });
+
   await test('a path deleted in the inspected source commit lets exact Git checkout fail without deleting the worktree file', async () => {
     const dir = initRepo('lgvs-commit-file-deleted-source-');
     try {
@@ -421,7 +546,7 @@ keybinding:
     const handler = extension.slice(start, end);
     assert(start >= 0 && end > start, 'checkout handler must remain a bounded Commit-files controller method');
     assert(handler.includes('await this.refresh(true);'), 'success must refresh Files/status and the Commit-files preview');
-    assert(handler.includes("await this.restorePanelFocusAfterModal('commits');"), 'success must keep Commit-files focus');
+    assert(handler.includes("await this.restorePanelFocusAfterModal('commits', () => this.commitFilesController.sessionIsCurrent(owner));"), 'success must keep Commit-files focus while guarding the captured session');
     assert(!handler.includes('commitFileSelected = 0'), 'success must preserve the selected Commit-files row');
     assert(!handler.includes('showWarningMessage'), 'no confirmation/cancellation path applies upstream');
   });

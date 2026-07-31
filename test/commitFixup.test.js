@@ -165,9 +165,9 @@ function assertBlocked(outcome, reason, fragment) {
     assert(extension.includes("from './commitFixup'"), 'extension.ts must delegate Fixup to the bounded module');
     assert(config.includes("markCommitAsFixup: 'f'"), 'the default must remain lazygit keybinding.commits.markCommitAsFixup = f');
     assert(extension.includes("key: key(k.markCommitAsFixup) || 'f', label: '$(combine) Fixup selected commit(s)'"), 'Commits Fixup must read configured markCommitAsFixup');
-    assert(extension.includes("panel==='commits'&&!${this.commitFilesFor ? 'true' : 'false'}&&hit(e,u.remove,c.squashDown,c.squashAboveCommits,c.markCommitAsFixup"), 'only the top-level Commits route may promote configured f or S into history rewrite actions');
+    assert(extension.includes("panel==='commits'&&!${this.commitFilesController.commit ? 'true' : 'false'}&&hit(e,u.remove,c.squashDown,c.squashAboveCommits,c.markCommitAsFixup"), 'only the top-level Commits route may promote configured f or S into history rewrite actions');
     assert(extension.includes('const fixupAction = !!findMenuItemByKey'), 'Fixup must be recognized as a top-level commit action before generic menu execution');
-    assert(extension.includes('if ((cherryPickBufferAction || dropAction || squashAction || fixupAction || autosquashAction) && this.commitFilesFor) return;'), 'Fixup and autosquash must not execute from the commit-files subview');
+    assert(extension.includes('if ((cherryPickBufferAction || dropAction || squashAction || fixupAction || autosquashAction) && this.commitFilesController.commit) return;'), 'Fixup and autosquash must not execute from the commit-files subview');
     assert(!extension.includes('c.setFixupMessage'), 'setFixupMessage c must remain a menu choice, not a competing top-level Commits route');
     assert(extension.includes("key: key(k.createFixupCommit) || 'F', label: '$(tools) Create fixup commit'"), 'F/create-fixup must remain separate and unchanged');
     assert(!extension.includes('Mark commit as fixup target'), 'the incorrect hash-copy placeholder label must be removed');

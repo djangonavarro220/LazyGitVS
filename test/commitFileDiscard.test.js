@@ -113,6 +113,8 @@ function discard(dir, commitHash, commitFiles, row, options = {}) {
     isLocalCommits: options.isLocalCommits !== false,
     confirm: options.confirm || (async () => true),
     onStart: options.onStart,
+    validateContext: options.validateContext,
+    canMutate: options.canMutate,
   });
 }
 
@@ -162,6 +164,7 @@ function activeOperationFixture(kind) {
 (async () => {
   await test('source routing reserves configured universal.remove for Commit-files d and documents its bounded parity', () => {
     const extension = fs.readFileSync(extensionPath, 'utf8');
+    const controller = fs.readFileSync(path.join(root, 'src', 'commitFilesController.ts'), 'utf8');
     const model = fs.readFileSync(path.join(root, 'src', 'commitFileDiscard.ts'), 'utf8');
     const config = fs.readFileSync(configPath, 'utf8');
     const security = fs.readFileSync(securityPath, 'utf8');
@@ -170,16 +173,16 @@ function activeOperationFixture(kind) {
     const parity = fs.readFileSync(parityPath, 'utf8');
     const shared = fs.readFileSync(path.join(root, 'src', 'commitRebaseTodo.ts'), 'utf8');
 
-    assert(extension.includes("from './commitFileDiscard'"), 'extension.ts must delegate Commit-files history rewriting to the bounded module');
+    assert(extension.includes("from './commitFilesController'") && controller.includes("from './commitFileDiscard'"), 'the authoritative controller must delegate Commit-files history rewriting to the bounded module');
     assert(config.includes("remove: 'd'"), 'lazygit universal.remove must retain d by default');
-    assert(extension.includes("panel==='commits'&&${this.commitFilesFor ? 'true' : 'false'}&&hit(e,u.remove)"), 'only the Commit-files webview route may post the dedicated discard message');
+    assert(extension.includes("panel==='commits'&&${this.commitFilesController.commit ? 'true' : 'false'}&&hit(e,u.remove)"), 'only the Commit-files webview route may post the dedicated discard message');
     assert(extension.includes("vscode.postMessage({type:'discardCommitFile'})"), 'Commit-files d must not be promoted through top-level commitAction');
     assert(extension.includes('private async discardCurrentCommitFile()'), 'controller must own a bounded Commit-files discard completion path');
     assert(extension.includes('isLocalCommits: !this.commitListForBranch'), 'branch-scoped commit views must never be treated as LocalCommits');
     assert(extension.includes("this.statusLine = 'Rebasing'"), 'the status must say exactly Rebasing only after model preflight/confirmation');
     assert(extension.includes("if (this.statusLine === 'Rebasing') this.statusLine = ''"), 'a failed rebase start with no active operation must clear the transient Rebasing status');
-    assert(extension.includes('this.commitFilesFor = undefined') && extension.includes('this.commitFileItems = []'), 'success must exit stale Commit-files drilldown instead of previewing an old hash');
-    assert(extension.includes("await this.restorePanelFocusAfterModal('commits');"), 'success/failure must restore Commit-files/Commits focus');
+    assert(extension.includes('this.commitFilesController.invalidate()'), 'success must exit stale Commit-files drilldown through the authoritative controller');
+    assert(extension.includes("await this.restorePanelFocusAfterModal('commits', () => this.commitFilesController.active);"), 'success/failure must restore Commit-files/Commits focus');
     assert(security.includes("'discardCommitFile'"), 'webview message validation must allow only the dedicated Commit-files discard message');
     assert(model.includes("COMMIT_FILE_DISCARD_TITLE = 'Discard file changes'"), 'upstream title must be exact');
     assert(model.includes("COMMIT_FILE_DISCARD_PROMPT = 'Are you sure you want to discard changes to the selected file(s) from this commit?\\n\\nThis action will start a rebase, reverting these file changes. Be aware that if subsequent commits depend on these changes, you may need to resolve conflicts.'"), 'upstream confirmation body must be exact');
@@ -348,6 +351,22 @@ function activeOperationFixture(kind) {
       assert.equal(detectGitOperationState(drift.dir), undefined);
     } finally {
       cleanup(drift.dir);
+    }
+
+    const boundaryDrift = linearFixture('lgvs-commit-file-discard-mutation-boundary-');
+    try {
+      git(boundaryDrift.dir, 'branch', 'same-head');
+      let starts = 0;
+      const outcome = await discard(boundaryDrift.dir, short(boundaryDrift.dir, boundaryDrift.selected), [file('changed.txt')], fileRow(file('changed.txt')), {
+        canMutate: () => { git(boundaryDrift.dir, 'checkout', 'same-head'); return true; },
+        onStart: () => { starts += 1; },
+      });
+      assertBlocked(outcome, 'drift', /mutation boundary/i);
+      assert.equal(starts, 0);
+      assert.equal(git(boundaryDrift.dir, 'branch', '--show-current').trim(), 'same-head');
+      assert.equal(detectGitOperationState(boundaryDrift.dir), undefined);
+    } finally {
+      cleanup(boundaryDrift.dir);
     }
   });
 

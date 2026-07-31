@@ -4,6 +4,7 @@ const path = require('path');
 
 const root = path.join(__dirname, '..');
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
+const controller = fs.readFileSync(path.join(root, 'src', 'commitFilesController.ts'), 'utf8');
 const { buildTreeRows } = require('../out/panels');
 
 const tree = { showFileTree: true, fileTreeSortOrder: 'foldersFirst', fileTreeSortCaseSensitive: false };
@@ -162,14 +163,14 @@ const selectedCommitFile = commitExpandedRows.find(row => row.kind === 'file' &&
 assert(selectedCommitFile && selectedCommitFile.file.id === 'alpha', 'Commit navigation resolves Enter on the visible selected file row to that exact file');
 assert(commitExpandedRows.some(row => row.kind === 'file' && row.path === 'src/alpha.ts'), 'Files collapse state cannot hide the same directory in Commits');
 
-assert(extension.includes('private collapsedCommitFileDirs = new Set<string>();'), 'Commit file tree needs its own collapsed-directory state');
+assert(controller.includes('private collapsedDirsValue = new Set<string>();'), 'Commit file tree needs its own collapsed-directory state inside the controller');
 assert(extension.includes('private fileTreeRows(): readonly Readonly<FileTreeRow>[] { return this.filePanelListModel.read({'), 'Files tree must use the production cache seam');
 assert(extension.includes('collapsedDirs: this.collapsedFileDirs }); }'), 'Files tree must use only Files collapse state');
 const commitFileCheckout = fs.readFileSync(path.join(root, 'src', 'commitFileCheckout.ts'), 'utf8');
 assert.match(commitFileCheckout, /export function projectCommitFileTreeRows\(/, 'Commit tree projection must live with Commit-files checkout safety helpers');
-assert.match(extension, /private commitFileTreeRows\(\) \{ return commitFileCheckout\.projectCommitFileTreeRows\(this\.commitFileItems, this\.lazygitGui, this\.collapsedCommitFileDirs\); \}/, 'Commit tree must use only commit-file collapse state through the extracted projection');
+assert(extension.includes('const commitFileRows = this.commitFilesController.rows(this.lazygitGui);'), 'Commit tree must read only controller-owned commit-file collapse state through the extracted projection');
 assert.match(extension, /if \(panel === 'status' \|\| this\.activeLength\(panel\) === 0\) await this\.refresh\(false\)/, 'Focusing an empty lazily rendered panel must refresh real repository data before navigation');
-assert.match(extension, /private async toggleCurrentCommitFileTreeNode\(\)[\s\S]*toggledCommitFileCollapsedDirs\(this\.collapsedCommitFileDirs, this\.currentCommitFileTreeRow\(\)\)[\s\S]*this\.collapsedCommitFileDirs = next/, 'Enter on a commit directory must toggle only commit-file collapse state through the extracted projection');
-assert.match(extension, /if \(await this\.toggleCurrentCommitFileTreeNode\(\)\) return;[\s\S]*const f = this\.currentCommitFile\(\);[\s\S]*if \(f\) return this\.enterCommitFileHunkMode\(f\);/, 'Enter toggles a directory and enters HUNK mode only for the selected file row');
+assert(controller.includes('toggledCommitFileCollapsedDirs') && extension.includes('this.commitFilesController.toggleDirectory'), 'Enter on a commit directory must toggle only controller-owned commit-file collapse state');
+assert.match(extension, /if \(await this\.toggleCurrentCommitFileTreeNode\(\)\) return;[\s\S]*const f = this\.commitFilesController\.currentFile\(this\.lazygitGui\);[\s\S]*if \(f\) return this\.enterCommitFileHunkMode\(f\);/, 'Enter toggles a directory and enters HUNK mode only for the controller-selected file row');
 
 console.log('commitFileTree tests passed');

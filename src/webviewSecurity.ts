@@ -13,6 +13,7 @@ export const allowedMessageTypes = new Set([
   'rangeToggle',
   'rangeMove',
   'select',
+  'activateRow',
   'switchPanel',
   'toggle',
   'enter',

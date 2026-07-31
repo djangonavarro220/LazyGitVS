@@ -1,6 +1,6 @@
 import * as cp from 'child_process';
 import { runSelectedCommitRebase } from './commitRebaseTodo';
-import { assertValidCommitFileCheckoutPath, type CommitFileTreeRow } from './commitFileCheckout';
+import { assertValidCommitFileCheckoutPath, type CommitFileContextCheck, type CommitFileTreeRow } from './commitFileCheckout';
 import { detectGitOperationState } from './gitOperationState';
 import type { CommitFile } from './gitService';
 
@@ -24,6 +24,9 @@ export type CommitFileDiscardInput = {
   isLocalCommits: boolean;
   confirm: (title: string, prompt: string) => Promise<boolean>;
   onStart?: () => void;
+  isContextCurrent?: CommitFileContextCheck;
+  validateContext?: () => Promise<boolean>;
+  canMutate?: () => boolean;
 };
 
 type PreparedPath = { path: string; previousExists: boolean };
@@ -32,6 +35,10 @@ type Preflight = PreparedDiscard | Extract<CommitFileDiscardOutcome, { kind: 'bl
 
 function blocked(reason: CommitFileDiscardBlockReason, message: string): Extract<CommitFileDiscardOutcome, { kind: 'blocked' }> {
   return { kind: 'blocked', reason, message };
+}
+
+async function contextCurrent(input: CommitFileDiscardInput): Promise<boolean> {
+  return !input.isContextCurrent || await input.isContextCurrent();
 }
 
 function runGit(cwd: string, args: string[], env: NodeJS.ProcessEnv = process.env): Promise<string> {
@@ -161,16 +168,35 @@ function samePreparedDiscard(initial: PreparedDiscard, final: PreparedDiscard): 
   return initial.branch === final.branch && initial.head === final.head && initial.todoHash === final.todoHash && initial.hash === final.hash && initial.parent === final.parent && initial.paths.length === final.paths.length && initial.paths.every((path, index) => path.path === final.paths[index].path && path.previousExists === final.paths[index].previousExists);
 }
 
+function repositoryStillMatchesSync(repoPath: string, prepared: PreparedDiscard): boolean {
+  if (detectGitOperationState(repoPath)) return false;
+  try {
+    const branch = cp.execFileSync('git', ['symbolic-ref', '--quiet', '--short', 'HEAD'], { cwd: repoPath, encoding: 'utf8' }).trim();
+    const [head, hash] = cp.execFileSync('git', ['rev-parse', 'HEAD^{commit}', `${prepared.todoHash}^{commit}`], { cwd: repoPath, encoding: 'utf8' }).trim().split(/\s+/);
+    return branch === prepared.branch && head === prepared.head && hash === prepared.hash;
+  } catch {
+    return false;
+  }
+}
+
 export async function discardCommitFileChanges(input: CommitFileDiscardInput): Promise<CommitFileDiscardOutcome> {
+  if (!await contextCurrent(input)) return blocked('drift', 'LazyGitVS: Commit-files context changed; discard was not started.');
   const initial = await preflight(input);
   if ('kind' in initial) return initial;
   if (!await input.confirm(COMMIT_FILE_DISCARD_TITLE, COMMIT_FILE_DISCARD_PROMPT)) return { kind: 'cancelled' };
+  if (input.validateContext && !await input.validateContext()) return blocked('drift', 'LazyGitVS: Commit-files context changed; discard was not started.');
   const final = await preflight(input);
   if ('kind' in final) return final;
   if (!samePreparedDiscard(initial, final)) return blocked('drift', 'LazyGitVS: repository changed while confirmation was open; Commit-files discard was not started.');
+  // Keep the final session/capability check synchronous and invoke the
+  // rebase immediately after it. There is intentionally no await between
+  // this check and the mutation start.
+  if (input.canMutate && !input.canMutate()) return blocked('drift', 'LazyGitVS: Commit-files context changed; discard was not started.');
+  if (!repositoryStillMatchesSync(input.repoPath, final)) return blocked('drift', 'LazyGitVS: repository changed at the mutation boundary; Commit-files discard was not started.');
+  const mutation = runSelectedCommitRebase({ repoPath: input.repoPath, hashes: [initial.todoHash], action: 'edit', base: initial.parent, useRoot: !initial.parent, keepEmpty: false, temporaryDirectoryPrefix: 'lazygitvs-commit-file-discard-' });
   input.onStart?.();
   try {
-    await runSelectedCommitRebase({ repoPath: input.repoPath, hashes: [initial.todoHash], action: 'edit', base: initial.parent, useRoot: !initial.parent, keepEmpty: false, temporaryDirectoryPrefix: 'lazygitvs-commit-file-discard-' });
+    await mutation;
     const operation = detectGitOperationState(input.repoPath);
     if (operation?.kind !== 'rebase') throw new Error('LazyGitVS: interactive rebase did not stop at the selected commit.');
     const stoppedHead = (await runGit(input.repoPath, ['rev-parse', '--verify', 'HEAD^{commit}'])).trim();

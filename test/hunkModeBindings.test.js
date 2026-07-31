@@ -65,7 +65,7 @@ for (const binding of keybindings.filter(binding => editorOwnedKeys.has(binding.
   );
 }
 
-assert(extension.includes("setContext', 'vim.active', active ? false : true"), 'HUNK/LINE must temporarily disable VSCodeVim so LGVS hunk keys win, then restore Vim on exit without brittle detection');
+assert(extension.includes("['vim.active', active ? false : true]"), 'HUNK/LINE must temporarily disable VSCodeVim so LGVS hunk keys win, then restore Vim on exit without brittle detection');
 assert(extension.includes("setContext', 'vim.active', true"), 'releaseEditorOwnership must restore Vim context so Esc leaves Insert after LGVS disappears');
 assert(extension.includes("private async releaseEditorOwnership()"), 'normal open/edit must have one hard release path that makes LGVS disappear from the editor');
 assert(extension.includes("this.modeStatusBarItem.hide();"), 'normal open/edit must hide the LGVS mode status bar instead of showing EDIT/LG state');

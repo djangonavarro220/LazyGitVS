@@ -136,7 +136,7 @@ function fixture(prefix = 'lgvs-create-fixup-') {
     assert(extension.includes("key: key(k.createFixupCommit) || 'F', label: '$(tools) Create fixup commit'"), 'the top-level F item must retain a native command label.');
     assert(extension.includes('nativeCreateFixupCommitMenuItem('), 'the top-level F item must open the bounded native menu.');
     assert(!extension.includes("args: ['commit', '--fixup', c.hash]"), 'F must not remain a direct simplistic Git args item.');
-    assert(extension.includes('panel===\'commits\'&&!${this.commitFilesFor ? \'true\' : \'false\'}'), 'the keyboard route must stay out of commit-files.');
+    assert(extension.includes('panel===\'commits\'&&!${this.commitFilesController.commit ? \'true\' : \'false\'}'), 'the keyboard route must stay out of commit-files.');
     assert(readme.includes('partial Commits Create fixup commit parity'), 'README must document the Create fixup commit parity slice.');
     assert(keybindingAudit.includes('configured `keybinding.commits.createFixupCommit`') && keybindingAudit.includes('Create fixup commit'), 'the keybinding audit must document configured F.');
     assert(parity.includes('Bounded partial Create fixup commit slice'), 'the gap report must document this bounded story.');

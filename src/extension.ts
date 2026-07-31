@@ -16,13 +16,12 @@ import { findMenuItemByKey } from './lazygitMenu';
 import { runBisectOptions, type BisectQuickPickItem } from './bisectOptions';
 import { dangerousGitMenuItem } from './destructiveActions';
 import { showGitOperationOptions } from './statusGitOperation';
-import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, openPath, previewCommitFileDiff, previewDiff, previewStashFileDiff, revealVisibleEditorLine, showCommitPreview, showStashPreview } from './workspaceActions';
+import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, openPath, previewCommitFileDiff, previewDiff, previewStashFileDiff, reconcileCommitFilePreviewPublication, revealVisibleEditorLine, showCommitPreview, showStashPreview } from './workspaceActions';
 import { deletedGhostDecorations, editorLineRange, excludeRangeLines, hunkChangedEditorRanges, rangeLineSet } from './hunkEditorDecorations';
 import { planAndPerformReflogAction, type ReflogDirection } from './undoRedo';
 import { panelBlockNavigationBindings } from './panelKeyboardRouter';
-import { gutterBadge } from './gutterBadge';
-import * as commitFileCheckout from './commitFileCheckout';
-import * as commitFileClipboard from './commitFileClipboard';
+import { gutterBadge } from './gutterBadge'; import { LatestWinsAsyncGate } from './previewRequestGate';
+import { COMMIT_FILE_RANGE_MESSAGE, CommitFilesController, canInspectSingleCommit, commitFilesHostMessageAllowed, commitFilesRowIdentity, createCommitFilesHostContext, isCommitFilesOwnerRepositoryCurrent, readOnlyCommitFileHunkState } from './commitFilesController';
 import { EMPTY_COMMIT_RANGE, clampCommitRange, extendNonStickyCommitRange, findCommitIndexByHash, hasVisibleCopiedCommit, isCommitInRange, moveCommitSelection, pasteCopiedCommits as pasteCherryPickBuffer, resetCherryPickBuffer, toggleCopiedCommitRange, toggleStickyCommitRange, type CherryPickBuffer, type CommitRangeSelection } from './commitCherryPick'; import { dropSelectedCommits } from './commitDrop'; import { discardCommitFileChanges } from './commitFileDiscard'; import { FIXUP_MENU_ITEMS, FIXUP_MENU_TITLE, fixupSelectedCommits } from './commitFixup'; import { nativeCreateFixupCommitMenuItem } from './commitCreateFixupUi'; import { squashSelectedCommits } from './commitSquash';
 import { chooseApplyFixupCommitsAction, commitAutosquashMenuItem } from './commitAutosquash'; import { commitEditMenuItem } from './commitEdit'; import { commitMoveMenuItem } from './commitMove'; import { commitRewordMenuItem } from './commitReword';
 import { showChangedFilesQuickPick } from './changedFilesQuickPick';
@@ -52,8 +51,12 @@ class LazyGitVSController {
   private remoteItems: Remote[] = [];
   private workspaceRepos: WorkspaceRepository[] = [];
   private commitItems: Commit[] = [];
-  private commitFileItems: CommitFile[] = [];
-  private commitFilesFor: Commit | undefined;
+  private readonly commitFilesController = new CommitFilesController({
+    getContext: () => createCommitFilesHostContext(getActiveWorkspaceRoot() ?? undefined, this.currentCommit()?.hash, this.filterText, this.selectionEpoch, this.activeViewPanel()),
+    runGit: (args, cwd) => git(args, cwd),
+    loadFiles: (hash, repoPath) => commitFiles(hash, repoPath),
+    treeOptions: () => this.lazygitGui,
+  });
   private commitListForBranch: Branch | undefined;
   private cherryPickBuffer: CherryPickBuffer = resetCherryPickBuffer(); private commitRange: CommitRangeSelection = EMPTY_COMMIT_RANGE;
   private stashItems: Stash[] = [];
@@ -64,14 +67,14 @@ class LazyGitVSController {
   private fileRangeAnchor: number | undefined;
   private fileRangeSelected = new Set<number>();
   private collapsedFileDirs = new Set<string>();
-  private collapsedCommitFileDirs = new Set<string>();
+
   private hunkSelected = 0;
   private branchSelected = 0;
   private tagSelected = 0;
   private remoteSelected = 0;
   private commitSelected = 0;
   private stashSelected = 0;
-  private commitFileSelected = 0;
+
   private stashFileSelected = 0;
   private conflictSelected = 0;
   private filterText = '';
@@ -89,7 +92,7 @@ class LazyGitVSController {
   private editorHunkMode = false;
   private editorEditMode = false;
   private readOnlyHunkMode = false;
-  private editorModeFilePath: string | undefined;
+  private editorModeFilePath: string | undefined; private editorModeOwnerId: string | undefined; private readonly editorModeGate = new LatestWinsAsyncGate(); private readonly editorPublicationGate = new LatestWinsAsyncGate(); private readonly focusPublicationGate = new LatestWinsAsyncGate();
   private refreshTimer?: NodeJS.Timeout;
   private intervalTimer?: NodeJS.Timeout;
   private pendingFilesPreviewTimer?: ReturnType<typeof setTimeout>; private filesPreviewEpoch = 0;
@@ -117,6 +120,7 @@ class LazyGitVSController {
   private pendingWebviewAutoFocus = false;
   private pendingPanelFocusTransition?: { from: ViewPanel; to: ViewPanel }; private defaultPanelsRevealed = false;
   constructor(private readonly context: vscode.ExtensionContext) {
+
     this.unstagedHunkDecoration = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: 'rgba(210, 153, 34, 0.13)', borderWidth: '0 0 0 2px', borderStyle: 'solid', borderColor: '#d29922' });
     this.stagedHunkDecoration = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: 'rgba(46, 160, 67, 0.13)', borderWidth: '0 0 0 2px', borderStyle: 'solid', borderColor: '#2ea043' });
     this.activeUnstagedHunkDecoration = vscode.window.createTextEditorDecorationType({ isWholeLine: true, backgroundColor: 'rgba(210, 153, 34, 0.22)', overviewRulerColor: '#d29922', overviewRulerLane: vscode.OverviewRulerLane.Right, borderWidth: '1px 1px 1px 4px', borderStyle: 'solid', borderColor: '#d29922' });
@@ -160,6 +164,11 @@ class LazyGitVSController {
         const message = normalizeWebviewMessage(rawMessage);
         if (!message) return;
         const type = message.type;
+        const requestedCapability = typeof message.capability === 'string' ? message.capability : undefined;
+        const commitFilesRequestAllowed = () => commitFilesHostMessageAllowed(panel, { ...this.commitFilesController.context(), capability: requestedCapability }, requestedCapability);
+        if (!this.commitFilesController.active && requestedCapability) return;
+        if (this.commitFilesController.active && panel === 'commits' && !commitFilesRequestAllowed()) return;
+        if (['checkoutCommitFile', 'discardCommitFile', 'copyCommitFileInfo'].includes(type) && !commitFilesRequestAllowed()) return;
         if (type === 'dogfoodBoundary') recordDogfoodBoundary(String(message.event ?? 'unknown'), { panel, key: String(message.key ?? '') });
         if (type === 'focusArea') { this.setFocusArea(message.area === 'panel' ? 'panel' : 'none'); const transition = this.pendingPanelFocusTransition; if (message.area === 'panel' && transition?.to === panel) { recordDogfoodBoundary('panelFocus', { ...transition, activeView: this.activeViewPanel() }); this.pendingPanelFocusTransition = undefined; } }
         if (type === 'commandPalette') await this.openCommandPalette();
@@ -167,7 +176,7 @@ class LazyGitVSController {
         if (type === 'moveTo') await this.moveTo(panel, message.position);
         if (type === 'rangeToggle') await this.toggleRange(panel);
         if (type === 'rangeMove') await this.rangeMove(panel, message.delta);
-        if (type === 'select') await this.select(panel, Number(message.index));
+        if (type === 'select') await this.select(panel, Number(message.index)); if (type === 'activateRow') await this.activateRow(panel, Number(message.index), requestedCapability);
         if (type === 'switchPanel') { if (this.webviewKeyboardOwner && this.focusArea === 'panel' && this.ownsModeStatus && !this.editorHunkMode && !this.editorEditMode) await this.focusPanel(message.panel); return; }
         if (type === 'toggle') await this.toggle(panel);
         if (type === 'enter') await this.enter(panel);
@@ -186,7 +195,7 @@ class LazyGitVSController {
         if (type === 'reflogUndo') await this.reflogUndo();
         if (type === 'reflogRedo') await this.reflogRedo();
         if (type === 'commitAction') await this.runCommitCommand(String(message.key ?? ''));
-        if (type === 'checkoutCommitFile') await this.checkoutCurrentCommitFile(); if (type === 'discardCommitFile' && panel === 'commits') await this.discardCurrentCommitFile(); if (type === 'copyCommitFileInfo' && panel === 'commits') await this.copyCurrentCommitFileInfo();
+        if (type === 'checkoutCommitFile' && commitFilesHostMessageAllowed(panel, this.commitFilesController.context())) await this.checkoutCurrentCommitFile(); if (type === 'discardCommitFile' && commitFilesHostMessageAllowed(panel, this.commitFilesController.context())) await this.discardCurrentCommitFile(); if (type === 'copyCommitFileInfo' && commitFilesHostMessageAllowed(panel, this.commitFilesController.context())) await this.copyCurrentCommitFileInfo();
         if (type === 'panelAction') await this.runPanelCommand(panel, String(message.key ?? ''));
         if (type === 'moveBlock') await this.moveBlock(panel, message.delta);
         if (type === 'focusMainView') await this.focusMainView(panel);
@@ -382,7 +391,6 @@ class LazyGitVSController {
     this.renderAll();
     vscode.window.showInformationMessage('LazyGitVS: state reset.');
   }
-
   private healthSnapshot() {
     return {
       activePanel: this.activePanel,
@@ -470,23 +478,15 @@ class LazyGitVSController {
     if (transition) this.pendingPanelFocusTransition = transition;
     await new Promise(resolve => setTimeout(resolve, 50)); await this.views.get(panel)?.webview.postMessage({ type: 'focusBody' });
   }
-  private async restorePanelFocusAfterModal(viewPanel: ViewPanel) {
-    if (this.editorHunkMode || this.editorEditMode) return;
-    this.ownsModeStatus = true;
-    this.webviewKeyboardOwner = true;
-    this.activePanel = this.panelForView(viewPanel);
-    await this.updateActiveViewContext();
-    this.setFocusArea('panel');
-    void vscode.commands.executeCommand('setContext', 'lazygitvs.keyboardMode', true);
-    this.requestWebviewAutoFocus();
-    this.persistNavigationState();
-    this.updateModeStatusBar();
-    this.setWebviewKeyboardEnabled(true);
-    this.renderAll();
-    await this.revealPanelView(this.activeViewPanel());
-    this.requestWebviewAutoFocus();
-    this.setWebviewKeyboardEnabled(true);
-    this.renderAll();
+  private async restorePanelFocusAfterModal(viewPanel: ViewPanel, shouldContinue: () => boolean = () => true) {
+    await this.focusPublicationGate.request(async isCurrent => {
+      if (this.editorHunkMode || this.editorEditMode || !shouldContinue() || !isCurrent()) return;
+      this.ownsModeStatus = true; this.webviewKeyboardOwner = true; this.activePanel = this.panelForView(viewPanel); await this.updateActiveViewContext();
+      if (!isCurrent() || !shouldContinue()) return;
+      this.setFocusArea('panel'); void vscode.commands.executeCommand('setContext', 'lazygitvs.keyboardMode', true); this.requestWebviewAutoFocus(); this.persistNavigationState(); this.updateModeStatusBar(); this.setWebviewKeyboardEnabled(true); this.renderAll(); await this.revealPanelView(this.activeViewPanel());
+      if (!isCurrent() || !shouldContinue()) return;
+      this.requestWebviewAutoFocus(); this.setWebviewKeyboardEnabled(true); this.renderAll();
+    });
   }
   private async revealPanelView(panel: ViewPanel) {
     const viewId = VIEW_IDS[panel];
@@ -505,12 +505,10 @@ class LazyGitVSController {
     const item = items.find(item => item.id === getActiveWorkspaceRoot()) ?? items[0];
     if (item) await this.statusTree?.reveal(item, { select: true, focus: true }).then(undefined, () => undefined);
   }
-
   private requestWebviewAutoFocus() {
     this.pendingWebviewAutoFocus = true;
     this.suppressWebviewAutoFocusUntil = 0;
   }
-
   private consumeWebviewAutoFocus(viewPanel: ViewPanel): boolean {
     if (!this.pendingWebviewAutoFocus) return false;
     if (this.activeViewPanel() !== viewPanel) return false;
@@ -519,57 +517,43 @@ class LazyGitVSController {
     this.pendingWebviewAutoFocus = false;
     return true;
   }
-
   private async openCommandPalette() {
     this.pendingWebviewAutoFocus = false;
     this.suppressWebviewAutoFocusUntil = Date.now() + 2500;
     this.setFocusArea('none');
     await vscode.commands.executeCommand('workbench.action.quickOpen', '>');
   }
-
   private visible() { return Array.from(this.views.values()).some(view => view.visible) || !!this.statusTree?.visible; }
-
   private ensureRuntimeInterval() {
     if (!this.windowFocused || !this.visible()) return;
     if (this.intervalTimer) return;
     this.intervalTimer = setInterval(() => this.scheduleRefresh(0), REFRESH_INTERVAL_MS);
     this.context.subscriptions.push({ dispose: () => { if (this.intervalTimer) clearInterval(this.intervalTimer); } });
   }
-
   private clearRuntimeTimers() { if (this.refreshTimer) { clearTimeout(this.refreshTimer); this.refreshTimer = undefined; } if (this.intervalTimer) { clearInterval(this.intervalTimer); this.intervalTimer = undefined; } this.cancelFilesPreview(); }
-
   private scheduleRefresh(delayMs = 250) { if (!this.visible()) { this.clearRuntimeTimers(); return; } this.updateModeStatusBar(); if (!this.windowFocused) { this.refreshDirtyWhileUnfocused = true; return; } if (this.refreshTimer) clearTimeout(this.refreshTimer); this.refreshTimer = setTimeout(() => this.refresh(false).catch(err => vscode.window.showErrorMessage(err.message)), delayMs); }
-
   private handleWindowStateChanged(state: vscode.WindowState) {
     this.windowFocused = state.focused;
     if (!state.focused) { this.clearRuntimeTimers(); return; }
     if (this.visible()) { this.ensureRuntimeInterval(); this.refreshDirtyWhileUnfocused = false; this.scheduleRefresh(0); }
   }
-
   private cancelFilesPreview() { if (this.pendingFilesPreviewTimer) clearTimeout(this.pendingFilesPreviewTimer); this.pendingFilesPreviewTimer = undefined; this.filesPreviewEpoch++; }
   private scheduleFilesPreview(viewPanel: ViewPanel) { if (this.pendingFilesPreviewTimer) clearTimeout(this.pendingFilesPreviewTimer); const epoch = ++this.filesPreviewEpoch; const filePath = this.currentFile()?.path; this.pendingFilesPreviewTimer = setTimeout(() => { this.pendingFilesPreviewTimer = undefined; if (epoch !== this.filesPreviewEpoch) return; void this.openCurrent(viewPanel, true, true, { epoch, filePath }).catch(() => undefined); }, 180); }
-  private async setEditorHunkMode(active: boolean) {
-    if (active) this.webviewKeyboardOwner = false;
-    this.setWebviewKeyboardEnabled(!active && this.ownsModeStatus && this.webviewKeyboardOwner);
-    this.editorHunkMode = active;
-    if (!active) { this.editorEditMode = false; this.readOnlyHunkMode = false; this.editorModeFilePath = undefined; }
-    this.setFocusArea(active ? 'editor-hunk' : this.ownsModeStatus ? 'panel' : 'viewer');
-    await vscode.commands.executeCommand('setContext', 'lazygitvs.editorHunkMode', active);
-    await vscode.commands.executeCommand('setContext', 'lazygitvs.editorEditMode', false);
-    // VSCodeVim owns printable keys in real editors. LGVS HUNK/LINE is a temporary
-    // modal editor layer, so disable Vim only while that layer is active and restore
-    // it on every exit path. No extension detection: the context is harmless if Vim
-    // is absent, and brittle if we guess.
-    await vscode.commands.executeCommand('setContext', 'vim.active', active ? false : true);
-    if (!active) this.clearEditorHunkDecorations();
-    else this.updateEditorHunkDecorations();
-    this.updateModeStatusBar();
+  private async setEditorHunkMode(active: boolean, ownerId?: string, prepare?: () => void): Promise<boolean> {
+    const applied = await this.editorModeGate.request(async isCurrent => {
+      if (active) { if (ownerId && this.editorModeOwnerId && this.editorModeOwnerId !== ownerId && !this.editorModeOwnerId.startsWith('editor-')) return false; this.editorModeOwnerId = ownerId; this.webviewKeyboardOwner = false; prepare?.(); }
+      else { if (ownerId && this.editorModeOwnerId !== ownerId) return false; this.editorModeOwnerId = undefined; }
+      this.setWebviewKeyboardEnabled(!active && this.ownsModeStatus && this.webviewKeyboardOwner); this.editorHunkMode = active;
+      if (!active) { this.editorEditMode = false; this.readOnlyHunkMode = false; this.editorModeFilePath = undefined; }
+      this.setFocusArea(active ? 'editor-hunk' : this.ownsModeStatus ? 'panel' : 'viewer');
+      for (const [key, value] of [['lazygitvs.editorHunkMode', active], ['lazygitvs.editorEditMode', false], ['vim.active', active ? false : true] ] as const) { await vscode.commands.executeCommand('setContext', key, value); if (!isCurrent()) return; }
+      if (!active) this.clearEditorHunkDecorations(); else this.updateEditorHunkDecorations(); this.updateModeStatusBar(); return true;
+    });
+    return applied === true;
   }
-
   private setWebviewKeyboardEnabled(enabled: boolean) {
     for (const view of this.views.values()) void view.webview.postMessage({ type: 'keyboardEnabled', enabled });
   }
-
   private isLGVSOwnedEditor(editor: vscode.TextEditor | undefined): boolean {
     if (!editor) return false;
     const uri = editor.document.uri;
@@ -577,7 +561,6 @@ class LazyGitVSController {
     const ownedPath = this.editorModeFilePath ?? (this.focusArea === 'viewer' ? this.currentFilePath(this.activeViewPanel()) : undefined);
     return !!ownedPath && uri.scheme === 'file' && uri.fsPath === path.join(workspaceRoot(), ownedPath);
   }
-
   private handleActiveTextEditorChanged(editor: vscode.TextEditor | undefined) {
     if (!editor) {
       if (this.focusArea === 'viewer' || this.editorEditMode) void this.releaseEditorOwnership();
@@ -591,13 +574,15 @@ class LazyGitVSController {
     this.updateEditorHunkDecorations();
     this.updateModeStatusBar();
   }
-
   private async releaseEditorOwnership() {
+    const ownerId = this.editorModeOwnerId;
+    if (!await this.setEditorHunkMode(false, ownerId) && ownerId) return;
     this.setWebviewKeyboardEnabled(false);
     this.editorHunkMode = false;
     this.editorEditMode = false;
     this.readOnlyHunkMode = false;
     this.editorModeFilePath = undefined;
+    this.editorModeOwnerId = undefined;
     this.statusLine = '';
     this.ownsModeStatus = false;
     this.webviewKeyboardOwner = false;
@@ -610,7 +595,6 @@ class LazyGitVSController {
     this.modeStatusBarItem.hide();
     this.suppressWebviewAutoFocusUntil = Date.now() + 2500;
   }
-
   private setFocusArea(area: FocusArea) {
     this.focusArea = area;
     void vscode.commands.executeCommand('setContext', 'lazygitvs.panelFocus', area === 'panel');
@@ -618,7 +602,6 @@ class LazyGitVSController {
     void vscode.commands.executeCommand('setContext', 'lazygitvs.focusArea', area);
     this.updateModeStatusBar();
   }
-
   private focusLabel(): string {
     if (this.focusArea === 'panel') return 'LG';
     if (this.focusArea === 'viewer') return 'VIEW';
@@ -626,7 +609,6 @@ class LazyGitVSController {
     if (this.focusArea === 'editor-edit') return 'EDIT';
     return '—';
   }
-
   private focusHint(): string {
     if (this.focusArea === 'panel') return 'Focus: LG panel';
     if (this.focusArea === 'viewer') return 'Focus: file viewer · editor keys belong to VS Code/Vim';
@@ -634,7 +616,6 @@ class LazyGitVSController {
     if (this.focusArea === 'editor-edit') return 'Focus: file editor · VS Code/Vim owns keys';
     return 'Focus: outside LGVS';
   }
-
   private updateModeStatusBar() {
     const showConfigured = vscode.workspace.getConfiguration('lazygitvs').get<boolean>('showStatusBarMode', false);
     if (!showConfigured && !this.editorHunkMode && this.focusArea === 'none') { this.modeStatusBarItem.hide(); return; }
@@ -646,7 +627,6 @@ class LazyGitVSController {
     this.modeStatusBarItem.tooltip = this.editorHunkMode ? this.focusHint() : `LazyGitVS mode · ${this.focusHint()}`;
     if ((this.visible() && (this.ownsModeStatus || this.focusArea === 'viewer' || this.focusArea === 'panel')) || this.editorHunkMode || this.editorEditMode) this.modeStatusBarItem.show(); else this.modeStatusBarItem.hide();
   }
-
   private async refresh(updatePreview: boolean) {
     await this.refreshCoordinator.request(updatePreview, async refreshPreview => {
       const refreshSelectionEpoch = this.selectionEpoch;
@@ -654,6 +634,9 @@ class LazyGitVSController {
       const refreshEditorMode = this.editorHunkMode || this.editorEditMode;
       const previousPath = this.currentFile()?.path;
       this.workspaceRepos = await discoverWorkspaceRepositories().catch(() => []);
+      const liveRootAfterDiscovery = getActiveWorkspaceRoot(), sessionOwner = this.commitFilesController.owner, pendingLoad = this.commitFilesController.pending;
+      if ((sessionOwner && (!liveRootAfterDiscovery || liveRootAfterDiscovery !== sessionOwner.repoPath || !fs.existsSync(sessionOwner.repoPath))) || (pendingLoad && liveRootAfterDiscovery !== pendingLoad.liveRepo)) await this.resetCommitFilesState(false);
+      else if (sessionOwner && !await isCommitFilesOwnerRepositoryCurrent(sessionOwner, (args, cwd) => git(args, cwd))) await this.resetCommitFilesState(false);
       if (this.workspaceRepos.length > 1 && !getActiveWorkspaceRoot()) {
         this.files = []; this.branchItems = []; this.tagItems = []; this.remoteItems = [];
         this.commitItems = []; this.stashItems = []; this.conflictItems = [];
@@ -661,6 +644,8 @@ class LazyGitVSController {
         return;
       }
       const [files, branchItems, tagItems, remoteItems, commitItems, stashItems] = await Promise.all([changedFiles(this.lazygitGit), branches().catch(() => []), tags().catch(() => []), remotes().catch(() => []), commits(this.commitListForBranch?.name).catch(() => []), stashes().catch(() => [])]);
+      const liveRootBeforePublication = getActiveWorkspaceRoot(), ownerBeforePublication = this.commitFilesController.owner;
+      if (ownerBeforePublication && (!liveRootBeforePublication || liveRootBeforePublication !== ownerBeforePublication.repoPath || !fs.existsSync(ownerBeforePublication.repoPath) || !await isCommitFilesOwnerRepositoryCurrent(ownerBeforePublication, (args, cwd) => git(args, cwd)))) { await this.resetCommitFilesState(false); return; }
       this.files = files; this.branchItems = branchItems; this.tagItems = tagItems; this.remoteItems = remoteItems; this.commitItems = commitItems; this.stashItems = stashItems;
       this.conflictItems = conflictsFromChangedFiles(files);
       if (previousPath && this.selectionEpoch === refreshSelectionEpoch) { const i = this.fileTreeRows().findIndex(row => row.kind === 'file' && row.file.path === previousPath); if (i >= 0) this.selected = i; }
@@ -688,15 +673,15 @@ class LazyGitVSController {
     this.tagSelected = clamp(this.tagSelected, this.filteredTags().length);
     this.remoteSelected = clamp(this.remoteSelected, this.filteredRemotes().length);
     this.commitSelected = clamp(this.commitSelected, this.filteredCommits().length); this.commitRange = clampCommitRange(this.commitRange, this.filteredCommits().length);
-    this.commitFileSelected = clamp(this.commitFileSelected, this.commitFileTreeRows().length);
+    this.commitFilesController.clampSelection();
     this.stashSelected = clamp(this.stashSelected, this.filteredStashes().length);
     this.stashFileSelected = clamp(this.stashFileSelected, this.stashFileItems.length);
     this.conflictSelected = clamp(this.conflictSelected, this.filteredConflicts().length);
     this.hunkLineSelected = clamp(this.hunkLineSelected, this.hunks[this.hunkSelected] ? hunkSelectableLineIndexes(this.hunks[this.hunkSelected]).length : 0);
   }
-  private activeIndex(panel: Panel): number { return panel === 'hunks' ? (this.hunkSelectionMode === 'line' ? this.hunkLineSelected : this.hunkSelected) : panel === 'branches' ? this.branchSelected : panel === 'tags' ? this.tagSelected : panel === 'remotes' ? this.remoteSelected : panel === 'commits' ? (this.commitFilesFor ? this.commitFileSelected : this.commitSelected) : panel === 'stash' ? (this.stashFilesFor ? this.stashFileSelected : this.stashSelected) : panel === 'conflicts' ? this.conflictSelected : this.selected; }
-  private setActiveIndex(panel: Panel, value: number) { if (panel === 'hunks') { if (this.hunkSelectionMode === 'line') this.hunkLineSelected = value; else this.hunkSelected = value; } else if (panel === 'branches') this.branchSelected = value; else if (panel === 'tags') this.tagSelected = value; else if (panel === 'remotes') this.remoteSelected = value; else if (panel === 'commits') { if (this.commitFilesFor) this.commitFileSelected = value; else this.commitSelected = value; } else if (panel === 'stash') { if (this.stashFilesFor) this.stashFileSelected = value; else this.stashSelected = value; } else if (panel === 'conflicts') this.conflictSelected = value; else this.selected = value; }
-  private activeLength(panel: Panel): number { return panel === 'status' ? 0 : panel === 'hunks' ? (this.hunkSelectionMode === 'line' ? (this.hunks[this.hunkSelected] ? hunkSelectableLineIndexes(this.hunks[this.hunkSelected]).length : 0) : this.hunks.length) : panel === 'branches' ? this.filteredBranches().length : panel === 'tags' ? this.filteredTags().length : panel === 'remotes' ? this.filteredRemotes().length : panel === 'commits' ? (this.commitFilesFor ? this.commitFileTreeRows().length : this.filteredCommits().length) : panel === 'stash' ? (this.stashFilesFor ? this.stashFileItems.length : this.filteredStashes().length) : panel === 'conflicts' ? this.filteredConflicts().length : this.fileTreeRows().length; }
+  private activeIndex(panel: Panel): number { return panel === 'hunks' ? (this.hunkSelectionMode === 'line' ? this.hunkLineSelected : this.hunkSelected) : panel === 'branches' ? this.branchSelected : panel === 'tags' ? this.tagSelected : panel === 'remotes' ? this.remoteSelected : panel === 'commits' ? (this.commitFilesController.active ? this.commitFilesController.selected : this.commitSelected) : panel === 'stash' ? (this.stashFilesFor ? this.stashFileSelected : this.stashSelected) : panel === 'conflicts' ? this.conflictSelected : this.selected; }
+  private setActiveIndex(panel: Panel, value: number) { if (panel === 'hunks') { if (this.hunkSelectionMode === 'line') this.hunkLineSelected = value; else this.hunkSelected = value; } else if (panel === 'branches') this.branchSelected = value; else if (panel === 'tags') this.tagSelected = value; else if (panel === 'remotes') this.remoteSelected = value; else if (panel === 'commits') { if (this.commitFilesController.active) this.commitFilesController.setSelected(value, this.selectionEpoch); else this.commitSelected = value; } else if (panel === 'stash') { if (this.stashFilesFor) this.stashFileSelected = value; else this.stashSelected = value; } else if (panel === 'conflicts') this.conflictSelected = value; else this.selected = value; }
+  private activeLength(panel: Panel): number { return panel === 'status' ? 0 : panel === 'hunks' ? (this.hunkSelectionMode === 'line' ? (this.hunks[this.hunkSelected] ? hunkSelectableLineIndexes(this.hunks[this.hunkSelected]).length : 0) : this.hunks.length) : panel === 'branches' ? this.filteredBranches().length : panel === 'tags' ? this.filteredTags().length : panel === 'remotes' ? this.filteredRemotes().length : panel === 'commits' ? (this.commitFilesController.commit ? this.commitFilesController.rows(this.lazygitGui).length : this.filteredCommits().length) : panel === 'stash' ? (this.stashFilesFor ? this.stashFileItems.length : this.filteredStashes().length) : panel === 'conflicts' ? this.filteredConflicts().length : this.fileTreeRows().length; }
   private filteredFiles(): ChangedFile[] {
     let items = this.files;
     if (this.fileStatusFilter === 'staged') items = items.filter(f => f.staged);
@@ -706,10 +691,7 @@ class LazyGitVSController {
     return this.sortFilesByLazyGitConfig(this.applyTextFilter(items, f => f.path));
   }
   private fileTreeRows(): readonly Readonly<FileTreeRow>[] { return this.filePanelListModel.read({ files: this.files, selection: this.selected, projectionKey: `${this.fileStatusFilter}\0${this.filterText}\0${this.fileSortMode}\0${this.lazygitGui.fileTreeSortOrder}\0${this.lazygitGui.fileTreeSortCaseSensitive}`, treeKey: `${this.lazygitGui.showFileTree}\0${Array.from(this.collapsedFileDirs).sort().join('\0')}`, project: () => this.filteredFiles(), options: this.lazygitGui, collapsedDirs: this.collapsedFileDirs }); }
-  private commitFileTreeRows() { return commitFileCheckout.projectCommitFileTreeRows(this.commitFileItems, this.lazygitGui, this.collapsedCommitFileDirs); }
   private currentFileTreeRow(): FileTreeRow | undefined { return this.fileTreeRows()[this.selected]; }
-  private currentCommitFileTreeRow() { return commitFileCheckout.selectedCommitFileTreeRow(this.commitFileTreeRows(), this.commitFileSelected); }
-  private currentCommitFile(): CommitFile | undefined { return commitFileCheckout.selectedCommitFile(this.commitFileTreeRows(), this.commitFileSelected); }
   private filesUnderFileTreeDir(dirPath: string): ChangedFile[] { return this.filteredFiles().filter(file => file.path === dirPath || file.path.startsWith(`${dirPath}/`)); }
   private selectFilePathInFilesPanel(filePath: string | undefined) {
     if (!filePath) return;
@@ -734,9 +716,7 @@ class LazyGitVSController {
     return true;
   }
   private async toggleCurrentCommitFileTreeNode() {
-    const next = commitFileCheckout.toggledCommitFileCollapsedDirs(this.collapsedCommitFileDirs, this.currentCommitFileTreeRow());
-    if (!next) return false;
-    this.collapsedCommitFileDirs = next;
+    if (!this.commitFilesController.toggleDirectory(++this.selectionEpoch)) return false;
     this.clampSelections(); this.renderAll(); await this.restorePanelFocusAfterModal('commits');
     return true;
   }
@@ -783,11 +763,20 @@ class LazyGitVSController {
     this.activePanel = panel;
     this.selectionEpoch++;
     this.setActiveIndex(panel, clamp(index, len));
-    if (panel === 'files') { this.fileRangeAnchor = undefined; this.fileRangeSelected.clear(); } else if (panel === 'commits' && !this.commitFilesFor) this.commitRange = EMPTY_COMMIT_RANGE;
+    if (panel === 'files') { this.fileRangeAnchor = undefined; this.fileRangeSelected.clear(); } else if (panel === 'commits' && !this.commitFilesController.commit) this.commitRange = EMPTY_COMMIT_RANGE;
     this.persistNavigationState();
     this.updateModeStatusBar();
     this.renderActivePanel(viewPanel);
     if (panel === 'files') this.scheduleFilesPreview(viewPanel); else await this.openCurrent(viewPanel, true).catch(() => undefined);
+  }
+  private async activateRow(viewPanel: ViewPanel, index: number, capability?: string) {
+    await this.commitFilesController.runActivation(async isCurrent => {
+      if (capability && !commitFilesHostMessageAllowed(viewPanel, this.commitFilesController.context(), capability)) return;
+      const panel = this.panelForView(viewPanel), len = this.activeLength(panel); if (!Number.isFinite(index) || !len) return;
+      this.ownsModeStatus = true; this.activePanel = panel; this.selectionEpoch++; this.setActiveIndex(panel, clamp(index, len));
+      if (panel === 'files') { this.fileRangeAnchor = undefined; this.fileRangeSelected.clear(); } else if (panel === 'commits' && !this.commitFilesController.commit) this.commitRange = EMPTY_COMMIT_RANGE;
+      this.persistNavigationState(); this.updateModeStatusBar(); this.renderActivePanel(viewPanel); if (isCurrent()) await this.enter(viewPanel, isCurrent);
+    });
   }
   private async move(viewPanel: ViewPanel, delta: number) {
     this.ownsModeStatus = true;
@@ -797,7 +786,7 @@ class LazyGitVSController {
     const len = this.activeLength(panel);
     if (!len) return;
     this.selectionEpoch++;
-    if (panel === 'commits' && !this.commitFilesFor) { const moved = moveCommitSelection(this.commitRange, this.commitSelected, delta, len); this.commitRange = moved.range; this.commitSelected = moved.selected; } else this.setActiveIndex(panel, Math.max(0, Math.min(len - 1, this.activeIndex(panel) + delta)));
+    if (panel === 'commits' && !this.commitFilesController.commit) { const moved = moveCommitSelection(this.commitRange, this.commitSelected, delta, len); this.commitRange = moved.range; this.commitSelected = moved.selected; } else this.setActiveIndex(panel, Math.max(0, Math.min(len - 1, this.activeIndex(panel) + delta)));
     this.persistNavigationState();
     this.renderActivePanel(viewPanel);
     if (panel === 'files') this.scheduleFilesPreview(viewPanel); else await this.openCurrent(viewPanel, true).catch(() => undefined);
@@ -809,7 +798,7 @@ class LazyGitVSController {
     this.ownsModeStatus = true;
     this.activePanel = panel;
     this.selectionEpoch++;
-    const nextIndex = position === 'top' ? 0 : len - 1; if (panel === 'commits' && !this.commitFilesFor) { const moved = moveCommitSelection(this.commitRange, this.commitSelected, nextIndex - this.commitSelected, len); this.commitRange = moved.range; this.commitSelected = moved.selected; } else this.setActiveIndex(panel, nextIndex);
+    const nextIndex = position === 'top' ? 0 : len - 1; if (panel === 'commits' && !this.commitFilesController.commit) { const moved = moveCommitSelection(this.commitRange, this.commitSelected, nextIndex - this.commitSelected, len); this.commitRange = moved.range; this.commitSelected = moved.selected; } else this.setActiveIndex(panel, nextIndex);
     if (panel === 'files') { this.fileRangeAnchor = undefined; this.fileRangeSelected.clear(); }
     this.persistNavigationState();
     this.updateModeStatusBar();
@@ -823,7 +812,7 @@ class LazyGitVSController {
   }
   private async toggleRange(viewPanel: ViewPanel) {
     const panel = this.panelForView(viewPanel);
-    if (panel === 'commits' && !this.commitFilesFor) { this.commitRange = toggleStickyCommitRange(this.commitRange, this.commitSelected); this.renderAll(); return; }
+    if (panel === 'commits' && !this.commitFilesController.commit) { this.commitRange = toggleStickyCommitRange(this.commitRange, this.commitSelected); this.renderAll(); return; }
     if (panel !== 'files') return;
     if (this.fileRangeAnchor === undefined) { this.fileRangeAnchor = this.selected; this.fileRangeSelected.add(this.selected); }
     else { this.fileRangeAnchor = undefined; this.fileRangeSelected.clear(); }
@@ -831,7 +820,7 @@ class LazyGitVSController {
   }
   private async rangeMove(viewPanel: ViewPanel, delta: number) {
     const panel = this.panelForView(viewPanel);
-    if (panel === 'commits' && !this.commitFilesFor) { this.ownsModeStatus = true; this.activePanel = panel; this.updateModeStatusBar(); const len = this.activeLength(panel); if (!len) return; this.selectionEpoch++; const moved = extendNonStickyCommitRange(this.commitRange, this.commitSelected, delta, len); this.commitRange = moved.range; this.commitSelected = moved.selected; this.persistNavigationState(); this.renderActivePanel(viewPanel); await this.openCurrent(viewPanel, true).catch(() => undefined); return; }
+    if (panel === 'commits' && !this.commitFilesController.commit) { this.ownsModeStatus = true; this.activePanel = panel; this.updateModeStatusBar(); const len = this.activeLength(panel); if (!len) return; this.selectionEpoch++; const moved = extendNonStickyCommitRange(this.commitRange, this.commitSelected, delta, len); this.commitRange = moved.range; this.commitSelected = moved.selected; this.persistNavigationState(); this.renderActivePanel(viewPanel); await this.openCurrent(viewPanel, true).catch(() => undefined); return; }
     if (panel !== 'files') return this.move(viewPanel, delta);
     if (this.fileRangeAnchor === undefined) this.fileRangeAnchor = this.selected;
     await this.move(viewPanel, delta);
@@ -858,7 +847,7 @@ class LazyGitVSController {
     }
     else await this.enter(viewPanel);
   }
-  private async enter(viewPanel: ViewPanel) {
+  private async enter(viewPanel: ViewPanel, activationCurrent: () => boolean = () => true) {
     const panel = this.panelForView(viewPanel);
     this.activePanel = panel;
     this.updateModeStatusBar();
@@ -868,14 +857,13 @@ class LazyGitVSController {
     if (panel === 'branches') return this.enterBranchCommits();
     if (panel === 'tags') return this.tagMenu();
     if (panel === 'remotes') return this.remoteMenu();
-    if (panel === 'commits') return this.enterCommit();
-
+    if (panel === 'commits') return this.enterCommit(activationCurrent);
     if (panel === 'stash') return this.enterStash();
     if (panel === 'conflicts') return this.conflictMenu();
   }
   private async back(viewPanel: ViewPanel) {
     if (viewPanel === 'files' && this.activePanel === 'hunks') { this.activePanel = 'files'; this.updateModeStatusBar(); this.renderAll(); return; }
-    if (viewPanel === 'commits' && this.commitFilesFor) { this.commitFilesFor = undefined; this.commitFileItems = []; this.commitFileSelected = 0; this.renderAll(); await this.openCurrent('commits', true).catch(() => undefined); return; }
+    if (viewPanel === 'commits' && this.commitFilesController.active) { await this.resetCommitFilesState(false); this.renderAll(); await this.openCurrent('commits', true).catch(() => undefined); return; }
     if (viewPanel === 'stash' && this.stashFilesFor) { this.stashFilesFor = undefined; this.stashFileItems = []; this.stashFileSelected = 0; this.renderAll(); await this.openCurrent('stash', true).catch(() => undefined); return; }
     await this.focusPanel(viewPanel);
   }
@@ -908,6 +896,7 @@ class LazyGitVSController {
     ]);
     await this.refresh(true);
   }
+  private async resetCommitFilesState(clearCommitList = true) { const ownerId = this.editorModeOwnerId; this.commitFilesController.invalidate(); if (ownerId || this.editorHunkMode) await this.setEditorHunkMode(false, ownerId).catch(() => false); await Promise.all([this.editorPublicationGate.request(async isCurrent => { if (isCurrent()) await closeLazyGitVSPreviewTabsIfSingle(); }), this.focusPublicationGate.request(async () => undefined), reconcileCommitFilePreviewPublication()]); this.commitListForBranch = clearCommitList ? undefined : this.commitListForBranch; }
   private async toggleFileTree() {
     this.lazygitGui.showFileTree = !this.lazygitGui.showFileTree;
     this.statusLine = `File tree ${this.lazygitGui.showFileTree ? 'on' : 'off'}`;
@@ -961,13 +950,13 @@ class LazyGitVSController {
     if (!picked) return;
     await this.selectRepository(picked.repo.path);
   }
-  private async selectRepository(repoPath: string) {
-    const repos = this.workspaceRepos.length ? this.workspaceRepos : await discoverWorkspaceRepositories();
+  private async selectRepository(repoPath: string) { const repos = this.workspaceRepos.length ? this.workspaceRepos : await discoverWorkspaceRepositories();
     const repo = repos.find(repo => repo.path === repoPath);
     if (!repo) return this.recentReposMenu();
-    const clearedCopiedCommits = !!this.cherryPickBuffer.sourceRepoPath && this.cherryPickBuffer.sourceRepoPath !== repo.path; if (clearedCopiedCommits) this.cherryPickBuffer = resetCherryPickBuffer(); this.commitRange = EMPTY_COMMIT_RANGE; setActiveWorkspaceRoot(repo.path); this.selectionEpoch++; this.workspaceRepos = repos; this.statusLine = `Repository: ${repo.name}${clearedCopiedCommits ? ' · copied commits cleared' : ''}`;
-    await this.refresh(true);
-    await this.focusPanel('status');
+    const clearedCopiedCommits = !!this.cherryPickBuffer.sourceRepoPath && this.cherryPickBuffer.sourceRepoPath !== repo.path; if (clearedCopiedCommits) this.cherryPickBuffer = resetCherryPickBuffer();
+    this.cancelFilesPreview(); this.commitRange = EMPTY_COMMIT_RANGE; await this.resetCommitFilesState(); if (this.editorHunkMode || this.editorEditMode) await this.setEditorHunkMode(false);
+    setActiveWorkspaceRoot(repo.path); this.selectionEpoch++; this.workspaceRepos = repos; this.statusLine = `Repository: ${repo.name}${clearedCopiedCommits ? ' · copied commits cleared' : ''}`;
+    await this.refresh(true); await this.focusPanel('status');
   }
   private async statusMenu() {
     await pickGitAction('Status options', this.statusCommandCatalog());
@@ -1075,9 +1064,9 @@ class LazyGitVSController {
     );
     return items;
   } private commitListContext(): string { return this.commitListForBranch ? `branch:${this.commitListForBranch.name}` : 'local'; }
-  private isCommitRangeSelected(index: number): boolean { return !this.commitFilesFor && this.commitRange.mode !== 'none' && isCommitInRange(this.commitRange, this.commitSelected, index, this.filteredCommits().length); } private isVisibleCopiedCommit(commit: Commit): boolean { const repoPath = getActiveWorkspaceRoot(); return !!repoPath && hasVisibleCopiedCommit(this.cherryPickBuffer, { repoPath, listContext: this.commitListContext(), hash: commit.hash }); }
-  private copyCurrentCommitRange() { if (this.commitFilesFor) return; const repoPath = workspaceRoot(), visibleCommits = this.filteredCommits(); if (!visibleCommits.length) return; this.cherryPickBuffer = toggleCopiedCommitRange(this.cherryPickBuffer, { repoPath, listContext: this.commitListContext(), newestFirstHashes: visibleCommits.map(commit => commit.hash), range: this.commitRange, selectedIndex: this.commitSelected }); this.statusLine = this.cherryPickBuffer.hashes.length ? `Copied ${this.cherryPickBuffer.hashes.length} commit(s) for cherry-pick` : 'Copied commits cleared'; this.renderAll(); } private resetCopiedCommits() { if (this.commitFilesFor) return; this.cherryPickBuffer = resetCherryPickBuffer(); this.statusLine = 'Copied commits cleared'; this.renderAll(); }
-  private async pasteCopiedCommits() { if (this.commitFilesFor) return; const targetRepoPath = workspaceRoot(), previousTargetHash = this.currentCommit()?.hash; try { const outcome = await pasteCherryPickBuffer({ buffer: this.cherryPickBuffer, targetRepoPath, runGit: (args, cwd) => git(args, cwd), confirm: async (title, prompt) => await vscode.window.showWarningMessage(prompt, { modal: true, detail: title }, title) === title }); if (outcome.kind === 'success') { this.cherryPickBuffer = outcome.buffer; this.statusLine = `Cherry-picked ${outcome.buffer.hashes.length} copied commit(s)`; await this.refresh(false); this.commitSelected = findCommitIndexByHash(this.filteredCommits().map(commit => commit.hash), previousTargetHash, this.commitSelected); this.renderAll(); await this.openCurrent('commits', true).catch(() => undefined); return; } if (outcome.kind === 'cancelled') return; if (outcome.kind === 'source-mismatch') this.cherryPickBuffer = outcome.buffer; vscode.window.showWarningMessage(outcome.message); this.renderAll(); } catch (error) { await this.refresh(false).catch(() => undefined); throw error; } } private async dropCurrentCommitRange() { if (this.commitFilesFor) return; const repoPath = workspaceRoot(), visibleCommits = this.filteredCommits(); if (!visibleCommits.length) return; const outcome = await dropSelectedCommits({ repoPath, visibleHashes: visibleCommits.map(commit => commit.hash), selectedIndex: this.commitSelected, range: this.commitRange, viewBranch: this.commitListForBranch?.name, confirm: async (title, prompt) => await vscode.window.showWarningMessage(prompt, { modal: true, detail: title }, title) === title }); if (outcome.kind === 'success') { this.statusLine = `Dropped ${outcome.hashes.length} commit(s)`; await this.refresh(false); this.commitSelected = clamp(outcome.startIndex, this.filteredCommits().length); this.commitRange = EMPTY_COMMIT_RANGE; this.renderAll(); await this.openCurrent('commits', true).catch(() => undefined); return; } if (outcome.kind === 'rebase-active') { this.statusLine = 'Drop stopped during rebase; recover from Status'; await this.refresh(false); vscode.window.showWarningMessage(outcome.message); return; } if (outcome.kind === 'blocked') vscode.window.showWarningMessage(outcome.message); } private async squashCurrentCommitRange() { if (this.commitFilesFor) return; const repoPath = workspaceRoot(), visibleCommits = this.filteredCommits(); if (!visibleCommits.length) return; try { const outcome = await squashSelectedCommits({ repoPath, visibleHashes: visibleCommits.map(commit => commit.hash), selectedIndex: this.commitSelected, range: this.commitRange, viewBranch: this.commitListForBranch?.name, confirm: async (title, prompt) => await vscode.window.showWarningMessage(prompt, { modal: true, detail: title }, title) === title, onStart: () => { this.statusLine = 'Squashing'; this.renderAll(); } }); if (outcome.kind === 'success') { this.statusLine = `Squashed ${outcome.hashes.length} commit(s)`; await this.refresh(false); this.commitSelected = clamp(outcome.startIndex, this.filteredCommits().length); this.commitRange = EMPTY_COMMIT_RANGE; this.renderAll(); await this.openCurrent('commits', true).catch(() => undefined); return; } if (outcome.kind === 'rebase-active') { this.statusLine = 'Squash stopped during rebase; recover from Status'; await this.refresh(false); vscode.window.showWarningMessage(outcome.message); return; } if (outcome.kind === 'blocked') vscode.window.showWarningMessage(outcome.message); } finally { if (this.statusLine === 'Squashing') { this.statusLine = ''; this.renderAll(); } } } private async fixupCurrentCommitRange() { if (this.commitFilesFor) return; const repoPath = workspaceRoot(), visibleCommits = this.filteredCommits(); if (!visibleCommits.length) return; try { const outcome = await fixupSelectedCommits({ repoPath, visibleHashes: visibleCommits.map(commit => commit.hash), selectedIndex: this.commitSelected, range: this.commitRange, viewBranch: this.commitListForBranch?.name, chooseAction: async () => { let actionFlag: '' | '-C' | undefined; await pickGitAction(FIXUP_MENU_TITLE, FIXUP_MENU_ITEMS.map(action => ({ key: action.key, label: action.label, description: action.tooltip, run: async () => { actionFlag = action.actionFlag; } }))); return actionFlag; }, onStart: () => { this.statusLine = 'Fixing up'; this.renderAll(); } }); if (outcome.kind === 'success') { this.statusLine = `Fixed up ${outcome.hashes.length} commit(s)`; await this.refresh(false); this.commitSelected = clamp(outcome.startIndex, this.filteredCommits().length); this.commitRange = EMPTY_COMMIT_RANGE; this.renderAll(); await this.openCurrent('commits', true).catch(() => undefined); return; } if (outcome.kind === 'rebase-active') { this.statusLine = 'Fixup stopped during rebase; recover from Status'; await this.refresh(false); vscode.window.showWarningMessage(outcome.message); return; } if (outcome.kind === 'blocked') vscode.window.showWarningMessage(outcome.message); } finally { if (this.statusLine === 'Fixing up') { this.statusLine = ''; this.renderAll(); } } }
+  private isCommitRangeSelected(index: number): boolean { return !this.commitFilesController.commit && this.commitRange.mode !== 'none' && isCommitInRange(this.commitRange, this.commitSelected, index, this.filteredCommits().length); } private isVisibleCopiedCommit(commit: Commit): boolean { const repoPath = getActiveWorkspaceRoot(); return !!repoPath && hasVisibleCopiedCommit(this.cherryPickBuffer, { repoPath, listContext: this.commitListContext(), hash: commit.hash }); }
+  private copyCurrentCommitRange() { if (this.commitFilesController.commit) return; const repoPath = workspaceRoot(), visibleCommits = this.filteredCommits(); if (!visibleCommits.length) return; this.cherryPickBuffer = toggleCopiedCommitRange(this.cherryPickBuffer, { repoPath, listContext: this.commitListContext(), newestFirstHashes: visibleCommits.map(commit => commit.hash), range: this.commitRange, selectedIndex: this.commitSelected }); this.statusLine = this.cherryPickBuffer.hashes.length ? `Copied ${this.cherryPickBuffer.hashes.length} commit(s) for cherry-pick` : 'Copied commits cleared'; this.renderAll(); } private resetCopiedCommits() { if (this.commitFilesController.commit) return; this.cherryPickBuffer = resetCherryPickBuffer(); this.statusLine = 'Copied commits cleared'; this.renderAll(); }
+  private async pasteCopiedCommits() { if (this.commitFilesController.commit) return; const targetRepoPath = workspaceRoot(), previousTargetHash = this.currentCommit()?.hash; try { const outcome = await pasteCherryPickBuffer({ buffer: this.cherryPickBuffer, targetRepoPath, runGit: (args, cwd) => git(args, cwd), confirm: async (title, prompt) => await vscode.window.showWarningMessage(prompt, { modal: true, detail: title }, title) === title }); if (outcome.kind === 'success') { this.cherryPickBuffer = outcome.buffer; this.statusLine = `Cherry-picked ${outcome.buffer.hashes.length} copied commit(s)`; await this.refresh(false); this.commitSelected = findCommitIndexByHash(this.filteredCommits().map(commit => commit.hash), previousTargetHash, this.commitSelected); this.renderAll(); await this.openCurrent('commits', true).catch(() => undefined); return; } if (outcome.kind === 'cancelled') return; if (outcome.kind === 'source-mismatch') this.cherryPickBuffer = outcome.buffer; vscode.window.showWarningMessage(outcome.message); this.renderAll(); } catch (error) { await this.refresh(false).catch(() => undefined); throw error; } } private async dropCurrentCommitRange() { if (this.commitFilesController.commit) return; const repoPath = workspaceRoot(), visibleCommits = this.filteredCommits(); if (!visibleCommits.length) return; const outcome = await dropSelectedCommits({ repoPath, visibleHashes: visibleCommits.map(commit => commit.hash), selectedIndex: this.commitSelected, range: this.commitRange, viewBranch: this.commitListForBranch?.name, confirm: async (title, prompt) => await vscode.window.showWarningMessage(prompt, { modal: true, detail: title }, title) === title }); if (outcome.kind === 'success') { this.statusLine = `Dropped ${outcome.hashes.length} commit(s)`; await this.refresh(false); this.commitSelected = clamp(outcome.startIndex, this.filteredCommits().length); this.commitRange = EMPTY_COMMIT_RANGE; this.renderAll(); await this.openCurrent('commits', true).catch(() => undefined); return; } if (outcome.kind === 'rebase-active') { this.statusLine = 'Drop stopped during rebase; recover from Status'; await this.refresh(false); vscode.window.showWarningMessage(outcome.message); return; } if (outcome.kind === 'blocked') vscode.window.showWarningMessage(outcome.message); } private async squashCurrentCommitRange() { if (this.commitFilesController.commit) return; const repoPath = workspaceRoot(), visibleCommits = this.filteredCommits(); if (!visibleCommits.length) return; try { const outcome = await squashSelectedCommits({ repoPath, visibleHashes: visibleCommits.map(commit => commit.hash), selectedIndex: this.commitSelected, range: this.commitRange, viewBranch: this.commitListForBranch?.name, confirm: async (title, prompt) => await vscode.window.showWarningMessage(prompt, { modal: true, detail: title }, title) === title, onStart: () => { this.statusLine = 'Squashing'; this.renderAll(); } }); if (outcome.kind === 'success') { this.statusLine = `Squashed ${outcome.hashes.length} commit(s)`; await this.refresh(false); this.commitSelected = clamp(outcome.startIndex, this.filteredCommits().length); this.commitRange = EMPTY_COMMIT_RANGE; this.renderAll(); await this.openCurrent('commits', true).catch(() => undefined); return; } if (outcome.kind === 'rebase-active') { this.statusLine = 'Squash stopped during rebase; recover from Status'; await this.refresh(false); vscode.window.showWarningMessage(outcome.message); return; } if (outcome.kind === 'blocked') vscode.window.showWarningMessage(outcome.message); } finally { if (this.statusLine === 'Squashing') { this.statusLine = ''; this.renderAll(); } } } private async fixupCurrentCommitRange() { if (this.commitFilesController.commit) return; const repoPath = workspaceRoot(), visibleCommits = this.filteredCommits(); if (!visibleCommits.length) return; try { const outcome = await fixupSelectedCommits({ repoPath, visibleHashes: visibleCommits.map(commit => commit.hash), selectedIndex: this.commitSelected, range: this.commitRange, viewBranch: this.commitListForBranch?.name, chooseAction: async () => { let actionFlag: '' | '-C' | undefined; await pickGitAction(FIXUP_MENU_TITLE, FIXUP_MENU_ITEMS.map(action => ({ key: action.key, label: action.label, description: action.tooltip, run: async () => { actionFlag = action.actionFlag; } }))); return actionFlag; }, onStart: () => { this.statusLine = 'Fixing up'; this.renderAll(); } }); if (outcome.kind === 'success') { this.statusLine = `Fixed up ${outcome.hashes.length} commit(s)`; await this.refresh(false); this.commitSelected = clamp(outcome.startIndex, this.filteredCommits().length); this.commitRange = EMPTY_COMMIT_RANGE; this.renderAll(); await this.openCurrent('commits', true).catch(() => undefined); return; } if (outcome.kind === 'rebase-active') { this.statusLine = 'Fixup stopped during rebase; recover from Status'; await this.refresh(false); vscode.window.showWarningMessage(outcome.message); return; } if (outcome.kind === 'blocked') vscode.window.showWarningMessage(outcome.message); } finally { if (this.statusLine === 'Fixing up') { this.statusLine = ''; this.renderAll(); } } }
   private commitHistoryActionInput() {
     return { repoPath: workspaceRoot(), visibleHashes: this.filteredCommits().map(commit => commit.hash), selectedIndex: this.commitSelected, range: this.commitRange,
       isLocalCommits: !this.commitListForBranch, onStatus: (status: string) => { this.statusLine = status; this.renderAll(); }, onMessage: (message: string) => { vscode.window.showWarningMessage(message); } };
@@ -1086,7 +1075,7 @@ class LazyGitVSController {
     return commitRewordMenuItem({ ...this.commitHistoryActionInput(), key, prompt: async (title, initialSummary) => vscode.window.showInputBox({ title, value: initialSummary, validateInput: value => value.trim() && !/[\r\n]/.test(value) ? undefined : 'Commit summary required.' }) });
   }
   private commitCommandCatalog(): GitMenuItem[] {
-    if (this.commitFilesFor) return commitFileCheckout.commitFileCheckoutCatalog(this.commitFilesFor.hash, this.currentCommitFileTreeRow(), this.keyLabel(this.lazygitKeymap.commitFiles.checkoutCommitFile) || 'c', async () => this.checkoutCurrentCommitFile());
+    if (this.commitFilesController.commit) return this.commitFilesController.checkoutCatalog(this.keyLabel(this.lazygitKeymap.commitFiles.checkoutCommitFile) || 'c', async () => this.checkoutCurrentCommitFile());
     const u = this.lazygitKeymap.universal, k = this.lazygitKeymap.commits;
     const key = (value: string | string[] | undefined) => this.keyLabel(value);
     const c = this.currentCommit();
@@ -1155,12 +1144,10 @@ class LazyGitVSController {
     else if (panel === 'conflicts') return this.conflictCommandCatalog();
     return [...this.reflogCommandCatalog(), ...contextual];
   }
-
   async helpCurrentPanel() { await this.helpMenu(this.activeViewPanel()); }
   private async helpMenu(viewPanel: ViewPanel) {
     const panel = this.panelForView(viewPanel);
     const items = this.commandRegistry(viewPanel);
-
     if (!items.length) {
       vscode.window.showInformationMessage(`LazyGitVS: ${this.title(panel)} has no extra contextual commands.`);
       await this.focusPanel(this.activeViewPanel()).catch(() => undefined);
@@ -1191,7 +1178,7 @@ class LazyGitVSController {
     const k = this.lazygitKeymap.commits, u = this.lazygitKeymap.universal;
     const key = (value: string | string[] | undefined) => this.keyLabel(value);
     if (commit && findMenuItemByKey([{ key: key(k.viewBisectOptions) || 'b', label: 'View bisect options' }], typed)) { try { await this.openBisectOptions(commit); } finally { await this.restorePanelFocusAfterModal('commits'); } return; }
-    const cherryPickBufferAction = !!findMenuItemByKey([{ key: key(k.cherryPickCopy) || 'C', label: 'Copy/toggle commit range' }, { key: key(k.pasteCommits) || 'V', label: 'Paste copied commits' }, { key: key(k.resetCherryPick) || '<ctrl+r>', label: 'Reset copied commits' }], typed); const dropAction = !!findMenuItemByKey([{ key: key(u.remove) || 'd', label: 'Drop selected commit(s)' }], typed); const squashAction = !!findMenuItemByKey([{ key: key(k.squashDown) || 's', label: 'Squash selected commit(s)' }], typed); const fixupAction = !!findMenuItemByKey([{ key: key(k.markCommitAsFixup) || 'f', label: 'Fixup selected commit(s)' }], typed); const autosquashAction = !!findMenuItemByKey([{ key: key(k.squashAboveCommits) || 'S', label: 'Apply fixup commits' }], typed); const moveAction = !!findMenuItemByKey([{ key: key(k.moveDownCommit) || '<ctrl+j>', label: 'Move commit down one' }, { key: key(k.moveUpCommit) || '<ctrl+k>', label: 'Move commit up one' }], typed); const editAction = !!findMenuItemByKey([{ key: key(u.edit) || 'e', label: 'Edit selected commit(s)' }], typed); if ((cherryPickBufferAction || dropAction || squashAction || fixupAction || autosquashAction) && this.commitFilesFor) return; if (moveAction && this.commitFilesFor) return; if (editAction && this.commitFilesFor) return; const item = findMenuItemByKey(this.commitCommandCatalog(), typed); if (!item) return;
+    const cherryPickBufferAction = !!findMenuItemByKey([{ key: key(k.cherryPickCopy) || 'C', label: 'Copy/toggle commit range' }, { key: key(k.pasteCommits) || 'V', label: 'Paste copied commits' }, { key: key(k.resetCherryPick) || '<ctrl+r>', label: 'Reset copied commits' }], typed); const dropAction = !!findMenuItemByKey([{ key: key(u.remove) || 'd', label: 'Drop selected commit(s)' }], typed); const squashAction = !!findMenuItemByKey([{ key: key(k.squashDown) || 's', label: 'Squash selected commit(s)' }], typed); const fixupAction = !!findMenuItemByKey([{ key: key(k.markCommitAsFixup) || 'f', label: 'Fixup selected commit(s)' }], typed); const autosquashAction = !!findMenuItemByKey([{ key: key(k.squashAboveCommits) || 'S', label: 'Apply fixup commits' }], typed); const moveAction = !!findMenuItemByKey([{ key: key(k.moveDownCommit) || '<ctrl+j>', label: 'Move commit down one' }, { key: key(k.moveUpCommit) || '<ctrl+k>', label: 'Move commit up one' }], typed); const editAction = !!findMenuItemByKey([{ key: key(u.edit) || 'e', label: 'Edit selected commit(s)' }], typed); if ((cherryPickBufferAction || dropAction || squashAction || fixupAction || autosquashAction) && this.commitFilesController.commit) return; if (moveAction && this.commitFilesController.commit) return; if (editAction && this.commitFilesController.commit) return; const item = findMenuItemByKey(this.commitCommandCatalog(), typed); if (!item) return;
     try {
       await executeGitMenuItem(item);
       if (!cherryPickBufferAction && !dropAction && !squashAction && !fixupAction) await this.refresh(false);
@@ -1203,6 +1190,7 @@ class LazyGitVSController {
     const item = findMenuItemByKey(this.commandRegistry(viewPanel), typed);
     if (!item) return;
     try {
+      if (this.panelForView(viewPanel) === 'branches') await this.resetCommitFilesState(false);
       await executeGitMenuItem(item);
       await this.refresh(false);
     } finally {
@@ -1242,7 +1230,6 @@ class LazyGitVSController {
     await this.revealEditorHunk();
     setTimeout(() => void this.forceEditorFocus().then(() => this.revealEditorHunk()), 80);
   }
-
   async editorNextHunk(delta: number) {
     if (!this.editorHunkMode) return;
     const wrap = (value: number, length: number) => length ? ((value % length) + length) % length : 0;
@@ -1337,18 +1324,18 @@ class LazyGitVSController {
     setTimeout(() => void this.forceEditorFocus().then(() => this.placeCursorAtEditorHunkStart()), 450);
     setTimeout(() => { if (!this.editorHunkMode && !this.editorEditMode) this.suppressWebviewAutoFocusUntil = 0; }, 2600);
   }
-  async editorHunkNoop() {
-    // HUNK/LINE mode owns the editor keyboard. Printable keys that are not lazygit
-    // commands must be swallowed, otherwise VS Code inserts them into the file.
-  }
-  private async forceEditorFocus() {
+  async editorHunkNoop() {}
+  private async forceEditorFocus(shouldContinue: () => boolean = () => true) {
+    if (!shouldContinue()) return;
     try { await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup'); } catch { /* ignore */ }
+    if (!shouldContinue()) return;
     const editor = vscode.window.activeTextEditor;
     if (editor) await vscode.window.showTextDocument(editor.document, editor.viewColumn ?? vscode.ViewColumn.Active, false);
+    if (!shouldContinue()) return;
   }
   async exitEditorHunkMode() {
     const filePath = this.editorModeFilePath ?? this.currentFile()?.path;
-    if (this.readOnlyHunkMode && this.commitFilesFor) { this.activePanel = 'commits'; this.ownsModeStatus = true; this.setFocusArea('panel'); await this.setEditorHunkMode(false); await this.updateActiveViewContext(); this.requestWebviewAutoFocus(); this.renderAll(); await this.revealPanelView('commits'); this.updateModeStatusBar(); return; }
+    if (this.readOnlyHunkMode && this.commitFilesController.commit) { this.activePanel = 'commits'; this.ownsModeStatus = true; this.setFocusArea('panel'); await this.setEditorHunkMode(false); await this.updateActiveViewContext(); this.requestWebviewAutoFocus(); this.renderAll(); await this.revealPanelView('commits'); this.updateModeStatusBar(); return; }
     this.activePanel = 'files';
     this.ownsModeStatus = true;
     this.setFocusArea('panel');
@@ -1383,18 +1370,19 @@ class LazyGitVSController {
     });
     this.hunkLineSelected = best;
   }
-  private async revealEditorHunk() {
+  private async revealEditorHunk(shouldContinue: () => boolean = () => true) {
+    if (!shouldContinue()) return;
     const h = this.hunks[this.hunkSelected];
     if (!h) { this.updateEditorHunkDecorations(); return; }
     const editor = vscode.window.activeTextEditor;
-    if (!editor) return;
+    if (!editor || !shouldContinue()) return;
     const changed = hunkSelectableLineIndexes(h);
     const targetLine = changed.length ? hunkChangedEditorLine(h, changed[clamp(this.hunkLineSelected, changed.length)]) : hunkStartLine(h);
     const line = Math.min(targetLine, Math.max(0, editor.document.lineCount - 1));
     const pos = new vscode.Position(line, 0);
     editor.selection = new vscode.Selection(pos, pos);
     editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
-    this.updateEditorHunkDecorations();
+    if (shouldContinue()) this.updateEditorHunkDecorations();
   }
   private async placeCursorAtEditorHunkStart() {
     const h = this.hunks[this.hunkSelected];
@@ -1485,9 +1473,11 @@ class LazyGitVSController {
     else if (panel === 'branches') { const b = this.currentBranch(); if (b) await showText(`LazyGitVS Branch ${b.name}`, await git(branchLogArgs(this.lazygitGit, b.name)), preserveFocus, preserveFocus); }
     else if (panel === 'conflicts') { const f = this.currentConflict(); if (f) await previewDiff(f, preserveFocus); }
     else if (panel === 'commits') {
-      if (this.commitFilesFor) {
-        const f = this.currentCommitFile();
-        if (f) await previewCommitFileDiff(this.commitFilesFor, f, preserveFocus);
+      if (this.commitFilesController.active) {
+        const f = this.commitFilesController.currentFile(this.lazygitGui);
+        const owner = this.commitFilesController.owner;
+        const previewToken = this.commitFilesController.beginPreview();
+        if (f && owner && previewToken && this.commitFilesController.commit) await previewCommitFileDiff(this.commitFilesController.commit, f, preserveFocus, () => this.commitFilesController.previewCurrent(previewToken), owner.repoPath);
       } else {
         const c = this.currentCommit();
         if (c) await showCommitPreview(c, this.lazygitGit, preserveFocus);
@@ -1503,15 +1493,12 @@ class LazyGitVSController {
       }
     }
   }
-
   private diffArgs(...args: string[]): string[] { return ['diff', ...gitDiffConfigArgs(this.lazygitGit, true), ...args]; }
   private showArgs(...args: string[]): string[] { return ['show', ...gitDiffConfigArgs(this.lazygitGit, true), ...args]; }
   private async enterBranchCommits() {
     const b = this.currentBranch();
     if (!b) return;
-    this.commitListForBranch = b;
-    this.commitFilesFor = undefined;
-    this.commitFileItems = [];
+    await this.resetCommitFilesState(false); this.commitListForBranch = b;
     this.commitSelected = 0;
     this.commitItems = await commits(b.name);
     this.statusLine = `Commits for ${b.name}`;
@@ -1519,42 +1506,46 @@ class LazyGitVSController {
     await this.focusPanel('commits');
     await this.openCurrent('commits', true).catch(() => undefined);
   }
-  private async enterCommit() {
-    if (this.commitFilesFor) {
-      if (await this.toggleCurrentCommitFileTreeNode()) return;
-      const f = this.currentCommitFile();
-      if (f) return this.enterCommitFileHunkMode(f);
-      return;
-    }
-    const c = this.currentCommit(); if (!c) return;
-    if (!commitFileCheckout.canInspectSingleCommit(this.commitRange.mode)) return void vscode.window.showErrorMessage(commitFileCheckout.COMMIT_FILE_RANGE_MESSAGE);
-    Object.assign(this, await commitFileCheckout.commitFileDrilldownState(c, commitFiles));
-    this.renderAll();
-    await this.openCurrent('commits', true);
+  private async enterCommit(activationCurrent: () => boolean = () => true) {
+    if (this.commitFilesController.active) { if (await this.toggleCurrentCommitFileTreeNode()) return; const f = this.commitFilesController.currentFile(this.lazygitGui); if (f) return this.enterCommitFileHunkMode(f); return; }
+    const c = this.currentCommit(); if (!c) return; if (!canInspectSingleCommit(this.commitRange.mode)) return void vscode.window.showErrorMessage(COMMIT_FILE_RANGE_MESSAGE);
+    if (!await this.commitFilesController.loadCommit(c, activationCurrent)) return;
+    this.renderAll(); await this.openCurrent('commits', true);
   }
   private async checkoutCurrentCommitFile() {
-    const commit = this.commitFilesFor;
-    if (!commit || !await commitFileCheckout.checkoutCommitFileTreeRow({ repoPath: workspaceRoot(), commitHash: commit.hash, row: this.currentCommitFileTreeRow(), runGit: (args, cwd) => git(args, cwd) })) return;
-    await this.refresh(true);
-    await this.restorePanelFocusAfterModal('commits');
+    const owner = this.commitFilesController.owner; if (!owner || !this.commitFilesController.ownerIsCurrent(owner)) return;
+    await this.commitFilesController.checkoutCurrent({
+      onSuccess: async () => { await this.refresh(true); if (this.commitFilesController.sessionIsCurrent(owner)) await this.restorePanelFocusAfterModal('commits', () => this.commitFilesController.sessionIsCurrent(owner)); },
+    });
   }
   private async enterCommitFileHunkMode(file: CommitFile) {
-    const commit = this.commitFilesFor;
-    if (!commit) return;
-    const patch = await git(this.showArgs('--patch', '--stat', commit.hash, '--', file.path));
-    Object.assign(this, commitFileCheckout.readOnlyCommitFileHunkState(patch, file.path, this.lazygitGui.useHunkModeInStagingView));
-    await this.setEditorHunkMode(true);
-    this.renderAll();
-    await showText(`LazyGitVS ${commit.hash}:${file.path}`, patch, false, false);
-    await this.forceEditorFocus();
-    await this.revealEditorHunk();
+    await this.commitFilesController.enterHunk(file, {
+      showArgs: (...args) => this.showArgs(...args),
+      useHunkModeInStagingView: this.lazygitGui.useHunkModeInStagingView,
+      applyHunkState: (patch, filePath) => Object.assign(this, readOnlyCommitFileHunkState(patch, filePath, this.lazygitGui.useHunkModeInStagingView)),
+      setEditorHunkMode: (active, ownerId, prepare) => this.setEditorHunkMode(active, ownerId, prepare),
+      clearHunkState: () => { this.readOnlyHunkMode = false; this.editorModeFilePath = undefined; this.clearEditorHunkDecorations(); },
+      render: () => this.renderAll(),
+      showText: async (title, content, preview, preserveFocus, hunkCurrent) => { await this.editorPublicationGate.request(async publicationCurrent => { const isCurrent = () => publicationCurrent() && hunkCurrent(); if (isCurrent()) await showText(title, content, preserveFocus, preview, isCurrent); }); },
+      forceEditorFocus: hunkCurrent => this.forceEditorFocus(hunkCurrent),
+      revealEditorHunk: hunkCurrent => this.revealEditorHunk(hunkCurrent),
+    });
   }
-  private async discardCurrentCommitFile() { const commit = this.commitFilesFor; if (!commit) return;
-    try { const outcome = await discardCommitFileChanges({ repoPath: workspaceRoot(), commitHash: commit.hash, commitFiles: [...this.commitFileItems], row: this.currentCommitFileTreeRow(), rangeMode: this.commitRange.mode, isLocalCommits: !this.commitListForBranch, confirm: async (title, prompt) => await vscode.window.showWarningMessage(prompt, { modal: true, detail: title }, title) === title, onStart: () => { this.statusLine = 'Rebasing'; this.renderAll(); } });
-      if (outcome.kind === 'success') { this.commitFilesFor = undefined; this.commitFileItems = []; this.commitFileSelected = 0; this.statusLine = 'Discarded selected changes from commit'; await this.refresh(true); } else if (outcome.kind !== 'cancelled') { this.statusLine = outcome.message; await vscode.window.showWarningMessage(outcome.message); }
-    } catch (error) { await vscode.window.showErrorMessage((error as Error).message); } finally { if (this.statusLine === 'Rebasing') this.statusLine = ''; this.clampSelections(); this.renderAll(); await this.restorePanelFocusAfterModal('commits'); } }
+  private async discardCurrentCommitFile() {
+    await this.commitFilesController.discardCurrent({
+      rangeMode: this.commitRange.mode,
+      isLocalCommits: !this.commitListForBranch,
+      confirm: async (title, prompt) => await vscode.window.showWarningMessage(prompt, { modal: true, detail: title }, title) === title,
+      onStart: () => { this.statusLine = 'Rebasing'; },
+      onSuccess: async () => { await this.resetCommitFilesState(false); this.statusLine = 'Discarded selected changes from commit'; await this.refresh(true); },
+      onOutcome: async message => { this.statusLine = message; await vscode.window.showWarningMessage(message); },
+      onError: async error => { await vscode.window.showErrorMessage(error.message); },
+      onFinally: async () => { if (this.statusLine === 'Rebasing') this.statusLine = ''; this.clampSelections(); this.renderAll(); await this.restorePanelFocusAfterModal('commits', () => this.commitFilesController.active); },
+    });
+  }
   private async copyCurrentCommitFileInfo() {
-    await commitFileClipboard.runCommitFileClipboardAction({ commitHash: this.commitFilesFor?.hash, row: this.currentCommitFileTreeRow(), repoPath: workspaceRoot(), gitConfig: this.lazygitGit, runGit: (args, cwd) => git(args, cwd), copyText }, pickGitAction, () => this.restorePanelFocusAfterModal('commits')); }
+    await this.commitFilesController.copyCurrent({ gitConfig: this.lazygitGit, copyText, pickMenu: pickGitAction, restoreFocus: async () => { await this.restorePanelFocusAfterModal('commits', () => this.commitFilesController.active); } });
+  }
   private async enterStash() {
     if (this.stashFilesFor) {
       const f = this.stashFileItems[this.stashFileSelected];
@@ -1568,15 +1559,16 @@ class LazyGitVSController {
     this.renderAll();
     await this.openCurrent('stash', true);
   }
-
   private async clearFilterOrBack(viewPanel: ViewPanel) {
-    if (this.filterText) { this.filterText = ''; this.clampSelections(); this.persistNavigationState(); this.renderAll(); await this.openCurrent(viewPanel, true).catch(() => undefined); return; }
+    if (this.filterText) { this.filterText = ''; this.selectionEpoch++; this.commitFilesController.invalidateTransient({ selectionEpoch: this.selectionEpoch, selectedRowIdentity: commitFilesRowIdentity(this.commitFilesController.currentRow(this.lazygitGui)), filterText: this.filterText }); this.clampSelections(); this.persistNavigationState(); this.renderAll(); await this.openCurrent(viewPanel, true).catch(() => undefined); return; }
     await this.back(viewPanel);
   }
   private async searchPanel() {
     const value = await vscode.window.showInputBox({ title: `Search ${this.title(this.activePanel)}`, value: this.filterText, prompt: 'Empty clears the filter.' });
     if (value === undefined) return;
     this.filterText = value;
+    this.selectionEpoch++;
+    this.commitFilesController.invalidateTransient({ selectionEpoch: this.selectionEpoch, selectedRowIdentity: commitFilesRowIdentity(this.commitFilesController.currentRow(this.lazygitGui)), filterText: this.filterText });
     this.clampSelections();
     this.renderAll();
   }
@@ -1591,6 +1583,8 @@ class LazyGitVSController {
     if (!item) return;
     this.fileStatusFilter = item.value;
     this.selected = 0;
+    this.selectionEpoch++;
+    this.commitFilesController.invalidateTransient({ selectionEpoch: this.selectionEpoch, selectedRowIdentity: commitFilesRowIdentity(this.commitFilesController.currentRow(this.lazygitGui)), filterText: this.filterText });
     this.renderAll();
   }
   private async diffingMenu() {
@@ -1643,6 +1637,7 @@ class LazyGitVSController {
     const title = this.title(panel);
     const isActiveView = this.activeViewPanel() === viewPanel;
     const shouldFocus = this.consumeWebviewAutoFocus(viewPanel);
+    const commitFilesCapability = viewPanel === 'commits' && this.commitFilesController.active ? this.commitFilesController.capabilityForRender() : undefined;
     const showPanelSelection = isActiveView && this.focusArea === 'panel';
     const rows = this.rows(panel, showPanelSelection);
     const footer = '';
@@ -1658,19 +1653,19 @@ class LazyGitVSController {
       .status-pair{display:grid;grid-template-columns:12px 12px;column-gap:2px;align-items:center;font-family:var(--vscode-editor-font-family);font-size:10px}.slot{display:inline-grid;place-items:center;width:12px;height:14px;border-radius:2px;font-size:10px;font-weight:700;line-height:1;box-sizing:border-box;color:var(--vscode-button-foreground,#fff)}.slot.empty{visibility:hidden;background:transparent;border-color:transparent;box-shadow:none}.slot.index{background:var(--vscode-gitDecoration-addedResourceForeground,#6a9955)}.slot.worktree{background:var(--vscode-gitDecoration-modifiedResourceForeground,#e06c75)}.slot.deleted,.slot.conflict{background:var(--vscode-errorForeground,#f85149)}.slot.untracked{background:var(--vscode-gitDecoration-untrackedResourceForeground,#d7ba7d);color:var(--vscode-sideBar-background,#1e1e1e)}.row.dir,.row.file.tree{grid-template-columns:7px minmax(0,1fr);}.tree-line{display:inline-flex;align-items:center;gap:2px;min-width:0;overflow:hidden;text-overflow:ellipsis;}.tree-indent{display:inline-block;flex:0 0 auto;width:var(--tree-indent,0ch)}.tree-name{overflow:hidden;text-overflow:ellipsis;}.tree-arrow{color:var(--vscode-descriptionForeground);}.status-dashboard{padding:7px 9px 10px;display:flex;flex-direction:column;gap:5px;min-width:0}.lg-logo{font-family:var(--vscode-editor-font-family);font-size:20px;font-weight:800;letter-spacing:.5px;color:var(--vscode-foreground);line-height:1.05}.lg-sub{color:var(--vscode-descriptionForeground);font-size:11px;margin-bottom:4px}.lg-link{display:flex;align-items:center;gap:5px;min-height:19px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.lg-link span{overflow:hidden;text-overflow:ellipsis}.lg-repo{margin-top:6px;padding-top:6px;border-top:1px solid var(--vscode-sideBarSectionHeader-border);color:var(--vscode-descriptionForeground);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.current .path,.current .status{font-weight:700}.danger .status{color:var(--vscode-errorForeground)}.hint{color:var(--vscode-descriptionForeground);font-size:11px;line-height:1.35;padding:4px 8px 5px;border-top:1px solid var(--vscode-sideBarSectionHeader-border);background:var(--vscode-sideBar-background);}kbd{font-family:var(--vscode-editor-font-family);font-size:10px;color:var(--vscode-keybindingLabel-foreground);background:var(--vscode-keybindingLabel-background);border:1px solid var(--vscode-keybindingLabel-border);border-bottom-color:var(--vscode-keybindingLabel-bottomBorder);border-radius:3px;padding:0 3px;margin-right:2px;}.statusline{color:var(--vscode-descriptionForeground);padding-top:3px;}
       .boom{position:absolute;inset:0;display:grid;place-items:center;background:color-mix(in srgb,var(--vscode-sideBar-background) 55%,transparent);z-index:5;pointer-events:none;}.bomb{font-size:46px;animation:bomb .45s ease-in forwards}.blast{position:absolute;font-size:76px;opacity:0;animation:blast .5s ease-out .35s forwards}@keyframes bomb{to{transform:scale(.35) rotate(20deg);opacity:0}}@keyframes blast{0%{transform:scale(.2);opacity:0}35%{opacity:1}100%{transform:scale(1.6);opacity:0}}
     </style></head><body tabindex="0"><div class="root ${this.lazygitGui.wrapLinesInStagingView ? 'wrap-staging' : ''}">${boom}<div class="title">${title}</div><div class="rows" role="listbox" aria-label="${escapeHtml(title)}">${rows}</div>${footer}</div><script nonce="${nonce}">
-      const vscode=acquireVsCodeApi(); const panel='${viewPanel}'; const shouldFocus=${shouldFocus ? 'true' : 'false'}; let keyboardEnabled=${this.focusArea === 'panel' && this.ownsModeStatus && !this.editorHunkMode && !this.editorEditMode ? 'true' : 'false'}; window.addEventListener('message',event=>{if(event.data&&event.data.type==='keyboardEnabled')keyboardEnabled=!!event.data.enabled;if(event.data&&event.data.type==='focusBody'){document.body.focus();markPanelFocus();}}); function markPanelFocus(){keyboardEnabled=true;vscode.postMessage({type:'focusArea',area:'panel'});} window.addEventListener('focus',markPanelFocus); document.body.addEventListener('focus',markPanelFocus); setTimeout(()=>{document.querySelector('.row.sel')?.scrollIntoView({block:'nearest'}); if(shouldFocus){ document.body.focus(); markPanelFocus(); }},0);
+      const vscode=acquireVsCodeApi(); const commitFilesCapability=${commitFilesCapability ? scriptJson(commitFilesCapability) : 'undefined'}; const rawPostMessage=vscode.postMessage.bind(vscode); vscode.postMessage=message=>rawPostMessage(commitFilesCapability?Object.assign({},message,{capability:commitFilesCapability}):message); const panel='${viewPanel}'; const shouldFocus=${shouldFocus ? 'true' : 'false'}; let keyboardEnabled=${this.focusArea === 'panel' && this.ownsModeStatus && !this.editorHunkMode && !this.editorEditMode ? 'true' : 'false'}; window.addEventListener('message',event=>{if(event.data&&event.data.type==='keyboardEnabled')keyboardEnabled=!!event.data.enabled;if(event.data&&event.data.type==='focusBody'){document.body.focus();markPanelFocus();}}); function markPanelFocus(){keyboardEnabled=true;vscode.postMessage({type:'focusArea',area:'panel'});} window.addEventListener('focus',markPanelFocus); document.body.addEventListener('focus',markPanelFocus); setTimeout(()=>{document.querySelector('.row.sel')?.scrollIntoView({block:'nearest'}); if(shouldFocus){ document.body.focus(); markPanelFocus(); }},0);
       const keymap=${scriptJson(this.lazygitKeymap)};
       const blockNavigation=${scriptJson(panelBlockNavigationBindings(this.lazygitKeymap.universal))};
       const panels={1:'status',2:'files',3:'branches',4:'commits',5:'stash',6:'conflicts',7:'tags',8:'remotes'};
       function norm(e){ let key=e.key; if(key===' ')key='<space>'; else if(key==='Enter')key='<enter>'; else if(key==='Escape')key='<esc>'; else if(key==='Tab')key=e.shiftKey?'<backtab>':'<tab>'; else if(key==='Backspace')key='<backspace>'; else if(key==='ArrowDown')key='<down>'; else if(key==='ArrowUp')key='<up>'; else if(key==='ArrowLeft')key='<left>'; else if(key==='ArrowRight')key='<right>'; const mods=[]; if(e.ctrlKey)mods.push('ctrl'); if(e.altKey)mods.push('alt'); if(e.metaKey)mods.push('meta'); return mods.length?'<'+mods.join('+')+'+'+String(key).replace(/^<|>$/g,'')+'>':key; }
       function keysEqual(expected,typed){ if(expected.startsWith('<')&&expected.endsWith('>'))return expected.toLowerCase()===typed.toLowerCase(); return expected===typed; }
       function hit(e,...bindings){ const k=norm(e); return bindings.flat().filter(Boolean).some(b => keysEqual(String(b),k)); }
-      document.querySelector('.rows')?.addEventListener('click',e=>{ const row=e.target.closest('.row[data-index]'); if(!row)return; document.body.focus(); vscode.postMessage({type:'select',index:Number(row.dataset.index)}); });
-      document.querySelector('.rows')?.addEventListener('dblclick',e=>{ const row=e.target.closest('.row[data-index]'); if(!row)return; document.body.focus(); vscode.postMessage({type:'select',index:Number(row.dataset.index)}); vscode.postMessage({type:'enter'}); });
+      let clickTimer; document.querySelector('.rows')?.addEventListener('click',e=>{ const row=e.target.closest('.row[data-index]'); if(!row)return; clearTimeout(clickTimer); clickTimer=setTimeout(()=>{ document.body.focus(); vscode.postMessage({type:'select',index:Number(row.dataset.index)}); },220); });
+      document.querySelector('.rows')?.addEventListener('dblclick',e=>{ const row=e.target.closest('.row[data-index]'); if(!row)return; clearTimeout(clickTimer); document.body.focus(); vscode.postMessage({type:'activateRow',index:Number(row.dataset.index)}); });
       window.addEventListener('keydown',e=>{ if(!keyboardEnabled)return; if((e.ctrlKey||e.metaKey)&&e.shiftKey&&String(e.key).toLowerCase()==='p'){e.preventDefault();vscode.postMessage({type:'commandPalette'});return;} if(e.key==='F1'){e.preventDefault();vscode.postMessage({type:'commandPalette'});return;} const u=keymap.universal, f=keymap.files, m=keymap.main; const jump=Array.isArray(u.jumpToBlock)?u.jumpToBlock:[]; const jumpIndex=jump.indexOf(e.key); const jumpPanel = jumpIndex>=0 ? panels[String(jumpIndex+1)] : panels[e.key]; if(jumpPanel){e.preventDefault();vscode.postMessage({type:'switchPanel',panel:jumpPanel});return;}
         if(e.key==='?'){e.preventDefault();vscode.postMessage({type:'helpMenu'});return;} if(panel!=='conflicts'&&hit(e,u.undo)){e.preventDefault();vscode.postMessage({type:'dogfoodBoundary',event:'reflogUndo',key:norm(e)});vscode.postMessage({type:'reflogUndo'});return;} if(panel!=='conflicts'&&hit(e,u.redo)){e.preventDefault();vscode.postMessage({type:'reflogRedo'});return;} if(hit(e,u.focusMainView)){e.preventDefault();vscode.postMessage({type:'focusMainView'});return;} if(e.shiftKey&&e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:1});return;} if(e.shiftKey&&e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'rangeMove',delta:-1});return;} if(e.key==='ArrowDown'){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(e.key==='ArrowUp'){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;} if(hit(e,u.prevPage)){e.preventDefault();vscode.postMessage({type:'move',delta:-10});return;} if(hit(e,u.nextPage)){e.preventDefault();vscode.postMessage({type:'move',delta:10});return;} if(hit(e,u.gotoTop,u.gotoTopAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'top'});return;} if(hit(e,u.gotoBottom,u.gotoBottomAlt)){e.preventDefault();vscode.postMessage({type:'moveTo',position:'bottom'});return;} if(hit(e,u.toggleRangeSelect)){e.preventDefault();vscode.postMessage({type:'rangeToggle'});return;} if(hit(e,u.startSearch)){e.preventDefault();vscode.postMessage({type:'search'});return;} if(panel==='files'&&hit(e,f.openStatusFilter)){e.preventDefault();vscode.postMessage({type:'statusFilter'});return;} if(panel==='files'&&hit(e,f.toggleTreeView)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='files'&&hit(e,f.collapseAll)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='files'&&hit(e,f.expandAll)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(hit(e,u.nextItem,u.nextItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:1});return;} if(hit(e,u.prevItem,u.prevItemAlt)){e.preventDefault();vscode.postMessage({type:'move',delta:-1});return;}
         if(hit(e,u.createRebaseOptionsMenu)){e.preventDefault();vscode.postMessage({type:'operationOptions'});return;} if(hit(e,u.diffingMenu,u.diffingMenuAlt)){e.preventDefault();vscode.postMessage({type:'diffingMenu'});return;} if(hit(e,blockNavigation.next)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:1});return;} if(hit(e,blockNavigation.previous)){e.preventDefault();vscode.postMessage({type:'moveBlock',delta:-1});return;}
-        const c=keymap.commits, cf=keymap.commitFiles; if(panel==='commits'&&${this.commitFilesFor ? 'true' : 'false'}&&hit(e,f.copyFileInfoToClipboard)){e.preventDefault();vscode.postMessage({type:'copyCommitFileInfo'});return;} if(panel==='commits'&&${this.commitFilesFor ? 'true' : 'false'}&&hit(e,u.remove)){e.preventDefault();vscode.postMessage({type:'discardCommitFile'});return;} if(panel==='commits'&&${this.commitFilesFor ? 'true' : 'false'}&&hit(e,cf.checkoutCommitFile)){e.preventDefault();vscode.postMessage({type:'checkoutCommitFile'});return;} if(panel==='commits'&&!${this.commitFilesFor ? 'true' : 'false'}&&hit(e,u.remove,c.squashDown,c.squashAboveCommits,c.markCommitAsFixup,c.moveDownCommit,c.moveUpCommit,c.checkoutCommit,c.copyCommitAttributeToClipboard,c.newBranch,c.renameCommit,c.amendToCommit,u.edit,c.createFixupCommit,c.cherryPickCopy,c.pasteCommits,c.resetCherryPick,c.revertCommit,c.createTag,c.tagCommit,c.viewBisectOptions,c.viewResetOptions,c.openInBrowser,c.openLogMenu)){e.preventDefault();vscode.postMessage({type:'commitAction',key:norm(e)});return;} if(panel==='files'&&hit(e,c.viewResetOptions)){e.preventDefault();vscode.postMessage({type:'resetToUpstreamMenu'});return;}
+        const c=keymap.commits, cf=keymap.commitFiles; if(panel==='commits'&&${this.commitFilesController.commit ? 'true' : 'false'}&&hit(e,f.copyFileInfoToClipboard)){e.preventDefault();vscode.postMessage({type:'copyCommitFileInfo'});return;} if(panel==='commits'&&${this.commitFilesController.commit ? 'true' : 'false'}&&hit(e,u.remove)){e.preventDefault();vscode.postMessage({type:'discardCommitFile'});return;} if(panel==='commits'&&${this.commitFilesController.commit ? 'true' : 'false'}&&hit(e,cf.checkoutCommitFile)){e.preventDefault();vscode.postMessage({type:'checkoutCommitFile'});return;} if(panel==='commits'&&!${this.commitFilesController.commit ? 'true' : 'false'}&&hit(e,u.remove,c.squashDown,c.squashAboveCommits,c.markCommitAsFixup,c.moveDownCommit,c.moveUpCommit,c.checkoutCommit,c.copyCommitAttributeToClipboard,c.newBranch,c.renameCommit,c.amendToCommit,u.edit,c.createFixupCommit,c.cherryPickCopy,c.pasteCommits,c.resetCherryPick,c.revertCommit,c.createTag,c.tagCommit,c.viewBisectOptions,c.viewResetOptions,c.openInBrowser,c.openLogMenu)){e.preventDefault();vscode.postMessage({type:'commitAction',key:norm(e)});return;} if(panel==='files'&&hit(e,c.viewResetOptions)){e.preventDefault();vscode.postMessage({type:'resetToUpstreamMenu'});return;}
         const b=keymap.branches, st=keymap.stash; if(panel==='status'&&['o','e','a','A','u','<enter>'].includes(norm(e))){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='hunks'&&hit(e,u.select,u.togglePanel,u.remove,m.toggleSelectHunk)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='branches'&&hit(e,u.select,u.new,u.remove,b.checkoutBranchByName,b.checkoutPreviousBranch,b.renameBranch,b.mergeIntoCurrentBranch,b.rebaseBranch,b.forceCheckoutBranch,b.setUpstream,b.fastForward,b.createTag,b.sortOrder)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='stash'&&hit(e,u.goInto,st.apply,st.popStash,st.newBranch,st.renameStash,u.remove)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='tags'&&hit(e,u.select,u.new,u.remove,b.createTag,b.pushTag)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='remotes'&&hit(e,u.new,u.edit,u.remove,b.fetchRemote,b.addForkRemote)){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;} if(panel==='conflicts'&&(hit(e,u.goInto,u.openFile)||['1','2','b','m'].includes(norm(e)))){e.preventDefault();vscode.postMessage({type:'panelAction',key:norm(e)});return;}
         if(hit(e,u.select)){e.preventDefault();vscode.postMessage({type:'toggle'});return;} if(panel==='status'&&hit(e,u.goInto)){e.preventDefault();vscode.postMessage({type:'repoMenu'});return;} if(hit(e,u.goInto)){e.preventDefault();vscode.postMessage({type:'enter'});return;} if(hit(e,u.openFile)){e.preventDefault();vscode.postMessage({type:'openFile'});return;} if(hit(e,u.edit)){e.preventDefault();vscode.postMessage({type:'editFile'});return;} if(panel==='files'&&hit(e,f.copyFileInfoToClipboard)){e.preventDefault();vscode.postMessage({type:'copyInfo'});return;} if(panel==='files'&&hit(e,f.copyPath,u.copyToClipboard)){e.preventDefault();vscode.postMessage({type:'copyPath'});return;} if(panel!=='files'&&hit(e,u.copyToClipboard)){e.preventDefault();vscode.postMessage({type:'copyInfo'});return;} if(panel==='files'&&hit(e,f.ignoreFile)){e.preventDefault();vscode.postMessage({type:'ignoreMenu'});return;} if(panel==='files'&&hit(e,f.fetch)){e.preventDefault();vscode.postMessage({type:'fetch'});return;}
         if(panel==='files'&&hit(e,f.toggleStagedAll)){e.preventDefault();vscode.postMessage({type:'stageAll'});return;} if(panel==='files'&&hit(e,f.commitChangesWithoutHook)){e.preventDefault();vscode.postMessage({type:'commitNoVerify'});return;} if(panel==='files'&&hit(e,f.amendLastCommit)){e.preventDefault();vscode.postMessage({type:'amendLastCommit'});return;} if(panel==='files'&&hit(e,f.commitChangesWithEditor)){e.preventDefault();vscode.postMessage({type:'commitWithEditor'});return;} if((panel==='files'||panel==='status')&&hit(e,f.commitChanges)){e.preventDefault();vscode.postMessage({type:'commit'});return;} if(hit(e,u.pushFiles,u.push)){e.preventDefault();vscode.postMessage({type:'push'});return;} if(hit(e,u.pullFiles,u.pull)){e.preventDefault();vscode.postMessage({type:'pull'});return;}
@@ -1678,7 +1673,7 @@ class LazyGitVSController {
         if(hit(e,u.togglePanel)){e.preventDefault();vscode.postMessage({type:'togglePanel'});return;} if(hit(e,u.return)){e.preventDefault();vscode.postMessage({type:'back'});return;} if(e.key==='Backspace'){e.preventDefault();vscode.postMessage({type:'clearFilter'});return;} if(hit(e,u.refresh,f.refreshFiles)){e.preventDefault();vscode.postMessage({type:'refresh'});return;} if(hit(e,u.quit)){e.preventDefault();vscode.postMessage({type:'close'});return;} if(panel==='hunks'&&hit(e,m.toggleSelectHunk)){e.preventDefault();vscode.postMessage({type:'toggleHunkSelection'});return;} });
     </script></body></html>`; } catch { this.views.delete(viewPanel); }
   }
-  private title(panel: Panel): string { if (panel === 'hunks') return `${this.hunkSide === 'staged' ? 'Staged' : 'Unstaged'} changes · ${escapeHtml(this.files[this.selected]?.path ?? '')}`; if (panel === 'commits' && this.commitFilesFor) return `Commit files · ${this.commitFilesFor.hash}`; if (panel === 'stash' && this.stashFilesFor) return `Stash files · ${this.stashFilesFor.ref}`; return ({ status: 'Status', files: 'Files', branches: 'Branches', commits: 'Commits', stash: 'Stash', conflicts: 'Conflicts', tags: 'Tags', remotes: 'Remotes', hunks: 'Hunks' } as Record<Panel,string>)[panel]; }
+  private title(panel: Panel): string { if (panel === 'hunks') return `${this.hunkSide === 'staged' ? 'Staged' : 'Unstaged'} changes · ${escapeHtml(this.files[this.selected]?.path ?? '')}`; if (panel === 'commits' && this.commitFilesController.commit) return `Commit files · ${this.commitFilesController.commit.hash}`; if (panel === 'stash' && this.stashFilesFor) return `Stash files · ${this.stashFilesFor.ref}`; return ({ status: 'Status', files: 'Files', branches: 'Branches', commits: 'Commits', stash: 'Stash', conflicts: 'Conflicts', tags: 'Tags', remotes: 'Remotes', hunks: 'Hunks' } as Record<Panel,string>)[panel]; }
   private help(panel: Panel): string {
     const u = this.lazygitKeymap.universal, f = this.lazygitKeymap.files, m = this.lazygitKeymap.main, c = this.lazygitKeymap.commits;
     const kb = (value: string | string[] | undefined) => `<kbd>${escapeHtml(Array.isArray(value) ? value.join('/') : String(value ?? ''))}</kbd>`;
@@ -1691,7 +1686,7 @@ class LazyGitVSController {
     if (panel === 'remotes') return common + `${kb(String(this.lazygitKeymap.branches.fetchRemote))} fetch · ${kb(String(u.new))} add · ${kb(String(u.edit))} edit URL · ${kb(String(u.remove))} remove`;
     if (panel === 'commits') {
       const c = this.lazygitKeymap.commits, cf = this.lazygitKeymap.commitFiles;
-      if (this.commitFilesFor) return common + `${kb(String(f.copyFileInfoToClipboard))} copy menu · ${kb(String(cf.checkoutCommitFile))} checkout · ${kb(String(u.remove))} discard from commit · ${kb(String(u.goInto))} open/toggle`;
+      if (this.commitFilesController.commit) return common + `${kb(String(f.copyFileInfoToClipboard))} copy menu · ${kb(String(cf.checkoutCommitFile))} checkout · ${kb(String(u.remove))} discard from commit · ${kb(String(u.goInto))} open/toggle`;
       return common + `${kb(String(u.edit))} edit · ${kb(String(u.remove))} drop · ${kb(String(c.squashDown))} squash · ${kb(String(c.squashAboveCommits))} apply fixups · ${kb(String(c.markCommitAsFixup))} fixup · ${kb(String(c.moveDownCommit))}/${kb(String(c.moveUpCommit))} move · ${kb(String(u.goInto))} files · ${kb(String(c.checkoutCommit))} checkout · ${kb(String(c.copyCommitAttributeToClipboard ?? u.copyToClipboard))} copy · ${kb(String(c.viewBisectOptions))} bisect · ${kb(String(c.viewResetOptions))} reset · ${kb(String(c.revertCommit))}/${kb(String(c.createTag ?? c.tagCommit))} revert/tag`;
     }
     if (panel === 'stash') return common + `${kb(String(u.goInto))} apply/pop/drop/show · ${kb(String(f.stashAllChanges))} create stash`;
@@ -1723,18 +1718,17 @@ class LazyGitVSController {
     if (panel === 'tags') { const tags = this.filteredTags(); return tags.length ? tags.map((t,i)=>row(active && i===this.tagSelected, 'tag', 'T', t.name, t.date || t.subject, i)).join('') : '<div class="empty">No tags. Press T to create one.</div>'; }
     if (panel === 'remotes') { const remotes = this.filteredRemotes(); return remotes.length ? remotes.map((r,i)=>row(active && i===this.remoteSelected, 'remote', 'R', r.name, r.fetchUrl || r.pushUrl, i)).join('') : '<div class="empty">No remotes. Press n to add one.</div>'; }
     if (panel === 'commits') {
-      if (this.commitFilesFor) {
-        const commitFileRows = this.commitFileTreeRows();
-        return commitFileRows.length ? this.virtualRows(commitFileRows, this.commitFileSelected, (r, i) => r.kind === 'dir'
-          ? dirRow(active && i===this.commitFileSelected, 'dir', r, i)
+      if (this.commitFilesController.commit) {
+        const commitFileRows = this.commitFilesController.rows(this.lazygitGui);
+        return commitFileRows.length ? this.virtualRows(commitFileRows, this.commitFilesController.selected, (r, i) => r.kind === 'dir'
+          ? dirRow(active && i===this.commitFilesController.selected, 'dir', r, i)
           : this.lazygitGui.showFileTree
-            ? treeFileRow(active && i===this.commitFileSelected, statusClass(r.file), r.file, this.fileTreeLabel(r), r.depth, i)
-            : fileRow(active && i===this.commitFileSelected, statusClass(r.file), r.file, this.fileTreeLabel(r), i))
+            ? treeFileRow(active && i===this.commitFilesController.selected, statusClass(r.file), r.file, this.fileTreeLabel(r), r.depth, i)
+            : fileRow(active && i===this.commitFilesController.selected, statusClass(r.file), r.file, this.fileTreeLabel(r), i))
           : '<div class="empty">No files in commit.</div>';
       }
       const commits = this.filteredCommits(); return commits.length ? commits.map((c,i)=>commitRow(active && i===this.commitSelected, c, i, `${this.isCommitRangeSelected(i) ? 'range ' : ''}${this.isVisibleCopiedCommit(c) ? 'copied' : ''}`.trim())).join('') : '<div class="empty">No commits.</div>';
     }
-
     if (panel === 'stash') {
       if (this.stashFilesFor) return this.stashFileItems.length ? this.stashFileItems.map((f,i)=>row(active && i===this.stashFileSelected, '', f.status, f.path, this.stashFilesFor!.ref, i)).join('') : '<div class="empty">No files in stash.</div>';
       const stashes = this.filteredStashes(); return stashes.length ? stashes.map((s,i)=>row(active && i===this.stashSelected, '', s.ref, s.message, '', i)).join('') : '<div class="empty">No stashes. Press s to create one.</div>';
@@ -1755,14 +1749,19 @@ class LazyGitVSController {
 }
 function clamp(index: number, length: number): number { return length ? Math.max(0, Math.min(length - 1, index)) : 0; }
 function stripAnsi(s: string): string { return s.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, ''); }
-async function showText(title: string, content: string, preserveFocus = false, preview = false) {
+async function showText(title: string, content: string, preserveFocus = false, preview = false, shouldOpen: () => boolean = () => true) {
+  if (!shouldOpen()) return;
   await closeLazyGitVSPreviewTabsIfSingle();
+  if (!shouldOpen()) return;
   const uri = virtualPreviewProvider.set(title, stripAnsi(content));
+  if (!shouldOpen()) return;
   const doc = await vscode.workspace.openTextDocument(uri);
+  if (!shouldOpen()) return;
   await vscode.languages.setTextDocumentLanguage(doc, 'diff');
+  if (!shouldOpen()) return;
   await vscode.window.showTextDocument(doc, { preview, preserveFocus, viewColumn: vscode.ViewColumn.Active });
+  if (!shouldOpen()) return;
 }
-
 export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(EMPTY_PREVIEW_SCHEME, new EmptyProvider()));
   context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(VIRTUAL_PREVIEW_SCHEME, virtualPreviewProvider));
