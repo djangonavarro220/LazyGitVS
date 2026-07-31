@@ -86,6 +86,8 @@ Canonical disputed claims were re-audited offline against the locally preserved 
 - [x] Mark fixup target.
 - [x] **Bounded partial C/V/reset cherry-pick slice**: Commits `v` provides a sticky visual range; Shift+Up/Down creates a non-sticky range; `C` copies/toggles the current single/range buffer in visible newest-first order; `V` confirms then invokes one oldest-first `git cherry-pick` argv; and configured `resetCherryPick` (default `<ctrl+r>`) clears only copied state. Source repository/list context is recorded, repository switches clear the buffer, successful paste keeps it reusable but hides copied-row highlighting, and the selected target hash is restored after refresh.
 - This bounded slice deliberately rejects a dirty target worktree and merge commits before mutation. Cancellation and Git conflicts retain the buffer and let the existing Status operation flow expose recovery. Auto-stash, merge `-m 1`, Git-version empty-commit flags, and universal/cross-panel range refactoring remain in the open gap below.
+- [x] **Bounded partial Drop slice**: configured `universal.remove` (default `d`) is routed only from top-level Commits and drops the current ordinary commit or visible selection range through `git rebase --interactive --autostash --keep-empty --no-autosquash --rebase-merges`. It uses a per-run 0700 sequence-editor executable and fails closed unless every selected hash appears exactly once as a `pick` line in Git's generated todo.
+- The Drop preflight and post-confirmation revalidation require a clean attached checked-out local branch matching any branch-scoped Commits view; every selected commit must still be reachable, ordinary/non-merge, and not the sole root. A root with descendants is handled with `--root`. Cancellation and every blocked preflight are read-only. If replay conflicts, LGVS leaves rebase active, refreshes, and lets Status `m` / `c` / `a` / `s` recover; a non-operation failure is surfaced without a rollback claim.
 - [x] Revert commit.
 - [x] Tag commit.
 - [x] Reset options.
@@ -188,9 +190,9 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 
 ### Commit gaps
 - [ ] Full upstream cherry-pick parity remains open beyond the bounded C/V/reset slice: no auto-stash, merge commits are not supported (`-m 1` is intentionally absent), no Git-version-specific empty-commit flags, and no universal range-selection refactor outside Commits.
+- [ ] full merge/active-rebase/dirty auto-stash Drop parity remains open beyond the bounded slice: merge commits/ranges, invocation while an operation is already active, and dirty working trees are rejected rather than automated. Detached/non-current branches, squash/edit/reorder, and richer rebase workflows remain out of scope.
 - [ ] Squash down `s`.
 - [ ] Autosquash/apply fixups `S`.
-- [ ] Drop commit `d`.
 - [ ] Edit/start interactive rebase `e`.
 - [ ] Start interactive rebase `i`.
 - [ ] Pick commit during rebase `p`.
@@ -273,7 +275,7 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 ## Recommended next order
 
 1. Bisect options in Commits.
-2. Commit workflows: squash/drop/edit/rebase/move/autosquash.
+2. Commit workflows: squash, full Drop parity, edit/rebase/move/autosquash.
 3. Files missing keys: `<ctrl+f>`, `<ctrl+t>`, `M`.
 4. Worktrees/Reflog/Submodules panels.
 5. Custom commands/custom pagers, late and sandboxed. This is useful but sharp.

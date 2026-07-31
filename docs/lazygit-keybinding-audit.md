@@ -79,7 +79,7 @@ This is the behavior spec for LazyGitVS. If LGVS differs, it needs an explicit V
 - `c`: Set fixup message.
 - `r`: Reword.
 - `R`: Reword with editor.
-- `d`: Drop.
+- `d` (configured `universal.remove`): **partial Drop parity** for the selected ordinary single commit or visible range in the top-level Commits list. It confirms, revalidates, and uses a private interactive-rebase sequence editor; it rejects dirty trees, active operations, detached/mismatched branch views, merge commits, unreachable commits, and a sole root rather than approximating full upstream Drop.
 - `e`: Edit/start interactive rebase.
 - `i`: Start interactive rebase.
 - `F`: Create fixup commit.
@@ -122,5 +122,6 @@ This is the behavior spec for LazyGitVS. If LGVS differs, it needs an explicit V
 - Canonical audited claims live in `docs/lazygit-parity-ledger.json`; CI rejects duplicate, stale, and contradictory rows.
 - Branch `<enter>` now matches upstream: it views commits for the selected branch.
 - Commits has **partial C/V/reset cherry-pick parity**: range copy/toggle, source-repository isolation, cancellation retention, and configured reset are covered for clean working trees and non-merge commits. Auto-stash, merge `-m 1`, Git-version empty-commit flags, and broad range parity remain gaps; this must not be read as full upstream cherry-pick parity.
+- Commits has **partial Drop parity** through configured `universal.remove`: it covers only clean attached-current-branch ordinary commit/range removal with a private interactive-rebase todo editor and leaves conflicts for Status recovery. Full merge Drop, Drop during an active rebase, and dirty-worktree auto-stash remain gaps; this must not be read as full upstream Drop parity.
 - Several branch/commit/tag options are implemented as simplified direct Git commands rather than lazygit option menus.
 - File tree `-`/`=` collapse/expand and some filter/sort/worktree flows are incomplete.
