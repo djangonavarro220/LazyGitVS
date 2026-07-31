@@ -83,8 +83,9 @@ test('reset catalog uses explicit destructive confirmation messages, not generic
   assert.match(gitMenusSource, /resetConfirmation\('HEAD~1', 'mixed'\)/, 'mixed reset must have an explicit reset confirmation');
 });
 
-test('destructive run-based catalog actions use explicit confirmation wrappers', () => {
-  assert.match(extensionSource, /dangerousGitMenuItem\(\{ key: key\(k\.renameCommit\)[\s\S]+?git\(\['commit', '--amend', '-m', msg\.trim\(\)\]\)/, 'reword HEAD commit rewrites history and must be explicitly confirmed');
+test('destructive run-based catalog actions use explicit confirmation wrappers except the bounded native-input Reword flow', () => {
+  assert.doesNotMatch(extensionSource, /dangerousGitMenuItem\(\{ key: key\(k\.renameCommit\)/, 'Reword edits one selected message through its native input rather than an extra destructive confirmation');
+  assert.match(extensionSource, /commitRewordItem\(key: string\)[\s\S]+?commitRewordMenuItem\([\s\S]+?prompt: async \(title, initialSummary\)/, 'configured Reword must use the bounded native summary-input coordinator');
   assert.match(extensionSource, /dangerousGitMenuItem\(\{ key: key\(k\.renameStash\)[\s\S]+?git\(\['stash', 'drop', s\.ref\]\)/, 'rename stash drops the old stash ref and must be explicitly confirmed');
 });
 

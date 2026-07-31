@@ -4,6 +4,7 @@ const path = require('path');
 
 const root = path.join(__dirname, '..');
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
+const formatting = fs.readFileSync(path.join(root, 'src', 'viewFormatting.ts'), 'utf8');
 const operation = fs.readFileSync(path.join(root, 'src', 'statusGitOperation.ts'), 'utf8');
 const gitService = fs.readFileSync(path.join(root, 'src', 'gitService.ts'), 'utf8');
 const config = fs.readFileSync(path.join(root, 'src', 'lazygitConfig.ts'), 'utf8');
@@ -11,7 +12,7 @@ const pkg = require(path.join(root, 'package.json'));
 const parity = fs.readFileSync(path.join(root, 'docs', 'lazygit-parity-gap-report.md'), 'utf8');
 const dogfood = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
 
-assert(extension.includes("`${repo.operation ? `(${repo.operation.label}) ` : ''}${repo.name} → ${repo.branch}`"), 'Status rows must render upstream operation text as `(operation) repo → branch`');
+assert(formatting.includes("`${repo.operation ? `(${repo.operation.label}) ` : ''}${repo.name} → ${repo.branch}`"), 'Status rows must render upstream operation text as `(operation) repo → branch`');
 assert(operation.includes("state.actions.map(action => ({\n    key: action.key,\n    label: action.label"), 'm options must preserve upstream c/a/s keys and labels from detected state');
 assert(operation.includes("git(action.args, repoPath, { GIT_EDITOR: 'true' })"), 'operation continue must suppress an unavailable terminal editor while preserving the existing commit message');
 assert(operation.includes("detectGitOperationState(repoPath)"), 'operation actions must re-read Git state instead of trusting a stale Status row');

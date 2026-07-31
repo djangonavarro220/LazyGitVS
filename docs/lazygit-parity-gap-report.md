@@ -85,7 +85,8 @@ Canonical disputed claims were re-audited offline against the locally preserved 
 - [x] Copy commit attribute menu.
 - [x] Checkout commit detached.
 - [x] New branch off commit.
-- [x] Reword HEAD commit.
+- [x] **Bounded partial Reword slice**: configured `keybinding.commits.renameCommit` (default `r`) is routed only from attached top-level Local Commits and rewords exactly one selected reachable ordinary non-merge commit without a destructive confirmation. It captures full `%B` before native **Reword commit** summary input, preserves the remaining body, and revalidates repository/branch/HEAD/selected hash/message after input. `HEAD` uses exact `git commit --allow-empty --amend --only -m <summary>` plus body only when nonempty; a selected ancestor/root uses private 0700 typed `edit` rebase without `--keep-empty`, proves stopped HEAD, amends, then continues with `GIT_EDITOR=true`.
+- Reword/amend selected non-HEAD commits is intentionally limited to clean attached-current-branch Local Commits with `commit.gpgSign=false`; visual ranges, branch views, merges, active operations, dirty-tree auto-stash, editor-based `R`, and generic rebase UI remain gaps. Cancellation and post-input drift are read-only. Conflicts remain active for Status recovery without auto-abort, while no-operation failures surface their exact Git error.
 - [x] Amend HEAD with staged changes.
 - [x] Create fixup commit.
 - [x] Bounded Fixup menu for ordinary commit/range selections.
@@ -215,8 +216,6 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 - [ ] Select commits of current branch `*`.
 - [ ] Worktree options `w`.
 - [ ] External difftool `<ctrl+t>`.
-- [ ] Reword/amend selected non-HEAD commit via rebase; current implementation is mostly HEAD-safe only.
-
 ### Commit files gaps
 - [ ] Full visual commit-range drilldown/diff-to semantics; Enter currently refuses a range before opening the bounded single-commit surface.
 - [ ] Submodule and symlink checkout edge cases.

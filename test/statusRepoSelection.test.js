@@ -24,6 +24,7 @@ const { changedFiles, discoverWorkspaceRepositories, getActiveWorkspaceRoot, set
 
 const root = path.join(__dirname, '..');
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
+const formatting = fs.readFileSync(path.join(root, 'src', 'viewFormatting.ts'), 'utf8');
 const gitService = fs.readFileSync(path.join(root, 'src', 'gitService.ts'), 'utf8');
 const lazygitConfig = fs.readFileSync(path.join(root, 'src', 'lazygitConfig.ts'), 'utf8');
 const pkg = fs.readFileSync(path.join(root, 'package.json'), 'utf8');
@@ -52,7 +53,7 @@ assert(extension.includes('await Promise.all([\n      vscode.commands.executeCom
 const keybindings = JSON.parse(pkg).contributes.keybindings;
 assert(!keybindings.some(binding => ['lazygitvs.undoReflog', 'lazygitvs.redoReflog'].includes(binding.command)), 'Status must not retain static undo/redo keys that conflict with lazygit config');
 assert(extension.includes('repoChangeDescription(repo)'), '1 Status rows must show pending-change counts next to each repository, like VS Code SCM badges');
-assert(extension.includes("repo.changeCount ? `${repo.changeCount} change${repo.changeCount === 1 ? '' : 's'}` : 'clean'"), 'Clean and dirty repositories must be distinguishable in the Status repository list');
+assert(formatting.includes("repo.changeCount ? `${repo.changeCount} change${repo.changeCount === 1 ? '' : 's'}` : 'clean'"), 'Clean and dirty repositories must be distinguishable in the Status repository list');
 assert(extension.includes('description: repoChangeDescription(repo)'), 'Repository QuickPick must also show pending-change counts before switching repos');
 
 assert(extension.includes('const current = getActiveWorkspaceRoot();'), '1 Status must not visually mark the first repository as current before explicit Status selection');

@@ -5,6 +5,7 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const config = fs.readFileSync(path.join(root, 'src', 'lazygitConfig.ts'), 'utf8');
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
+const formatting = fs.readFileSync(path.join(root, 'src', 'viewFormatting.ts'), 'utf8');
 const webviewSecurity = fs.readFileSync(path.join(root, 'src', 'webviewSecurity.ts'), 'utf8');
 const dogfood = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
 const dogfoodReporting = fs.readFileSync(path.join(root, 'scripts', 'dogfood', 'reporting.js'), 'utf8');
@@ -44,7 +45,7 @@ assert(dogfood.includes("await chord(Input, 'ctrl+alt+f')"), 'targeted undo dogf
 assert(!dogfood.includes("dispatchLgvsKey(Runtime, 'x'"), 'targeted undo dogfood must not substitute synthetic DOM keyboard evidence for real input');
 assert(dogfood.includes("await key(Input, 'x')"), 'targeted undo dogfood must physically send the configured key into the focused Files webview');
 assert(extension.includes("type:'dogfoodBoundary'"), 'the real webview key router must expose bounded dogfood boundary events');
-assert(extension.includes("process.env.LGVS_DOGFOOD_BOUNDARY_REPORT"), 'boundary events must be gated by the existing dogfood environment/reporting channel');
+assert(formatting.includes("process.env.LGVS_DOGFOOD_BOUNDARY_REPORT"), 'boundary events must be gated by the existing dogfood environment/reporting channel');
 assert(dogfood.includes('boundaryEvents'), 'targeted undo dogfood must persist boundary events in its normal report');
 assert(dogfood.includes("event === 'reflogUndo'"), 'targeted undo dogfood must assert that physical x emitted reflogUndo');
 assert(dogfood.includes("path.join(SHOTS, REPORT_SLUG)"), 'each targeted lane must retain screenshots in its own report-scoped directory');
