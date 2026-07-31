@@ -29,6 +29,8 @@ export const allowedMessageTypes = new Set([
   'reflogUndo',
   'reflogRedo',
   'commitAction',
+  'checkoutCommitFile',
+  'discardCommitFile',
   'panelAction',
   'moveBlock',
   'focusMainView',

@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-export type RebaseTodoAction = 'drop' | 'squash' | 'fixup';
+export type RebaseTodoAction = 'drop' | 'squash' | 'fixup' | 'edit';
 export type RebaseTodoActionFlag = '' | '-C';
 
 export const INTERACTIVE_REBASE_ARGS = ['rebase', '--interactive', '--autostash', '--keep-empty', '--no-autosquash', '--rebase-merges'];
@@ -22,7 +22,7 @@ const sequenceEditorSource = [
   "const rebaseDirectory = path.basename(path.dirname(resolvedTodo));",
   "if (rebaseDirectory !== 'rebase-merge' && rebaseDirectory !== 'rebase-apply') fail('refusing to edit a non-rebase todo');",
   "const action = process.env.LGVS_REBASE_TODO_ACTION;",
-  "if (action !== 'drop' && action !== 'squash' && action !== 'fixup') fail('invalid rebase todo action');",
+  "if (action !== 'drop' && action !== 'squash' && action !== 'fixup' && action !== 'edit') fail('invalid rebase todo action');",
   "const actionFlag = process.env.LGVS_REBASE_TODO_FLAG || '';",
   "if (actionFlag !== '' && actionFlag !== '-C') fail('invalid rebase todo action flag');",
   "if (actionFlag && action !== 'fixup') fail('rebase todo action flag is only valid for fixup');",
@@ -91,13 +91,15 @@ export async function runSelectedCommitRebase(input: {
   actionFlag?: RebaseTodoActionFlag;
   base?: string;
   useRoot: boolean;
+  keepEmpty?: boolean;
   temporaryDirectoryPrefix: string;
 }): Promise<void> {
   if (!input.useRoot && !input.base) throw new Error('Interactive rebase requires a base commit or --root.');
   const actionFlag = validateActionFlag(input.action, input.actionFlag);
   const editor = createSequenceEditor(input.temporaryDirectoryPrefix, input.hashes);
   try {
-    await runGit(input.repoPath, [...INTERACTIVE_REBASE_ARGS, ...(input.useRoot ? ['--root'] : [input.base!])], {
+    const rebaseArgs = input.keepEmpty === false ? INTERACTIVE_REBASE_ARGS.filter(arg => arg !== '--keep-empty') : INTERACTIVE_REBASE_ARGS;
+    await runGit(input.repoPath, [...rebaseArgs, ...(input.useRoot ? ['--root'] : [input.base!])], {
       ...process.env,
       GIT_SEQUENCE_EDITOR: editor.command,
       GIT_EDITOR: 'true',
