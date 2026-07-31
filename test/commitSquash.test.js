@@ -146,6 +146,8 @@ function assertBlocked(outcome, reason, fragment) {
     assert.throws(() => rewriteSelectedPickTodo(todo, ['eeeeeee'], 'squash'), /exactly one|missing/i, 'missing picks must fail closed');
     assert.throws(() => rewriteSelectedPickTodo(`${todo}pick bbbbbbb duplicate\n`, ['bbbbbbb'], 'squash'), /exactly one|duplicate/i, 'duplicate todo picks must fail closed');
     assert.throws(() => rewriteSelectedPickTodo(todo, ['bbbbbbb', 'bbbbbbb'], 'drop'), /duplicate/i, 'duplicate requested hashes must never be coalesced');
+    assert.throws(() => rewriteSelectedPickTodo(todo, ['bbbbbbb'], 'squash', '-C'), /fixup|flag/i, 'the Fixup-only -C flag must not change Squash semantics');
+    assert.throws(() => rewriteSelectedPickTodo(todo, ['bbbbbbb'], 'drop', '-C'), /fixup|flag/i, 'the Fixup-only -C flag must not change Drop semantics');
     assert.throws(() => rewriteSelectedPickTodo(todo.replace('pick bbbbbbb selected', 'fixup bbbbbbb selected'), ['bbbbbbb'], 'squash'), /exactly one|missing/i, 'only a generated pick directive may be changed');
   });
 
@@ -162,7 +164,7 @@ function assertBlocked(outcome, reason, fragment) {
     assert(config.includes("squashDown: 's'"), 'the default must remain lazygit keybinding.commits.squashDown = s');
     assert(extension.includes("key: key(k.squashDown) || 's', label: '$(combine) Squash selected commit(s)'"), 'Commits Squash must read keybinding.commits.squashDown');
     assert(extension.includes("panel==='commits'&&!${this.commitFilesFor ? 'true' : 'false'}&&hit(e,u.remove,c.squashDown"), 'only the top-level Commits route may promote configured squashDown into a commit action');
-    assert(extension.includes('if ((cherryPickBufferAction || dropAction || squashAction) && this.commitFilesFor) return;'), 'Squash must not execute from the commit-files subview');
+    assert(extension.includes('if ((cherryPickBufferAction || dropAction || squashAction || fixupAction) && this.commitFilesFor) return;'), 'Squash must not execute from the commit-files subview');
     assert(extension.includes("if(panel==='hunks'&&hit(e,u.select,u.togglePanel,u.remove"), 'Hunks must retain their own configured d path');
     assert(extension.includes("if(hit(e,u.remove)){e.preventDefault();vscode.postMessage({type:'discardMenu'});return;}"), 'Files must retain their configured d discard path');
     assert(model.includes("SQUASH_COMMIT_TITLE = 'Squash'") && model.includes("SQUASH_COMMIT_PROMPT = 'Are you sure you want to squash the selected commit(s) into the commit below?'"), 'Squash must retain the upstream title and prompt');
