@@ -29,12 +29,11 @@ const sequenceEditorSource = [
   "let hashes; try { hashes = JSON.parse(process.env.LGVS_REBASE_TODO_HASHES || ''); } catch (_) { fail('invalid selected-hash environment data'); }",
   "if (!Array.isArray(hashes) || !hashes.length || hashes.some(hash => typeof hash !== 'string' || !hash)) fail('missing selected hashes');",
   "if (new Set(hashes).size !== hashes.length) fail('duplicate selected hashes');",
-  "const selected = new Set(hashes);",
   "const counts = new Map(hashes.map(hash => [hash, 0]));",
   "const source = fs.readFileSync(resolvedTodo, 'utf8');",
   "const lines = source.match(/[^\\n]*\\n|[^\\n]+/g) || [];",
   "const directive = action + (actionFlag ? ' ' + actionFlag : '');",
-  "const rewritten = lines.map(line => { const match = line.match(/^pick ([^\\s]+)(?=\\s|$)/); if (!match || !selected.has(match[1])) return line; counts.set(match[1], counts.get(match[1]) + 1); return directive + ' ' + line.slice(5); });",
+  "const rewritten = lines.map(line => { const match = line.match(/^pick ([^\\s]+)(?=\\s|$)/); if (!match) return line; const matches = hashes.filter(hash => hash === match[1] || hash.startsWith(match[1]) || match[1].startsWith(hash)); if (!matches.length) return line; if (matches.length !== 1) fail('ambiguous selected hashes for pick ' + match[1]); const hash = matches[0]; counts.set(hash, counts.get(hash) + 1); return directive + ' ' + line.slice(5); });",
   "for (const hash of hashes) if (counts.get(hash) !== 1) fail('expected exactly one pick ' + hash + ', found ' + counts.get(hash));",
   "fs.writeFileSync(resolvedTodo, rewritten.join(''), 'utf8');",
 ].join('\n');
@@ -71,13 +70,16 @@ export function rewriteSelectedPickTodo(todo: string, hashes: readonly string[],
   const validatedActionFlag = validateActionFlag(action, actionFlag);
   if (!hashes.length || hashes.some(hash => !hash)) throw new Error('Rebase todo rewrite requires selected hashes.');
   if (new Set(hashes).size !== hashes.length) throw new Error('Rebase todo rewrite received duplicate selected hashes.');
-  const selected = new Set(hashes);
   const counts = new Map(hashes.map(hash => [hash, 0]));
   const lines = todo.match(/[^\n]*\n|[^\n]+/g) ?? [];
   const rewritten = lines.map(line => {
     const match = line.match(/^pick (\S+)(?=\s|$)/);
-    if (!match || !selected.has(match[1])) return line;
-    counts.set(match[1], (counts.get(match[1]) ?? 0) + 1);
+    if (!match) return line;
+    const matches = hashes.filter(hash => hash === match[1] || hash.startsWith(match[1]) || match[1].startsWith(hash));
+    if (!matches.length) return line;
+    if (matches.length !== 1) throw new Error(`Rebase todo rewrite found ambiguous selected hashes for pick ${match[1]}.`);
+    const hash = matches[0];
+    counts.set(hash, (counts.get(hash) ?? 0) + 1);
     return `${action}${validatedActionFlag ? ` ${validatedActionFlag}` : ''} ${line.slice(5)}`;
   });
   for (const hash of hashes) if (counts.get(hash) !== 1) throw new Error(`Rebase todo rewrite expected exactly one pick ${hash}, found ${counts.get(hash) ?? 0}.`);
