@@ -134,15 +134,18 @@ export function commitFilesOwnerWithRow(owner: CommitFilesOwner, selectionEpoch:
   return freeze({ ...owner, selectionEpoch, selectedRowIdentity, capability: undefined });
 }
 
-export function commitFilesHostMessageAllowed(panel: string, context: CommitFilesLiveContext, capability = context.capability): boolean {
+export function commitFilesFocusMessageAllowed(panel: string, context: CommitFilesLiveContext, capability = context.capability): boolean {
   return panel === 'commits' &&
     context.physicalPanel === 'commits' &&
-    context.activeViewPanel === 'commits' &&
     !!context.currentOwner &&
     typeof capability === 'string' &&
     capability.length > 0 &&
     context.currentOwner.capability === capability &&
     context.capability === capability;
+}
+
+export function commitFilesHostMessageAllowed(panel: string, context: CommitFilesLiveContext, capability = context.capability): boolean {
+  return context.activeViewPanel === 'commits' && commitFilesFocusMessageAllowed(panel, context, capability);
 }
 
 export function commitFilesOwnerIsCurrent(owner: CommitFilesOwner, context: CommitFilesLiveContext, requireActive = true): boolean {

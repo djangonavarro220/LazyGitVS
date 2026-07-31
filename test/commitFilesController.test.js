@@ -9,6 +9,7 @@ assert(fs.existsSync(controllerPath), 'Commit-files must have one isolated Commi
 const controllerSource = fs.readFileSync(controllerPath, 'utf8');
 const {
   CommitFilesController,
+  commitFilesFocusMessageAllowed,
   commitFilesHostMessageAllowed,
   loadCommitFilesFor,
 } = require('../out/commitFilesController');
@@ -37,6 +38,12 @@ assert(controllerSource.includes('commitFileCheckout') && controllerSource.inclu
   assert(controller.active, 'controller should own the active drilldown.');
   const renderCapability = controller.capabilityForRender();
   assert.equal(commitFilesHostMessageAllowed('commits', controller.context(), renderCapability), true);
+  const physicallyFocusedContext = { ...controller.context(), activeViewPanel: 'files' };
+  assert.equal(commitFilesHostMessageAllowed('commits', physicallyFocusedContext, renderCapability), false, 'actions stay blocked until Commits is active');
+  assert.equal(commitFilesFocusMessageAllowed('commits', physicallyFocusedContext, renderCapability), true, 'the current physical Commit-files document may adopt focus before it is logically active');
+  assert.equal(commitFilesFocusMessageAllowed('files', physicallyFocusedContext, renderCapability), false);
+  assert.equal(commitFilesFocusMessageAllowed('commits', physicallyFocusedContext, `${renderCapability}-stale`), false);
+  assert(extension.includes("type === 'focusArea' ? commitFilesFocusRequestAllowed() : commitFilesRequestAllowed()"), 'only focusArea may use the focus-adoption capability predicate');
   controller.invalidateTransient({ selectionEpoch: 2, filterText: 'needle' });
   assert.deepStrictEqual(controller.rows({ showFileTree: false }).map(row => row.file?.path).filter(Boolean), ['src/needle.ts'], 'Commit-files search must filter controller-owned rows');
   assert.equal(controller.owner.selectedRowIdentity, 'file:src/needle.ts', 'filtering must rebind ownership to the visible selected row');

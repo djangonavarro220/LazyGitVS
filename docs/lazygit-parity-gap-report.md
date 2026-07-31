@@ -283,7 +283,7 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 - [ ] Scope commands by panel/mode without stealing Vim/editor keys.
 
 ### Accessibility / performance gaps
-- [ ] Add `aria-activedescendant` and stable row ids.
+- [x] Active-row accessibility: the focused webview exposes the panel as a listbox, every rendered selectable row has a stable index-derived id, and `aria-activedescendant` follows the selected row only while that panel owns focus.
 - [ ] Keyboard focus announcement polish.
 - [ ] Virtualization should eventually preserve scroll position and not just trim HTML around active row.
 - [ ] Large-repo profiling and refresh throttling beyond current basic refresh guards.
