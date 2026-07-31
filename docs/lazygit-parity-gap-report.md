@@ -76,6 +76,8 @@ Canonical disputed claims were re-audited offline against the locally preserved 
 - [x] Show commit patch/stat preview.
 - [x] `<enter>` drills into commit files.
 - [x] Commit-file patch preview.
+- [x] **Bounded partial Commit-files checkout slice**: after `Enter` opens exactly one inspected commit with no visual range, configured `keybinding.commitFiles.checkoutCommitFile` (default `c`) checks out the selected tree file or directory with captured-repository argv `git checkout <commit> -- <path>`. It verifies the commit, validates a non-empty relative literal path, inspects NUL-delimited selected-path porcelain status before and immediately before mutation, and refuses tracked staged/unstaged/conflict/deleted/renamed paths with a `local modifications` error. Unrelated changes are allowed. Because Git can silently overwrite an untracked path here, LGVS fails closed on source-tree collisions. Success refreshes while preserving Commit-files selection/preview; there is no confirmation.
+- Enter with an active visual commit range refuses before setting Commit-files state, rather than silently choosing one endpoint. Full visual-range diff/to semantics remain open.
 - [x] Commit-file `<enter>` enters a read-only VS Code HUNK/LINE view for per-file commit patches, with `Esc` returning to the commit-files subview; lazygit uses this surface for patch-builder line entry, while LGVS documents this as a VS Code-native read-only difference until patch-builder support lands.
 - [x] Copy commit attribute menu.
 - [x] Checkout commit detached.
@@ -213,7 +215,8 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 - [ ] Reword/amend selected non-HEAD commit via rebase; current implementation is mostly HEAD-safe only.
 
 ### Commit files gaps
-- [ ] Checkout file from commit `c`.
+- [ ] Full visual commit-range drilldown/diff-to semantics; Enter currently refuses a range before opening the bounded single-commit surface.
+- [ ] Submodule and symlink checkout edge cases.
 - [ ] Discard this commit's changes to file `d` via interactive rebase flow.
 - [ ] Copy path / copy file info exact menu.
 - [ ] Commit-file custom patch include/exclude.

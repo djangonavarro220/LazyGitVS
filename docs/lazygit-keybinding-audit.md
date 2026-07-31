@@ -90,6 +90,13 @@ This is the behavior spec for LazyGitVS. If LGVS differs, it needs an explicit V
 - `T`: Tag commit.
 - `<c-l>`: View log options.
 
+## Commit files
+
+- `c` (configured `keybinding.commitFiles.checkoutCommitFile`, default `c`): **bounded partial Commit-files checkout parity**. Once `Enter` has opened exactly one inspected commit with no visual commit range, checkout the selected file or directory from that captured commit with exact argv `git checkout <commit> -- <path>` through the VS Code extension process; no terminal and no confirmation.
+- The selected repository path, commit hash, and tree-row path are captured at action time. The path must be a non-empty relative literal repository path; absolute, traversal, NUL, and Git-pathspec-magic values are refused. The commit is verified and NUL-delimited selected-path porcelain status is rechecked immediately before checkout.
+- Tracked staged, unstaged, conflicted, deleted, or renamed local changes at/in the selected path fail with `local modifications`; unrelated working-tree changes remain allowed. Git can silently overwrite an untracked path in this workflow, so LGVS adds a fail-closed source-tree collision check before checkout.
+- This `c` is scoped only to Commit-files; top-level Commits retains its configured `c` Fixup-menu meaning, Files retains its configured `c` Commit meaning, and HUNK/LINE retains its own action map. Visual-range Commit-files endpoint/diff semantics, submodules, symlinks, discard `d`, copy menus, patch mode, and external diff remain gaps.
+
 ## Stash
 
 - `<space>`: Apply.

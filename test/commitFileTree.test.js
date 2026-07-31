@@ -165,9 +165,11 @@ assert(commitExpandedRows.some(row => row.kind === 'file' && row.path === 'src/a
 assert(extension.includes('private collapsedCommitFileDirs = new Set<string>();'), 'Commit file tree needs its own collapsed-directory state');
 assert(extension.includes('private fileTreeRows(): readonly Readonly<FileTreeRow>[] { return this.filePanelListModel.read({'), 'Files tree must use the production cache seam');
 assert(extension.includes('collapsedDirs: this.collapsedFileDirs }); }'), 'Files tree must use only Files collapse state');
-assert.match(extension, /private commitFileTreeRows\(\): TreeRow<ChangedFile & CommitFile>\[\] \{ return this\.treeRowsFor\(this\.commitFileItems\.map\(file => this\.commitFileAsChangedFile\(file\)\), this\.collapsedCommitFileDirs\); \}/, 'Commit tree must use only commit-file collapse state');
+const commitFileCheckout = fs.readFileSync(path.join(root, 'src', 'commitFileCheckout.ts'), 'utf8');
+assert.match(commitFileCheckout, /export function projectCommitFileTreeRows\(/, 'Commit tree projection must live with Commit-files checkout safety helpers');
+assert.match(extension, /private commitFileTreeRows\(\) \{ return commitFileCheckout\.projectCommitFileTreeRows\(this\.commitFileItems, this\.lazygitGui, this\.collapsedCommitFileDirs\); \}/, 'Commit tree must use only commit-file collapse state through the extracted projection');
 assert.match(extension, /if \(panel === 'status' \|\| this\.activeLength\(panel\) === 0\) await this\.refresh\(false\)/, 'Focusing an empty lazily rendered panel must refresh real repository data before navigation');
-assert.match(extension, /private async toggleCurrentCommitFileTreeNode\(\)[\s\S]*this\.collapsedCommitFileDirs\.has\(row\.path\)[\s\S]*this\.collapsedCommitFileDirs\.add\(row\.path\)/, 'Enter on a commit directory must toggle only commit-file collapse state');
+assert.match(extension, /private async toggleCurrentCommitFileTreeNode\(\)[\s\S]*toggledCommitFileCollapsedDirs\(this\.collapsedCommitFileDirs, this\.currentCommitFileTreeRow\(\)\)[\s\S]*this\.collapsedCommitFileDirs = next/, 'Enter on a commit directory must toggle only commit-file collapse state through the extracted projection');
 assert.match(extension, /if \(await this\.toggleCurrentCommitFileTreeNode\(\)\) return;[\s\S]*const f = this\.currentCommitFile\(\);[\s\S]*if \(f\) return this\.enterCommitFileHunkMode\(f\);/, 'Enter toggles a directory and enters HUNK mode only for the selected file row');
 
 console.log('commitFileTree tests passed');

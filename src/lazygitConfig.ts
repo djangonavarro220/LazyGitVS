@@ -7,6 +7,7 @@ export type LazyGitKeymap = {
   files: Record<string, string>;
   branches: Record<string, string>;
   commits: Record<string, string>;
+  commitFiles: Record<string, string>;
   stash: Record<string, string>;
   main: Record<string, string>;
 };
@@ -48,6 +49,7 @@ export const DEFAULT_LAZYGIT_KEYMAP: LazyGitKeymap = {
   files: { copyPath: '<c-o>', copyFileInfoToClipboard: 'y', openStatusFilter: '<c-b>', toggleTreeView: '`', collapseAll: '-', expandAll: '=', sortOrder: 's', commitChanges: 'c', commitChangesWithoutHook: 'w', amendLastCommit: 'A', commitChangesWithEditor: 'C', refreshFiles: 'r', stashAllChanges: 's', viewStashOptions: 'S', toggleStagedAll: 'a', viewResetOptions: 'D', confirmDiscard: 'x', ignoreFile: 'i', fetch: 'f' },
   branches: { checkoutBranchByName: 'c', forceCheckoutBranch: 'F', checkoutPreviousBranch: '-', rebaseBranch: 'r', renameBranch: 'R', mergeIntoCurrentBranch: 'M', setUpstream: 'u', sortOrder: 's', createTag: 'T', pushTag: 'P', fetchRemote: 'f', addForkRemote: 'F' },
   commits: { squashDown: 's', renameCommit: 'r', renameCommitWithEditor: 'R', viewResetOptions: 'g', markCommitAsFixup: 'f', setFixupMessage: 'c', createFixupCommit: 'F', squashAboveCommits: 'S', moveDownCommit: '<ctrl+j>', moveUpCommit: '<ctrl+k>', amendToCommit: 'A', resetCommitAuthor: 'a', pickCommit: 'p', revertCommit: 't', createTag: 'T', tagCommit: 'T', cherryPickCopy: 'C', pasteCommits: 'V', markCommitAsBaseForRebase: 'B', checkoutCommit: '<space>', resetCherryPick: '<ctrl+r>', copyCommitAttributeToClipboard: 'y', openLogMenu: '<ctrl+l>', openInBrowser: 'o', openPullRequestInBrowser: 'G', viewBisectOptions: 'b', startInteractiveRebase: 'i', selectCommitsOfCurrentBranch: '*', newBranch: 'n' },
+  commitFiles: { checkoutCommitFile: 'c' },
   stash: { apply: '<space>', popStash: 'g', renameStash: 'r', newBranch: 'n' },
   main: { toggleSelectHunk: 'a', pickBothHunks: 'b', editSelectHunk: 'E' }
 };

@@ -8,6 +8,7 @@ const root = path.join(__dirname, '..');
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
 const gitService = fs.readFileSync(path.join(root, 'src', 'gitService.ts'), 'utf8');
 const lazygitConfig = fs.readFileSync(path.join(root, 'src', 'lazygitConfig.ts'), 'utf8');
+const commitFileCheckout = fs.readFileSync(path.join(root, 'src', 'commitFileCheckout.ts'), 'utf8');
 const dogfoodUi = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
 const parityGapReport = fs.readFileSync(path.join(root, 'docs', 'lazygit-parity-gap-report.md'), 'utf8');
 const parityAudit = fs.readFileSync(path.join(root, 'docs', 'lazygit-parity-audit.md'), 'utf8');
@@ -41,8 +42,8 @@ assert(!gitService.includes("rest.join(' → ')"), 'Stash files must not collaps
 assert(!extension.includes("showText(`LazyGitVS ${this.commitFilesFor.hash}:${f.path}`"), 'Commit-file navigation must not regress to readonly text patch buffers');
 assert(extension.includes("if (f) return this.enterCommitFileHunkMode(f);"), 'Commit-file Enter must open the selected commit file in HUNK/LINE mode, not just a passive patch preview');
 assert(extension.includes('private async enterCommitFileHunkMode(file: CommitFile)'), 'Commit file HUNK/LINE mode must have an explicit read-only entry path');
-assert(extension.includes("this.allHunks = parseDiffHunks(patch, false);"), 'Commit file HUNK/LINE mode must parse hunks from the selected commit-file patch');
-assert(extension.includes('this.readOnlyHunkMode = true;'), 'Commit file HUNK/LINE mode must be read-only: no stage/unstage mutations on historical commits');
+assert(commitFileCheckout.includes('const allHunks = parseDiffHunks(patch, false);'), 'Commit file HUNK/LINE mode must parse hunks from the selected commit-file patch through the extracted helper');
+assert(commitFileCheckout.includes('readOnlyHunkMode: true,'), 'Commit file HUNK/LINE state must remain read-only after helper extraction');
 assert(extension.includes("if (this.readOnlyHunkMode) { this.statusLine = 'Commit diff is read-only: j/k move · a line · Esc back';"), 'Read-only commit hunk mode must block stage/unstage toggles');
 assert(extension.includes("if (this.readOnlyHunkMode && this.commitFilesFor) { this.activePanel = 'commits';"), 'Esc from read-only commit-file HUNK mode must return to the commit-files subview, not jump to Files');
 assert(extension.includes("await this.revealPanelView('commits');"), 'Commit-file HUNK mode Esc should restore Commits webview focus for commit-file navigation parity');
