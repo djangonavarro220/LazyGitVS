@@ -285,6 +285,8 @@ The canonical rows and immutable source links are in `docs/lazygit-parity-ledger
 <!-- parity-claim: {"id":"commits.C","parity":"gap","reviewedAt":"2026-07-11","claim":"Commit `C` is **Copy (cherry-pick)** and invokes upstream's copy-range path. LGVS preserves delayed `V` paste but stores only the current hash; selected ranges and cancellation/reset semantics remain an explicit gap in the canonical ledger."} -->
 - Commit `C` is **Copy (cherry-pick)** and invokes upstream's copy-range path. LGVS preserves delayed `V` paste but stores only the current hash; selected ranges and cancellation/reset semantics remain an explicit gap in the canonical ledger.
 
+> **Current working-tree scope (not a replacement for the immutable 2026-07-11 ledger snapshot):** the bounded implementation now supplies partial C/V/reset cherry-pick parity in Commits—range copy/toggle, configured reset, source-repository isolation, oldest-first paste, and cancellation/conflict retention—but only for clean working trees and non-merge commits. Auto-stash, merge `-m 1`, Git-version empty-commit flags, and full range parity remain deferred, so this is not a full-gap closure.
+
 ## Keybindings que LGVS debe copiar primero
 
 ### Global keybindings

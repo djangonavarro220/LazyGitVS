@@ -84,8 +84,8 @@ Canonical disputed claims were re-audited offline against the locally preserved 
 - [x] Amend HEAD with staged changes.
 - [x] Create fixup commit.
 - [x] Mark fixup target.
-- [x] `C` copies commit for later cherry-pick.
-- [x] `V` pastes/cherry-picks copied commits.
+- [x] **Bounded partial C/V/reset cherry-pick slice**: Commits `v` provides a sticky visual range; Shift+Up/Down creates a non-sticky range; `C` copies/toggles the current single/range buffer in visible newest-first order; `V` confirms then invokes one oldest-first `git cherry-pick` argv; and configured `resetCherryPick` (default `<ctrl+r>`) clears only copied state. Source repository/list context is recorded, repository switches clear the buffer, successful paste keeps it reusable but hides copied-row highlighting, and the selected target hash is restored after refresh.
+- This bounded slice deliberately rejects a dirty target worktree and merge commits before mutation. Cancellation and Git conflicts retain the buffer and let the existing Status operation flow expose recovery. Auto-stash, merge `-m 1`, Git-version empty-commit flags, and universal/cross-panel range refactoring remain in the open gap below.
 - [x] Revert commit.
 - [x] Tag commit.
 - [x] Reset options.
@@ -187,7 +187,7 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 - [ ] Merge/rebase option menus instead of simplified direct commands.
 
 ### Commit gaps
-- [ ] Commit `C` copies only the current commit; upstream copies a selected range and supports cancelling/resetting that selection before `V` paste.
+- [ ] Full upstream cherry-pick parity remains open beyond the bounded C/V/reset slice: no auto-stash, merge commits are not supported (`-m 1` is intentionally absent), no Git-version-specific empty-commit flags, and no universal range-selection refactor outside Commits.
 - [ ] Squash down `s`.
 - [ ] Autosquash/apply fixups `S`.
 - [ ] Drop commit `d`.
@@ -199,7 +199,7 @@ These are behaviours that currently work in LGVS but are not trusted enough to c
 - [ ] Amend commit attribute `a`.
 - [ ] Open pull request in browser `G`.
 - [ ] Move commits to new branch `N`.
-- [ ] Reset copied cherry-pick selection `<ctrl+r>`.
+
 - [ ] Select commits of current branch `*`.
 - [ ] Worktree options `w`.
 - [ ] External difftool `<ctrl+t>`.

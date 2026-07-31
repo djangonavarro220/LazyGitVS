@@ -68,8 +68,11 @@ This is the behavior spec for LazyGitVS. If LGVS differs, it needs an explicit V
 - `o`: Open commit in browser.
 - `n`: New branch off commit.
 - `g`: Reset options.
-- `C`: Copy for cherry-pick. It is not immediate cherry-pick.
-- `V`: Paste/cherry-pick copied commits.
+- `v`: Start/clear sticky commit range selection; normal movement extends it.
+- `Shift+↑/↓`: Create/extend a non-sticky commit range; normal movement clears it.
+- `C`: Copy/toggle the selected commit range for cherry-pick. It is not immediate cherry-pick.
+- `V`: Confirm and paste copied commits oldest-first on the active clean repository.
+- `<ctrl+r>`: Clear copied cherry-pick commits without a Git mutation.
 - `p`: Pick only when mid-rebase.
 - `s`: Squash.
 - `f`: Fixup.
@@ -118,6 +121,6 @@ This is the behavior spec for LazyGitVS. If LGVS differs, it needs an explicit V
 
 - Canonical audited claims live in `docs/lazygit-parity-ledger.json`; CI rejects duplicate, stale, and contradictory rows.
 - Branch `<enter>` now matches upstream: it views commits for the selected branch.
-- Commit `C` matches upstream's delayed `V` paste for one commit, but selected-range copy and cancellation/reset semantics remain a canonical gap.
+- Commits has **partial C/V/reset cherry-pick parity**: range copy/toggle, source-repository isolation, cancellation retention, and configured reset are covered for clean working trees and non-merge commits. Auto-stash, merge `-m 1`, Git-version empty-commit flags, and broad range parity remain gaps; this must not be read as full upstream cherry-pick parity.
 - Several branch/commit/tag options are implemented as simplified direct Git commands rather than lazygit option menus.
 - File tree `-`/`=` collapse/expand and some filter/sort/worktree flows are incomplete.

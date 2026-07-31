@@ -46,10 +46,10 @@ export function branchRow(sel: boolean, branch: Branch, index: number): string {
   return `<div class="row branch-row ${sel ? 'sel' : ''} ${branch.current ? 'current' : ''} ${branch.kind}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(title)}"><span class="cursor">${sel ? '›' : ' '}</span><span class="ref-kind">${branch.current ? '●' : kindLabel}</span><span class="path branch-name">${escapeHtml(branch.label)}</span>${meta ? `<span class="meta branch-meta">${escapeHtml(meta)}</span>` : ''}</div>`;
 }
 
-export function commitRow(sel: boolean, commit: Commit, index: number): string {
+export function commitRow(sel: boolean, commit: Commit, index: number, klass = ''): string {
   const details = commit.relativeDate;
   const titleDetails = `${commit.refs ? ` · ${escapeHtml(commit.refs)}` : ''}${[commit.relativeDate, commit.author].filter(Boolean).map(escapeHtml).map(part => ` · ${part}`).join('')}`;
-  return `<div class="row commit-row ${sel ? 'sel' : ''}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(commit.hash)} · ${escapeHtml(commit.subject)}${titleDetails}"><span class="cursor">${sel ? '›' : ' '}</span><span class="hash-pill">${escapeHtml(commit.hash)}</span><span class="commit-main path">${escapeHtml(commit.subject)}</span>${details ? `<span class="meta commit-meta">${escapeHtml(details)}</span>` : ''}</div>`;
+  return `<div class="row commit-row ${sel ? 'sel' : ''} ${klass}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(commit.hash)} · ${escapeHtml(commit.subject)}${titleDetails}"><span class="cursor">${sel ? '›' : ' '}</span><span class="hash-pill">${escapeHtml(commit.hash)}</span><span class="commit-main path">${escapeHtml(commit.subject)}</span>${details ? `<span class="meta commit-meta">${escapeHtml(details)}</span>` : ''}</div>`;
 }
 
 export function escapeHtml(s: string): string {

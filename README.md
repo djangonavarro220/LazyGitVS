@@ -131,9 +131,18 @@ D           Reset/nuke menu
 
 ```text
 b           View bisect options for the selected commit
+v           Start/clear a sticky visual commit range
+Shift+↑/↓   Create/extend a non-sticky visual commit range
+C           Copy/toggle the selected commit range for cherry-pick
+V           Confirm and paste copied commits oldest-first
+Ctrl+R      Clear copied commits without changing Git
 ```
 
 The key follows lazygit's `keybinding.commits.viewBisectOptions` setting (default `b`). The native `Bisect` picker offers only actions valid for the current Git bisect state and asks before resetting a bisect.
+
+LazyGitVS has **partial Commits cherry-pick range parity**: `C` consumes the current selected range (or one commit), toggles a fully copied range off, and keeps de-duplicated hashes in the visible newest-first order. `V` asks `Are you sure you want to cherry-pick the N copied commit(s) onto this branch?`, then sends Git the same buffer oldest-first. `<ctrl+r>` follows `keybinding.commits.resetCherryPick` (default `<ctrl+r>`) and only clears the copied buffer; it does not invoke Git. Copy state records its source repository and list context, is cleared when switching repositories, and is rejected before any cross-repository paste.
+
+This is deliberately bounded rather than full lazygit parity: the target working tree must be clean; copied merge commits are rejected; and cancellation or a Git conflict leaves the buffer intact. Auto-stash, merge-mainline (`-m 1`) handling, Git-version-specific empty-commit flags, and broader cross-panel range behavior remain deferred. After a successful paste, the target selection is restored by hash and the reusable buffer remains available while copied-row highlighting is hidden.
 
 Files use explicit staged/worktree badges instead of raw porcelain soup:
 
@@ -174,7 +183,7 @@ Hunk/line selection is shown in the editor with highlights and gutter markers. S
 - SCM sidebar Git cockpit with lazygit-style panels
 - real file previews and VS Code diff/editor integration
 - file stage/unstage, stage all, unstage all
-- range selection in Files
+- range selection in Files, plus bounded partial cherry-pick ranges in Commits
 - hunk and line stage/unstage
 - branch, commit, stash, conflict, tag, and remote panels
 - push, pull/fetch, stash, discard, reset, branch, commit, conflict, and selected-commit bisect QuickPick menus

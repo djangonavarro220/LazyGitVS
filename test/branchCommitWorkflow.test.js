@@ -55,10 +55,12 @@ assert(dogfoodUi.includes("commit-file-tree-escape-keeps-context"), 'Dogfood mus
 assert(parityAudit.includes('Enter / commit C re-audit') && parityLedger.rows.some(row => row.id === 'branches.enter' && row.upstreamBehavior === 'View commits'), 'Canonical parity evidence must record the current upstream Branch Enter claim');
 assert(parityGapReport.includes('Branches `<enter>` views commits for the selected branch; re-audited against lazygit keybinding docs/source extract') && !parityGapReport.includes('Branches` `<enter>` semantics are suspect') && !parityGapReport.includes('commit-file `<enter>` should feel like'), 'Parity gap report must clear the stale Enter suspect notes and document the VS Code-native commit-file difference');
 
-assert(extension.includes('private cherryPickCommitHashes: string[] = [];'), 'Commit C must copy commits into a cherry-pick buffer, not cherry-pick immediately');
-assert(extension.includes("label: '$(copy) Copy commit for cherry-pick'"), 'Commit C label must reflect lazygit copy-for-later semantics');
-assert(extension.includes('this.cherryPickCommitHashes = [c.hash];'), 'Commit C must store the selected commit hash for later paste');
+assert(extension.includes('private cherryPickBuffer: CherryPickBuffer = resetCherryPickBuffer();'), 'Commit C must retain a source-aware cherry-pick buffer, not cherry-pick immediately');
+assert(extension.includes("label: '$(copy) Copy/toggle commit range for cherry-pick'"), 'Commit C label must reflect lazygit copy/toggle range semantics');
+assert(extension.includes('toggleCopiedCommitRange(this.cherryPickBuffer'), 'Commit C must delegate range copy/toggle behavior to the bounded cherry-pick model');
 assert(extension.includes("key(k.pasteCommits) || 'V'"), 'Commit V must paste/cherry-pick previously copied commits');
+assert(extension.includes("key(k.resetCherryPick) || '<ctrl+r>'"), 'Commit reset must use the configured resetCherryPick binding');
+assert(extension.includes('pasteCherryPickBuffer'), 'Commit V must use the preflighted bounded cherry-pick model');
 assert(!extension.includes("{ key: key(k.cherryPickCopy) || 'C', label: '$(copy) Cherry-pick commit', description: c.hash, args: ['cherry-pick', c.hash] }"), 'Commit C must not directly run git cherry-pick; that is fake lazygit parity');
 
 assert(extension.includes('private branchSortMode'), 'Branches need a real sort mode for lazygit branch sortOrder, not a missing key');
