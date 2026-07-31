@@ -74,7 +74,7 @@ This is the behavior spec for LazyGitVS. If LGVS differs, it needs an explicit V
 - `V`: Confirm and paste copied commits oldest-first on the active clean repository.
 - `<ctrl+r>`: Clear copied cherry-pick commits without a Git mutation.
 - `p`: Pick only when mid-rebase.
-- `s`: Squash.
+- `s` (configured `keybinding.commits.squashDown`): **partial Squash-down parity** for the selected ordinary single commit or visible range in the top-level Commits list. It confirms, revalidates, changes only matching generated `pick` rows to `squash`, and combines them into the first visible unselected commit below. It rejects dirty trees, active operations, detached/mismatched branch views, unreachable or selected merge commits, and a range reaching the oldest/root commit; a root target uses `--root`.
 - `f`: Fixup.
 - `c`: Set fixup message.
 - `r`: Reword.
@@ -123,5 +123,6 @@ This is the behavior spec for LazyGitVS. If LGVS differs, it needs an explicit V
 - Branch `<enter>` now matches upstream: it views commits for the selected branch.
 - Commits has **partial C/V/reset cherry-pick parity**: range copy/toggle, source-repository isolation, cancellation retention, and configured reset are covered for clean working trees and non-merge commits. Auto-stash, merge `-m 1`, Git-version empty-commit flags, and broad range parity remain gaps; this must not be read as full upstream cherry-pick parity.
 - Commits has **partial Drop parity** through configured `universal.remove`: it covers only clean attached-current-branch ordinary commit/range removal with a private interactive-rebase todo editor and leaves conflicts for Status recovery. Full merge Drop, Drop during an active rebase, and dirty-worktree auto-stash remain gaps; this must not be read as full upstream Drop parity.
+- Commits has **partial Squash-down parity** through configured `keybinding.commits.squashDown`: it covers only clean attached-current-branch ordinary commit/range squashing into the commit immediately below through the same private todo editor, leaving conflicts for Status recovery. Active-rebase todo edits, selected merge handling, dirty-worktree auto-stash, and broader rebase UI remain gaps; this must not be read as full upstream Squash parity.
 - Several branch/commit/tag options are implemented as simplified direct Git commands rather than lazygit option menus.
 - File tree `-`/`=` collapse/expand and some filter/sort/worktree flows are incomplete.

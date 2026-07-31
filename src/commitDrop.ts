@@ -1,9 +1,7 @@
 import * as cp from 'child_process';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
 import { commitRangeBounds, type CommitRangeSelection } from './commitCherryPick';
 import { detectGitOperationState } from './gitOperationState';
+import { rewriteSelectedPickTodo, runSelectedCommitRebase } from './commitRebaseTodo';
 
 export const DROP_COMMIT_TITLE = 'Drop commit';
 export const DROP_COMMIT_PROMPT = 'Are you sure you want to drop the selected commit(s)?';
@@ -28,39 +26,14 @@ export type CommitDropInput = {
 type SelectedCommit = { todoHash: string; hash: string; parent?: string };
 type PreparedDrop = { branch: string; head: string; startIndex: number; commits: SelectedCommit[]; useRoot: boolean; upstream?: string };
 type Preflight = PreparedDrop | { kind: 'blocked'; reason: CommitDropBlockReason; message: string };
-type SequenceEditor = { directory: string; command: string; hashes: string[] };
-
-const rebaseArgs = ['rebase', '--interactive', '--autostash', '--keep-empty', '--no-autosquash', '--rebase-merges'];
-const sequenceEditorSource = [
-  '#!/usr/bin/env node',
-  "const fs = require('node:fs');",
-  "const path = require('node:path');",
-  "function fail(message) { process.stderr.write('LazyGitVS Drop sequence editor: ' + message + '\\n'); process.exit(2); }",
-  "const todoPath = process.argv[2];",
-  "if (process.argv.length !== 3 || typeof todoPath !== 'string') fail('expected exactly one generated rebase todo path');",
-  "const resolvedTodo = path.resolve(todoPath);",
-  "if (path.basename(resolvedTodo) !== 'git-rebase-todo') fail('refusing to edit a file other than git-rebase-todo');",
-  "const rebaseDirectory = path.basename(path.dirname(resolvedTodo));",
-  "if (rebaseDirectory !== 'rebase-merge' && rebaseDirectory !== 'rebase-apply') fail('refusing to edit a non-rebase todo');",
-  "let hashes; try { hashes = JSON.parse(process.env.LGVS_DROP_HASHES || ''); } catch (_) { fail('invalid selected-hash environment data'); }",
-  "if (!Array.isArray(hashes) || !hashes.length || hashes.some(hash => typeof hash !== 'string' || !hash)) fail('missing selected hashes');",
-  "if (new Set(hashes).size !== hashes.length) fail('duplicate selected hashes');",
-  "const selected = new Set(hashes);",
-  "const counts = new Map(hashes.map(hash => [hash, 0]));",
-  "const source = fs.readFileSync(resolvedTodo, 'utf8');",
-  "const lines = source.match(/[^\\n]*\\n|[^\\n]+/g) || [];",
-  "const rewritten = lines.map(line => { const match = line.match(/^pick ([^\\s]+)(?=\\s|$)/); if (!match || !selected.has(match[1])) return line; counts.set(match[1], counts.get(match[1]) + 1); return 'drop ' + line.slice(5); });",
-  "for (const hash of hashes) if (counts.get(hash) !== 1) fail('expected exactly one pick ' + hash + ', found ' + counts.get(hash));",
-  "fs.writeFileSync(resolvedTodo, rewritten.join(''), 'utf8');",
-].join('\n');
 
 function blocked(reason: CommitDropBlockReason, message: string): Extract<CommitDropOutcome, { kind: 'blocked' }> {
   return { kind: 'blocked', reason, message };
 }
 
-function runGit(cwd: string, args: string[], env?: NodeJS.ProcessEnv): Promise<string> {
+function runGit(cwd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    cp.execFile('git', args, { cwd, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, env: env ?? process.env }, (error, stdout, stderr) => {
+    cp.execFile('git', args, { cwd, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, env: process.env }, (error, stdout, stderr) => {
       if (error) {
         const failure = new Error((stderr || stdout || error.message).trim()) as GitFailure;
         failure.code = error.code ?? undefined;
@@ -128,34 +101,8 @@ function samePreparedDrop(initial: PreparedDrop, final: PreparedDrop): boolean {
   return initial.branch === final.branch && initial.head === final.head && initial.useRoot === final.useRoot && initial.upstream === final.upstream && initial.commits.length === final.commits.length && initial.commits.every((commit, index) => commit.hash === final.commits[index].hash && commit.todoHash === final.commits[index].todoHash);
 }
 
-function createSequenceEditor(hashes: string[]): SequenceEditor {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'lazygitvs-drop-'));
-  try {
-    fs.chmodSync(directory, 0o700);
-    const command = path.join(directory, 'sequence-editor');
-    fs.writeFileSync(command, sequenceEditorSource, { encoding: 'utf8', mode: 0o700 });
-    fs.chmodSync(command, 0o700);
-    return { directory, command, hashes };
-  } catch (error) {
-    fs.rmSync(directory, { recursive: true, force: true });
-    throw error;
-  }
-}
-
 export function rewriteDropTodo(todo: string, hashes: readonly string[]): string {
-  if (!hashes.length || hashes.some(hash => !hash)) throw new Error('Drop todo rewrite requires selected hashes.');
-  if (new Set(hashes).size !== hashes.length) throw new Error('Drop todo rewrite received duplicate selected hashes.');
-  const selected = new Set(hashes);
-  const counts = new Map(hashes.map(hash => [hash, 0]));
-  const lines = todo.match(/[^\n]*\n|[^\n]+/g) ?? [];
-  const rewritten = lines.map(line => {
-    const match = line.match(/^pick (\S+)(?=\s|$)/);
-    if (!match || !selected.has(match[1])) return line;
-    counts.set(match[1], (counts.get(match[1]) ?? 0) + 1);
-    return `drop ${line.slice(5)}`;
-  });
-  for (const hash of hashes) if (counts.get(hash) !== 1) throw new Error(`Drop todo rewrite expected exactly one pick ${hash}, found ${counts.get(hash) ?? 0}.`);
-  return rewritten.join('');
+  return rewriteSelectedPickTodo(todo, hashes, 'drop');
 }
 
 export async function dropSelectedCommits(input: CommitDropInput): Promise<CommitDropOutcome> {
@@ -165,22 +112,12 @@ export async function dropSelectedCommits(input: CommitDropInput): Promise<Commi
   const final = await preflight(input);
   if ('kind' in final) return final;
   if (!samePreparedDrop(initial, final)) return blocked('drift', 'LazyGitVS: repository changed while confirmation was open; Drop was not started.');
-  const editor = createSequenceEditor(initial.commits.map(commit => commit.todoHash));
+  const hashes = initial.commits.map(commit => commit.todoHash);
   try {
-    await runGit(input.repoPath, [...rebaseArgs, ...(initial.useRoot ? ['--root'] : [initial.upstream!])], {
-      ...process.env,
-      GIT_SEQUENCE_EDITOR: editor.command,
-      GIT_EDITOR: 'true',
-      LGVS_DROP_HASHES: JSON.stringify(editor.hashes),
-      LANG: 'C',
-      LC_ALL: 'C',
-      LC_MESSAGES: 'C',
-    });
-    return { kind: 'success', startIndex: initial.startIndex, hashes: editor.hashes };
+    await runSelectedCommitRebase({ repoPath: input.repoPath, hashes, action: 'drop', base: initial.upstream, useRoot: initial.useRoot, temporaryDirectoryPrefix: 'lazygitvs-drop-' });
+    return { kind: 'success', startIndex: initial.startIndex, hashes };
   } catch (error) {
     if (detectGitOperationState(input.repoPath)?.kind === 'rebase') return { kind: 'rebase-active', message: 'LazyGitVS: Drop stopped during rebase. Resolve, continue, skip, or abort it from Status.' };
     throw error;
-  } finally {
-    fs.rmSync(editor.directory, { recursive: true, force: true });
   }
 }
