@@ -163,7 +163,7 @@ keybinding:
     assert(extension.includes("if (!commitFileCheckout.canInspectSingleCommit(this.commitRange.mode)) return void vscode.window.showErrorMessage(commitFileCheckout.COMMIT_FILE_RANGE_MESSAGE);"), 'Enter with a visual commit range must refuse before setting commitFilesFor');
     assert(extension.includes("if(panel==='hunks'&&hit(e,u.select,u.togglePanel,u.remove,m.toggleSelectHunk))"), 'Hunks retain their own configured c/action surface');
     assert(extension.includes("key: key(f.commitChanges) || 'c', label: '$(git-commit) Commit'"), 'Files retain configured c commit semantics');
-    assert(extension.includes("panel==='commits'&&!${this.commitFilesFor ? 'true' : 'false'}&&hit(e,u.remove,c.squashDown,c.markCommitAsFixup"), 'top-level Commits retains its f/c-era routing without promoting Commit-files c');
+    assert(extension.includes("panel==='commits'&&!${this.commitFilesFor ? 'true' : 'false'}&&hit(e,u.remove,c.squashDown,c.squashAboveCommits,c.markCommitAsFixup"), 'top-level Commits retains its history-action routing without promoting Commit-files c');
     assert(model.includes("label: '$(debug-step-over) Checkout'"), 'Commit-files command/help path must use the upstream action description Checkout');
     assert(!model.includes('confirm:'), 'upstream Commit-files checkout has no confirmation callback');
     assert(!model.includes('showWarningMessage'), 'Commit-files checkout stays VS Code-native without a terminal or confirmation modal');

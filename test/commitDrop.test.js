@@ -146,7 +146,7 @@ function createConflictFixture(prefix = 'lgvs-drop-conflict-') {
     assert(config.includes("remove: 'd'"), 'the default must remain lazygit universal.remove = d');
     assert(extension.includes("key: key(u.remove) || 'd', label: '$(trash) Drop selected commit(s)'"), 'Commits Drop must read universal.remove instead of inventing a commits key');
     assert(extension.includes("panel==='commits'&&!${this.commitFilesFor ? 'true' : 'false'}&&hit(e,u.remove"), 'only the top-level Commits webview route may promote universal.remove into commitAction');
-    assert(extension.includes('if ((cherryPickBufferAction || dropAction || squashAction || fixupAction) && this.commitFilesFor) return;'), 'Drop must not execute from the commit-files subview');
+    assert(extension.includes('if ((cherryPickBufferAction || dropAction || squashAction || fixupAction || autosquashAction) && this.commitFilesFor) return;'), 'Drop must not execute from the commit-files subview alongside autosquash');
     assert(extension.includes("if(panel==='hunks'&&hit(e,u.select,u.togglePanel,u.remove"), 'Hunks must retain their own configured d path');
     assert(extension.includes("if(hit(e,u.remove)){e.preventDefault();vscode.postMessage({type:'discardMenu'});return;}"), 'Files must retain their existing configured d discard path');
     assert(model.includes("DROP_COMMIT_TITLE = 'Drop commit'") && model.includes("DROP_COMMIT_PROMPT = 'Are you sure you want to drop the selected commit(s)?'"), 'Drop must retain the exact modal title and body');
