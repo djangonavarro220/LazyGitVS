@@ -235,7 +235,7 @@ export async function remotes(): Promise<Remote[]> {
 export async function commits(ref?: string): Promise<Commit[]> {
   const args = ['log', '--decorate=short', '--max-count=80', '--pretty=format:%h%x09%D%x09%s%x09%an%x09%ar'];
   if (ref) args.push(ref, '--');
-  const out = await git(args);
+  const out = await git(args, workspaceRoot(), { LC_ALL: 'C', LANG: 'C' });
   return out.split('\n').filter(Boolean).map(line => {
     const [hash, refs, subject = '', author = '', relativeDate = ''] = line.split('\t');
     return { hash, refs, subject, author, relativeDate, graph: '' };

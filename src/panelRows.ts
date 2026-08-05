@@ -16,6 +16,28 @@ export function fileStateLabel(f: ChangedFile): string {
   return 'unstaged';
 }
 
+const COMMIT_AGE_UNITS: Record<string, string> = {
+  second: 's',
+  minute: 'm',
+  hour: 'h',
+  day: 'd',
+  week: 'w',
+  month: 'mo',
+  year: 'y'
+};
+
+export function compactCommitAge(relativeDate: string): string {
+  const value = relativeDate.trim();
+  if (!value) return '';
+  if (/^(?:just now|now)$/i.test(value)) return 'now';
+  if (/\byesterday\b/i.test(value)) return '1d';
+  if (/less than (?:a|one) minute/i.test(value)) return '<1m';
+  const match = value.match(/\b(\d+|a|an|one)\s+(second|minute|hour|day|week|month|year)s?\b/i);
+  if (!match) return value;
+  const amount = /^\d+$/.test(match[1]) ? match[1] : '1';
+  return `${amount}${COMMIT_AGE_UNITS[match[2].toLowerCase()]}`;
+}
+
 export function fileStatusHtml(f: ChangedFile): string {
   const [index, worktree] = [f.xy[0] ?? ' ', f.xy[1] ?? ' '];
   const slot = (kind: 'index' | 'worktree', ch: string) => ch === ' '
@@ -51,7 +73,7 @@ export function branchRow(sel: boolean, branch: Branch, index: number): string {
 }
 
 export function commitRow(sel: boolean, commit: Commit, index: number, klass = ''): string {
-  const details = commit.relativeDate;
+  const details = compactCommitAge(commit.relativeDate);
   const titleDetails = `${commit.refs ? ` · ${escapeHtml(commit.refs)}` : ''}${[commit.relativeDate, commit.author].filter(Boolean).map(escapeHtml).map(part => ` · ${part}`).join('')}`;
   return `<div id="lgvs-row-${index}" class="row commit-row ${sel ? 'sel' : ''} ${klass}" role="option" aria-selected="${sel ? 'true' : 'false'}" data-index="${index}" title="${escapeHtml(commit.hash)} · ${escapeHtml(commit.subject)}${titleDetails}"><span class="cursor">${sel ? '›' : ' '}</span><span class="hash-pill">${escapeHtml(commit.hash)}</span><span class="commit-main path">${escapeHtml(commit.subject)}</span>${details ? `<span class="meta commit-meta">${escapeHtml(details)}</span>` : ''}</div>`;
 }
