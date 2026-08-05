@@ -70,7 +70,7 @@ assert(extension.includes("setContext', 'vim.active', true"), 'releaseEditorOwne
 assert(extension.includes("private async releaseEditorOwnership()"), 'normal open/edit must have one hard release path that makes LGVS disappear from the editor');
 assert(extension.includes("this.modeStatusBarItem.hide();"), 'normal open/edit must hide the LGVS mode status bar instead of showing EDIT/LG state');
 assert(extension.includes("await this.releaseEditorOwnership();\n    if (filePath) await editPath(filePath);"), 'e from HUNK must release all LGVS editor ownership before opening the real file editor');
-assert(extension.includes("await this.releaseEditorOwnership(); await editPath(file);"), 'o/e from Files must also release LGVS instead of leaving viewer/status ownership behind');
+assert(extension.includes("await this.releaseEditorOwnership(); const editor = await editPath(file); await focusOpenedEditor(editor"), 'o/e from Files must release LGVS and transfer physical focus into the real editor');
 const hunkExitBody = extension.match(/async exitEditorHunkMode\(\) \{([\s\S]*?)\n  \}\n  private selectNearestLineToEditorLine/)[1];
 assert(hunkExitBody.includes("this.activePanel = 'files';"), 'Esc from editor HUNK/LINE must return workflow context to 2 Files');
 assert(extension.includes('private selectFilePathInFilesPanel(filePath: string | undefined)'), 'Files selection restore must use the opened editor file path, not a stale row index');

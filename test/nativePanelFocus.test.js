@@ -5,7 +5,9 @@ const path = require('path');
 const root = path.join(__dirname, '..');
 const extension = fs.readFileSync(path.join(root, 'src', 'extension.ts'), 'utf8');
 const previewDocuments = fs.readFileSync(path.join(root, 'src', 'previewDocuments.ts'), 'utf8');
-const source = `${extension}\n${previewDocuments}`;
+const workspaceActions = fs.readFileSync(path.join(root, 'src', 'workspaceActions.ts'), 'utf8');
+const dogfood = fs.readFileSync(path.join(root, 'scripts', 'dogfood-ui.js'), 'utf8');
+const source = `${extension}\n${previewDocuments}\n${workspaceActions}`;
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
 const views = pkg.contributes.views.scm;
@@ -37,7 +39,13 @@ assert(extension.includes('`${viewId}.focus`, { preserveFocus: false }'), 'panel
 assert(extension.includes('Date.now() <= this.suppressWebviewAutoFocusUntil'), 'webview bootstrap must remain guarded during editor/HUNK transitions');
 assert(!extension.includes('setTimeout(() => { void reveal(); }'), 'panel reveal must not schedule delayed focus retries that close Command Palette/QuickPick after it opens');
 assert(extension.includes("await this.releaseEditorOwnership();\n    if (filePath) await editPath(filePath);"), 'EDIT handoff must make LGVS disappear before handing the real editor to VS Code/Vim');
-assert(extension.includes("await this.releaseEditorOwnership(); await editPath(file);"), 'o/e file open must use the same hard release path as HUNK edit handoff');
+assert(extension.includes("await this.releaseEditorOwnership(); const editor = await editPath(file); await focusOpenedEditor(editor"), 'o/e file open must release LGVS and explicitly move keyboard focus into the already-open editor');
+assert(workspaceActions.includes('export async function focusOpenedEditor(editor: vscode.TextEditor'), 'normal Files o/e handoff must have a dedicated editor-focus helper');
+assert(workspaceActions.includes('for (const delay of [80, 220, 450])'), 'o/e must retry editor focus through the webview/Vim focus race');
+assert(workspaceActions.includes("workbench.action.focusActiveEditorGroup"), 'o/e focus helper must explicitly focus the active editor group');
+assert(dogfood.includes("for (const openKey of ['o', 'e'])"), 'real VS Code dogfood must exercise both physical Files open/edit keys');
+assert(dogfood.includes('Files ${openKey} moves physical keyboard focus into the already-open editor'), 'dogfood must assert physical editor focus, not merely that the file tab is open');
+assert(dogfood.includes('LGVS_DOGFOOD_FILES_EDITOR_FOCUS'), 'o/e editor-focus regression must have a bounded targeted dogfood lane');
 assert(extension.includes('vscode.window.onDidChangeActiveTextEditor(editor => this.handleActiveTextEditorChanged(editor))'), 'active editor changes must re-check LGVS ownership instead of leaving sticky viewer/status state');
 assert(extension.includes('private isLGVSOwnedEditor(editor: vscode.TextEditor | undefined): boolean'), 'LGVS must explicitly identify which editors it owns');
 assert(extension.includes("this.editorHunkMode || this.focusArea === 'viewer' || this.editorEditMode"), 'normal editor focus while LGVS thinks it owns HUNK/VIEW/EDIT must trigger a hard ownership release');

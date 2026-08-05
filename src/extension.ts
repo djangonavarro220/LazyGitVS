@@ -16,7 +16,7 @@ import { findMenuItemByKey } from './lazygitMenu';
 import { runBisectOptions, type BisectQuickPickItem } from './bisectOptions';
 import { dangerousGitMenuItem } from './destructiveActions';
 import { showGitOperationOptions } from './statusGitOperation';
-import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, openPath, previewCommitFileDiff, previewDiff, previewStashFileDiff, reconcileCommitFilePreviewPublication, revealVisibleEditorLine, showCommitPreview, showStashPreview } from './workspaceActions';
+import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, focusOpenedEditor, openPath, previewCommitFileDiff, previewDiff, previewStashFileDiff, reconcileCommitFilePreviewPublication, revealVisibleEditorLine, showCommitPreview, showStashPreview } from './workspaceActions';
 import { deletedGhostDecorations, editorLineRange, excludeRangeLines, hunkChangedEditorRanges, rangeLineSet } from './hunkEditorDecorations';
 import { planAndPerformReflogAction, type ReflogDirection } from './undoRedo';
 import { panelBlockNavigationBindings } from './panelKeyboardRouter';
@@ -875,7 +875,7 @@ class LazyGitVSController {
     this.renderAll();
     await this.openCurrent(viewPanel, false);
   }
-  private async editCurrent(viewPanel: ViewPanel) { const file = this.currentFilePath(viewPanel); if (file) { await this.releaseEditorOwnership(); await editPath(file); } }
+  private async editCurrent(viewPanel: ViewPanel) { const file = this.currentFilePath(viewPanel); if (file) { await this.releaseEditorOwnership(); const editor = await editPath(file); await focusOpenedEditor(editor, () => !this.ownsModeStatus && !this.editorHunkMode && !this.editorEditMode); } }
   private currentFilePath(viewPanel: ViewPanel): string | undefined { if (viewPanel === 'conflicts') return this.conflictItems[this.conflictSelected]?.path; return this.currentFile()?.path; }
   private async copyCurrentPath(viewPanel: ViewPanel) { const file = this.currentFilePath(viewPanel); if (file) await copyText(file, 'path copied'); }
   private async copyCurrentInfo(viewPanel: ViewPanel) {

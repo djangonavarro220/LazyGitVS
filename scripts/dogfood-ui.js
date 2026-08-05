@@ -158,15 +158,17 @@ function runMatrixIfNeeded() {
 
 async function cdpConnect() {
   const selected = await connectResponsiveWorkbench({
-    listTargets: () => getJson(`http://127.0.0.1:${PORT}/json/list`, 3000),
+    listTargets: async () => {
+      try { return await getJson(`http://127.0.0.1:${PORT}/json/list`, 3000); } catch { return []; }
+    },
     connect: target => CDP({ target, port: PORT })
   });
   return selected.client;
 }
 async function key(Input, key, opts = {}) {
   const mods = (opts.ctrl ? 2 : 0) | (opts.shift ? 8 : 0) | (opts.alt ? 1 : 0) | (opts.meta ? 4 : 0);
-  const codeMap = { Enter: 'Enter', Escape: 'Escape', Tab: 'Tab', Backspace: 'Backspace', ArrowDown: 'ArrowDown', ArrowUp: 'ArrowUp', Home: 'Home', End: 'End', F1: 'F1', F9: 'F9', Space: 'Space', '?': 'Slash', '1': 'Digit1', '2': 'Digit2', '3': 'Digit3', '4': 'Digit4', '5': 'Digit5', '6': 'Digit6', '7': 'Digit7', '8': 'Digit8', '9': 'Digit9', '0': 'Digit0' };
-  const vkeyMap = { Enter: 13, Escape: 27, Tab: 9, Backspace: 8, ArrowDown: 40, ArrowUp: 38, Home: 36, End: 35, F1: 112, F9: 120, Space: 32, '?': 191 };
+  const codeMap = { Enter: 'Enter', Escape: 'Escape', Tab: 'Tab', Backspace: 'Backspace', ArrowDown: 'ArrowDown', ArrowUp: 'ArrowUp', Home: 'Home', End: 'End', F1: 'F1', F8: 'F8', F9: 'F9', Space: 'Space', '?': 'Slash', '1': 'Digit1', '2': 'Digit2', '3': 'Digit3', '4': 'Digit4', '5': 'Digit5', '6': 'Digit6', '7': 'Digit7', '8': 'Digit8', '9': 'Digit9', '0': 'Digit0' };
+  const vkeyMap = { Enter: 13, Escape: 27, Tab: 9, Backspace: 8, ArrowDown: 40, ArrowUp: 38, Home: 36, End: 35, F1: 112, F8: 119, F9: 120, Space: 32, '?': 191 };
   const code = codeMap[key] || (/^[a-z]$/i.test(key) ? `Key${key.toUpperCase()}` : key);
   const text = !opts.ctrl && !opts.alt && !opts.meta && key.length === 1 ? (opts.shift ? key.toUpperCase() : key) : undefined;
   const virtualKey = vkeyMap[key] ?? (/^[a-z]$/i.test(key) ? key.toUpperCase().charCodeAt(0) : /^[0-9]$/.test(key) ? key.charCodeAt(0) : undefined);
@@ -263,6 +265,11 @@ async function quickInputState(Runtime) {
   return r.result.value || { visible: false, focused: false, text: '', placeholder: '' };
 }
 
+async function editorFocusState(Runtime) {
+  const r = await Runtime.evaluate({ expression: `(() => { const active = document.activeElement; const focusedEditor = document.querySelector('.monaco-editor.focused'); return { editorFocused: !!focusedEditor && (!!active?.closest?.('.monaco-editor') || active === focusedEditor || focusedEditor.contains(active)), activeTag: active?.tagName || '', activeClass: typeof active?.className === 'string' ? active.className : '' }; })()`, returnByValue: true });
+  return r.result.value || { editorFocused: false, activeTag: '', activeClass: '' };
+}
+
 async function selectedLgvsRowInfo(Runtime) {
   const r = await Runtime.evaluate({ expression: `(() => {
     function collect(root, out = []) {
@@ -324,7 +331,7 @@ async function main() {
   const fixtureStartedAtMs = Date.now();
   fixture = makeFixture();
   const fixtureReadyAtMs = Date.now();
-  const fixtureRepositories = fixtureRepos(fixture);
+  const fixtureRepositories = process.env.LGVS_DOGFOOD_FILES_EDITOR_FOCUS ? [fixture] : fixtureRepos(fixture);
   const secondaryRepo = secondaryFixtureRepo(fixture);
   const deepRepo = deepNestedFixtureRepo(fixture);
   if (process.env.LGVS_DOGFOOD_OPERATION_STATUS) {
@@ -358,6 +365,7 @@ async function main() {
     { key: 'ctrl+alt+r', command: 'lazygitvs.statusEnter', args: fixture },
     { key: 'ctrl+alt+f', command: 'lazygitvs.filesView.focus' },
     { key: 'f9', command: 'lazygitvs.enterSelected' },
+    { key: 'f8', command: 'lazygitvs.statusEnter', args: { repoPath: fixture } },
     { key: 'ctrl+alt+/', command: 'lazygitvs.helpCurrentPanel' },
     { key: 'ctrl+alt+h', command: 'lazygitvs.enterCurrentFileHunkMode' }
   ], null, 2));
@@ -636,11 +644,40 @@ async function main() {
       terminalPublished = true;
       return;
     }
+    async function focusFilesPanelForEditorHandoff() {
+      await runCommandPalette(Input, 'LazyGitVS: Focus SCM Sidebar');
+      await chord(Input, 'ctrl+alt+2');
+      await sleep(1200);
+    }
+    async function exerciseFilesEditorFocus() {
+      await focusFilesPanelForEditorHandoff('LGVS Files panel before o/e editor-focus handoff');
+      for (const openKey of ['o', 'e']) {
+        await key(Input, openKey);
+        const editorFocus = await waitFor(async () => {
+          const state = await editorFocusState(Runtime);
+          return state.editorFocused ? state : undefined;
+        }, 5000, 100, `Files ${openKey} physical editor focus`);
+        evidence.push({ step: `files-${openKey}-focuses-editor`, screenshot: await screenshot(Page, `03-files-${openKey}-focuses-editor`, { force: true }), status: status(fixture), editorFocus });
+        checks.push({ name: `Files ${openKey} moves physical keyboard focus into the already-open editor`, ok: editorFocus.editorFocused, editorFocus });
+        await focusFilesPanelForEditorHandoff(`LGVS Files panel after ${openKey} editor-focus handoff`);
+      }
+    }
     addCheck(checks, { name: 'Light theme dogfood profile is active', ok: !!process.env.LGVS_DOGFOOD_FAST_THEME || THEME.toLowerCase().includes('light'), theme: THEME });
     addCheck(checks, { name: `${useVim ? 'VSCodeVim' : 'No Vim'} dogfood variant is active`, ok: true, variant: VARIANT, vimExtension: useVim, vimVersion: vimExtension?.version });
     checks.push({ name: 'SCM sidebar exposes default LazyGitVS panels while Status stays hidden until 1', ok: !sidebarText.includes('1 STATUS') && ['2 FILES', '3 BRANCHES', '4 COMMITS', '5 STASH', '6 CONFLICTS', '7 TAGS', '8 REMOTES'].every(label => sidebarText.includes(label)), textSample: sidebarText.slice(0, 1200) });
     checks.push({ name: 'No noisy focus footer in LGVS panels', ok: !/Focus:\s+LG panel/i.test(sidebarText), textSample: sidebarText.slice(-800) });
     checks.push({ name: 'Right chat / secondary side bar stays closed in screenshots', ok: !/CHAT\s+Build with Agent/i.test(sidebarText), textSample: sidebarText.slice(-800) });
+    if (process.env.LGVS_DOGFOOD_FILES_EDITOR_FOCUS) {
+      await waitFor(async () => {
+        await key(Input, 'F8');
+        await sleep(400);
+        const text = (await pageText(Runtime)).slice(0, 4000);
+        return /LazyGitVS: (README\.md|settings\.json|src\/app\.ts)/.test(text) ? text : undefined;
+      }, 12000, 400, 'editor-focus fixture selection');
+      await exerciseFilesEditorFocus();
+      finishDogfoodReport();
+      return;
+    }
 
     await chord(Input, 'ctrl+alt+1');
     const statusPanelText = async () => {
@@ -1204,6 +1241,8 @@ async function main() {
     };
     await waitFor(filesContextVisible, 8000, 300, 'LGVS Files panel after viewer handoff');
     await sleep(STEP_DELAY);
+
+    await exerciseFilesEditorFocus();
 
     // Modal focus regression: Files d-discard opens a QuickPick. Cancelling it must return
     // keyboard focus to the same LGVS Files panel, so the next ArrowDown moves the file selection

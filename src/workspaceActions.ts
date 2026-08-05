@@ -200,6 +200,18 @@ export async function editPath(filePath: string): Promise<vscode.TextEditor> {
   return vscode.window.showTextDocument(doc, { preview: false, viewColumn: vscode.ViewColumn.Active });
 }
 
+export async function focusOpenedEditor(editor: vscode.TextEditor, shouldContinue: () => boolean = () => true): Promise<void> {
+  const expectedUri = editor.document.uri.toString();
+  const focus = async (requireCurrent: boolean) => {
+    if (!shouldContinue() || (requireCurrent && vscode.window.activeTextEditor?.document.uri.toString() !== expectedUri)) return;
+    try { await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup'); } catch { /* ignore */ }
+    if (!shouldContinue() || (requireCurrent && vscode.window.activeTextEditor?.document.uri.toString() !== expectedUri)) return;
+    await vscode.window.showTextDocument(editor.document, editor.viewColumn ?? vscode.ViewColumn.Active, false);
+  };
+  await focus(false);
+  for (const delay of [80, 220, 450]) setTimeout(() => void focus(true), delay);
+}
+
 export async function openPath(filePath: string) {
   await vscode.env.openExternal(vscode.Uri.file(path.join(workspaceRoot(), filePath)));
 }
