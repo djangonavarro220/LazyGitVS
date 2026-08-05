@@ -16,7 +16,7 @@ import { findMenuItemByKey } from './lazygitMenu';
 import { runBisectOptions, type BisectQuickPickItem } from './bisectOptions';
 import { dangerousGitMenuItem } from './destructiveActions';
 import { showGitOperationOptions } from './statusGitOperation';
-import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, focusOpenedEditor, openPath, previewCommitFileDiff, previewDiff, previewStashFileDiff, reconcileCommitFilePreviewPublication, revealVisibleEditorLine, showCommitPreview, showStashPreview } from './workspaceActions';
+import { appendIgnore, branchLogArgs, closeLazyGitVSPreviewTabsIfSingle, commitFlow, copyText, editPath, focusActiveEditorGroup, focusOpenedEditor, openPath, previewCommitFileDiff, previewDiff, previewStashFileDiff, reconcileCommitFilePreviewPublication, revealVisibleEditorLine, showCommitPreview, showStashPreview } from './workspaceActions';
 import { deletedGhostDecorations, editorLineRange, excludeRangeLines, hunkChangedEditorRanges, rangeLineSet } from './hunkEditorDecorations';
 import { planAndPerformReflogAction, type ReflogDirection } from './undoRedo';
 import { panelBlockNavigationBindings } from './panelKeyboardRouter';
@@ -918,7 +918,7 @@ class LazyGitVSController {
   private statusCommandCatalog(): GitMenuItem[] {
     return [
       { key: 'o', label: '$(go-to-file) Open lazygit config', description: this.lazygitConfigFiles[0] ?? 'No config loaded', run: async () => { const cfg = this.lazygitConfigFiles[0]; if (cfg) await vscode.env.openExternal(vscode.Uri.file(cfg)); else vscode.window.showInformationMessage('LazyGitVS: lazygit config not found; using defaults.'); } },
-      { key: 'e', label: '$(edit) Edit lazygit config', description: this.lazygitConfigFiles[0] ?? 'No config loaded', run: async () => { const cfg = this.lazygitConfigFiles[0]; if (cfg) await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(cfg)), { preview: false }); else vscode.window.showInformationMessage('LazyGitVS: lazygit config not found; using defaults.'); } },
+      { key: 'e', label: '$(edit) Edit lazygit config', description: this.lazygitConfigFiles[0] ?? 'No config loaded', run: async () => { const cfg = this.lazygitConfigFiles[0]; if (cfg) { await this.releaseEditorOwnership(); const editor = await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(vscode.Uri.file(cfg)), { preview: false }); await focusOpenedEditor(editor, () => !this.ownsModeStatus && !this.editorHunkMode && !this.editorEditMode); } else vscode.window.showInformationMessage('LazyGitVS: lazygit config not found; using defaults.'); } },
       { key: 'a', label: '$(git-commit) Show all branch log', description: 'git log --all --graph', run: async () => showText('LazyGitVS All Branch Log', await git(['log', '--all', '--graph', '--decorate=short', '--oneline', '--max-count=200'])) },
       { key: 'A', label: '$(git-commit) Show all branch log reversed', description: 'git log --all --graph --reverse', run: async () => showText('LazyGitVS All Branch Log', await git(['log', '--all', '--graph', '--decorate=short', '--oneline', '--reverse', '--max-count=200'])) },
       { key: 'u', label: '$(cloud-download) Check for updates', description: 'Use VS Code extension updates', run: async () => { await vscode.window.showInformationMessage('LazyGitVS updates are handled by VS Code / Marketplace.'); } },
@@ -1122,11 +1122,11 @@ class LazyGitVSController {
     const f = this.currentConflict();
     if (!f) return [];
     return [
-      { key: '<enter>', label: '$(merge) Open merge editor', description: f.path, run: async () => { await vscode.commands.executeCommand('vscode.openWith', vscode.Uri.file(path.join(workspaceRoot(), f.path)), 'mergeEditor'); } },
-      { key: 'o', label: '$(file) Open file', description: f.path, run: async () => { await editPath(f.path); } },
+      { key: '<enter>', label: '$(merge) Open merge editor', description: f.path, run: async () => { await this.releaseEditorOwnership(); await vscode.commands.executeCommand('vscode.openWith', vscode.Uri.file(path.join(workspaceRoot(), f.path)), 'mergeEditor'); await focusActiveEditorGroup(() => !this.ownsModeStatus && !this.editorHunkMode && !this.editorEditMode); } },
+      { key: 'o', label: '$(file) Open file', description: f.path, run: async () => this.editCurrent('conflicts') },
       { key: '1', label: '$(arrow-left) Choose ours', description: 'git checkout --ours', danger: true, confirm: `Accept ours for ${f.path}?`, args: ['checkout', '--ours', '--', f.path] },
       { key: '2', label: '$(arrow-right) Choose theirs', description: 'git checkout --theirs', danger: true, confirm: `Accept theirs for ${f.path}?`, args: ['checkout', '--theirs', '--', f.path] },
-      { key: 'b', label: '$(split-horizontal) Keep both / manual merge', description: 'open merge editor for both sides', run: async () => { await vscode.commands.executeCommand('vscode.openWith', vscode.Uri.file(path.join(workspaceRoot(), f.path)), 'mergeEditor'); } },
+      { key: 'b', label: '$(split-horizontal) Keep both / manual merge', description: 'open merge editor for both sides', run: async () => { await this.releaseEditorOwnership(); await vscode.commands.executeCommand('vscode.openWith', vscode.Uri.file(path.join(workspaceRoot(), f.path)), 'mergeEditor'); await focusActiveEditorGroup(() => !this.ownsModeStatus && !this.editorHunkMode && !this.editorEditMode); } },
       { key: 'm', label: '$(check) Mark resolved', description: 'git add', args: ['add', '--', f.path] }
     ];
   }
@@ -1154,7 +1154,7 @@ class LazyGitVSController {
       return;
     }
     await pickGitAction(`${this.title(panel)} commands`, items.filter(item => item.key));
-    await this.focusPanel(this.activeViewPanel()).catch(() => undefined);
+    if (this.ownsModeStatus) await this.focusPanel(this.activeViewPanel()).catch(() => undefined);
   }
   private async stageAll() { if (!this.files.length) return; await toggleStageAll(this.files); await this.refresh(true); }
   private async commit(mode?: 'commit' | 'body' | 'amend' | 'amendNoEdit' | 'noVerify') { await commitFlow(mode); await this.refresh(true); }
@@ -1194,7 +1194,7 @@ class LazyGitVSController {
       await executeGitMenuItem(item);
       await this.refresh(false);
     } finally {
-      await this.restorePanelFocusAfterModal(viewPanel);
+      await this.restorePanelFocusAfterModal(viewPanel, () => this.ownsModeStatus);
     }
   }
   private async stashAll() { await runGitAction('Stash all changes', ['stash', 'push']); await this.refresh(true); }

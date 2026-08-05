@@ -46,6 +46,11 @@ assert(workspaceActions.includes("workbench.action.focusActiveEditorGroup"), 'o/
 assert(dogfood.includes("for (const openKey of ['o', 'e'])"), 'real VS Code dogfood must exercise both physical Files open/edit keys');
 assert(dogfood.includes('Files ${openKey} moves physical keyboard focus into the already-open editor'), 'dogfood must assert physical editor focus, not merely that the file tab is open');
 assert(dogfood.includes('LGVS_DOGFOOD_FILES_EDITOR_FOCUS'), 'o/e editor-focus regression must have a bounded targeted dogfood lane');
+assert(extension.includes("run: async () => this.editCurrent('conflicts')"), 'Conflicts o must use the same hard editor handoff as Files o/e');
+assert(extension.includes("await this.releaseEditorOwnership(); const editor = await vscode.window.showTextDocument"), 'editing lazygit config must release panel ownership before focusing the editor');
+assert(extension.includes('await focusActiveEditorGroup(() => !this.ownsModeStatus'), 'merge-editor actions must explicitly transfer physical focus out of LGVS');
+assert(extension.includes('restorePanelFocusAfterModal(viewPanel, () => this.ownsModeStatus)'), 'panel commands must not reclaim focus after an editor-opening action releases ownership');
+assert(extension.includes('if (this.ownsModeStatus) await this.focusPanel(this.activeViewPanel())'), 'help menus must not reclaim focus after an editor-opening action');
 assert(extension.includes('vscode.window.onDidChangeActiveTextEditor(editor => this.handleActiveTextEditorChanged(editor))'), 'active editor changes must re-check LGVS ownership instead of leaving sticky viewer/status state');
 assert(extension.includes('private isLGVSOwnedEditor(editor: vscode.TextEditor | undefined): boolean'), 'LGVS must explicitly identify which editors it owns');
 assert(extension.includes("this.editorHunkMode || this.focusArea === 'viewer' || this.editorEditMode"), 'normal editor focus while LGVS thinks it owns HUNK/VIEW/EDIT must trigger a hard ownership release');

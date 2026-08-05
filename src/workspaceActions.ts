@@ -212,6 +212,16 @@ export async function focusOpenedEditor(editor: vscode.TextEditor, shouldContinu
   for (const delay of [80, 220, 450]) setTimeout(() => void focus(true), delay);
 }
 
+export async function focusActiveEditorGroup(shouldContinue: () => boolean = () => true): Promise<void> {
+  const expectedTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+  const focus = async () => {
+    if (!shouldContinue() || vscode.window.tabGroups.activeTabGroup.activeTab !== expectedTab) return;
+    try { await vscode.commands.executeCommand('workbench.action.focusActiveEditorGroup'); } catch { /* ignore */ }
+  };
+  await focus();
+  for (const delay of [80, 220, 450]) setTimeout(() => void focus(), delay);
+}
+
 export async function openPath(filePath: string) {
   await vscode.env.openExternal(vscode.Uri.file(path.join(workspaceRoot(), filePath)));
 }
