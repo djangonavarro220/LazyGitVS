@@ -4,6 +4,14 @@ All notable changes to LazyGitVS will be documented here.
 
 ## Unreleased
 
+## 0.1.104 - Files workflows, commit history actions, and focus polish
+
+- Expanded `2 Files` and Commit-files workflows with lazygit-style upstream reset options, safe commit-file checkout/discard/copy actions, hunk handling, bounded range operations, and a centralized controller that keeps repository, selection, and preview state consistent.
+- Added guarded commit-history actions for bisect, cherry-pick ranges, drop, squash, fixup, create/apply fixups, reword, edit, and adjacent commit movement, with native VS Code prompts, strict preflight checks, and Git recovery left available for conflicts and merge/rebase operations.
+- Reused lazygit configuration/keymap values across Files, Commits, and Commit-files, while tightening conflict/merge safety, stale-request cancellation, and editor/sidebar focus handoffs so async previews and Git actions do not steal focus after the user has moved on.
+- Improved Files and Commits accessibility and readability with focused-row identifiers, tighter typography and margins, compact commit ages, and clearer selected/copied/range states.
+- Added comprehensive unit and integration coverage for the new Git workflows, focus/race guards, accessibility, and Files reset behavior.
+
 ## 0.1.103 - Panel parity, transient previews, and large-repo performance
 
 - Restored default visibility for LGVS panels `2 Files` through `8 Remotes`; they stay visible instead of being hidden/materialized one at a time.
